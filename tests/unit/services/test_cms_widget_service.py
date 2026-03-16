@@ -3,12 +3,10 @@ import pytest
 from unittest.mock import MagicMock
 from plugins.cms.src.services.cms_widget_service import (
     CmsWidgetService,
-    CmsWidgetNotFoundError,
     CmsWidgetSlugConflictError,
     CmsWidgetInUseError,
 )
 from plugins.cms.src.models.cms_widget import CmsWidget
-from plugins.cms.src.models.cms_menu_item import CmsMenuItem
 
 
 def _make_service(widgets=None, menu_items=None, layout_widgets=None):

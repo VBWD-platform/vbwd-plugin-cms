@@ -8,7 +8,6 @@ from plugins.cms.src.services.cms_page_service import (
     CmsPageSlugConflictError,
 )
 from plugins.cms.src.models.cms_page import CmsPage
-from plugins.cms.src.models.cms_category import CmsCategory
 
 
 def _make_service(pages=None, categories=None):
@@ -140,8 +139,6 @@ class TestBulkActions:
 
 class TestExport:
     def test_export_json_includes_all_fields(self):
-        from uuid import uuid4
-
         page = _page("export-me", published=True)
         page.meta_title = "Export Test"
         svc, repo, _ = _make_service(pages=[page])

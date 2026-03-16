@@ -1,6 +1,5 @@
 """File storage abstraction for CMS media uploads."""
 import os
-import shutil
 from abc import ABC, abstractmethod
 
 

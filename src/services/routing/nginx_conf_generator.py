@@ -22,10 +22,7 @@ class NginxConfGenerator:
 
         ip_rules = [r for r in rules if r.match_type == "ip_range"]
         lang_rules = [r for r in rules if r.match_type == "language"]
-        country_rules = [r for r in rules if r.match_type == "country"]
         cookie_rules = [r for r in rules if r.match_type == "cookie"]
-        path_rules = [r for r in rules if r.match_type == "path_prefix"]
-        default_rules = [r for r in rules if r.match_type == "default"]
 
         # geo block for IP ranges
         if ip_rules:

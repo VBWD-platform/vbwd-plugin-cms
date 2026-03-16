@@ -60,8 +60,8 @@ class CmsPageRepository:
         from plugins.cms.src.models.cms_category import CmsCategory
 
         q = self.session.query(CmsPage).filter(
-            CmsPage.is_published == True
-        )  # noqa: E712
+            CmsPage.is_published is True
+        )
         if category_slug:
             q = q.join(CmsCategory, CmsPage.category_id == CmsCategory.id).filter(
                 CmsCategory.slug == category_slug

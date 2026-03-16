@@ -218,7 +218,7 @@ class ContactFormService:
                 raise ValidationError(f"Invalid email address: {value!r}")
         elif field_type == "url":
             if value and not re.match(r"^https?://", value):
-                raise ValidationError(f"URL must start with http:// or https://")
+                raise ValidationError("URL must start with http:// or https://")
         elif field_type == "radio" and options:
             allowed = {html.escape(str(o)) for o in options}
             if value and value not in allowed:
