@@ -1,0 +1,60 @@
+{
+  "tabs": [
+    {
+      "id": "storage",
+      "label": "Storage",
+      "fields": [
+        {
+          "key": "uploads_base_path",
+          "label": "Uploads Base Path",
+          "component": "input",
+          "inputType": "text",
+          "description": "Filesystem path where uploaded images are stored"
+        },
+        {
+          "key": "uploads_base_url",
+          "label": "Uploads Base URL",
+          "component": "input",
+          "inputType": "text",
+          "description": "Public URL prefix for serving uploaded images"
+        },
+        {
+          "key": "max_file_size_bytes",
+          "label": "Max File Size (bytes)",
+          "component": "input",
+          "inputType": "number",
+          "min": 102400,
+          "max": 104857600,
+          "description": "Maximum allowed upload file size in bytes"
+        },
+        {
+          "key": "allowed_mime_types",
+          "label": "Allowed MIME Types",
+          "component": "input",
+          "inputType": "text",
+          "description": "Comma-separated list of allowed image MIME types"
+        }
+      ]
+    },
+    {
+      "id": "defaults",
+      "label": "Defaults",
+      "fields": [
+        {
+          "key": "default_language",
+          "label": "Default Language",
+          "component": "input",
+          "inputType": "text",
+          "description": "Default language code applied to new pages"
+        },
+        {
+          "key": "default_robots",
+          "label": "Default Robots Meta",
+          "component": "input",
+          "inputType": "text",
+          "description": "Default robots meta value applied to new pages"
+        }
+      ]
+    }
+  ]
+}
