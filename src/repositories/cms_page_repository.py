@@ -34,9 +34,7 @@ class CmsPageRepository:
                 q = q.filter(CmsPage.language == filters["language"])
             if filters.get("search"):
                 term = f"%{filters['search']}%"
-                q = q.filter(
-                    CmsPage.name.ilike(term) | CmsPage.slug.ilike(term)
-                )
+                q = q.filter(CmsPage.name.ilike(term) | CmsPage.slug.ilike(term))
 
         total = q.count()
 
@@ -56,9 +54,14 @@ class CmsPageRepository:
             "pages": max(1, (total + per_page - 1) // per_page),
         }
 
-    def find_published_by_category(self, category_slug: Optional[str], page: int = 1, per_page: int = 20) -> Dict[str, Any]:
+    def find_published_by_category(
+        self, category_slug: Optional[str], page: int = 1, per_page: int = 20
+    ) -> Dict[str, Any]:
         from plugins.cms.src.models.cms_category import CmsCategory
-        q = self.session.query(CmsPage).filter(CmsPage.is_published == True)  # noqa: E712
+
+        q = self.session.query(CmsPage).filter(
+            CmsPage.is_published == True
+        )  # noqa: E712
         if category_slug:
             q = q.join(CmsCategory, CmsPage.category_id == CmsCategory.id).filter(
                 CmsCategory.slug == category_slug

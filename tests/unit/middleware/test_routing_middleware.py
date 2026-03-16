@@ -3,7 +3,10 @@ import pytest
 from unittest.mock import MagicMock, patch
 from flask import Flask
 
-from plugins.cms.src.middleware.routing_middleware import CmsRoutingMiddleware, _is_passthrough
+from plugins.cms.src.middleware.routing_middleware import (
+    CmsRoutingMiddleware,
+    _is_passthrough,
+)
 from plugins.cms.src.services.routing.matchers import RedirectInstruction
 
 
@@ -14,6 +17,7 @@ def _make_app():
 
 
 # ── _is_passthrough ───────────────────────────────────────────────────────────
+
 
 def test_is_passthrough_api():
     assert _is_passthrough("/api/v1/cms/pages") is True
@@ -28,6 +32,7 @@ def test_is_passthrough_regular_path():
 
 
 # ── CmsRoutingMiddleware.before_request ───────────────────────────────────────
+
 
 def test_middleware_passthrough_api_path():
     """API paths are not routed by middleware."""

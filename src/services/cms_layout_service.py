@@ -5,7 +5,9 @@ import zipfile
 import io
 from typing import List, Dict, Any, Optional
 from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
-from plugins.cms.src.repositories.cms_layout_widget_repository import CmsLayoutWidgetRepository
+from plugins.cms.src.repositories.cms_layout_widget_repository import (
+    CmsLayoutWidgetRepository,
+)
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.models.cms_layout import CmsLayout, AREA_TYPES
 from plugins.cms.src.services._slug import unique_slug
@@ -27,7 +29,9 @@ def _validate_areas(areas: List[Dict[str, Any]]) -> None:
     for area in areas:
         atype = area.get("type", "")
         if atype not in AREA_TYPES:
-            raise ValueError(f"Unknown area type '{atype}'. Valid types: {sorted(AREA_TYPES)}")
+            raise ValueError(
+                f"Unknown area type '{atype}'. Valid types: {sorted(AREA_TYPES)}"
+            )
         name = area.get("name", "")
         if name in seen_names:
             raise ValueError(f"duplicate area name '{name}'")
@@ -100,8 +104,17 @@ class CmsLayoutService:
             _validate_areas(data["areas"])
         if "slug" in data and data["slug"] != obj.slug:
             if self._repo.find_by_slug(data["slug"]):
-                raise CmsLayoutSlugConflictError(f"Slug '{data['slug']}' is already in use")
-        for field in ("name", "slug", "description", "areas", "sort_order", "is_active"):
+                raise CmsLayoutSlugConflictError(
+                    f"Slug '{data['slug']}' is already in use"
+                )
+        for field in (
+            "name",
+            "slug",
+            "description",
+            "areas",
+            "sort_order",
+            "is_active",
+        ):
             if field in data:
                 setattr(obj, field, data[field])
         self._repo.save(obj)
@@ -118,13 +131,17 @@ class CmsLayoutService:
         count = self._repo.bulk_delete(ids)
         return {"deleted": count}
 
-    def set_widget_assignments(self, layout_id: str, assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def set_widget_assignments(
+        self, layout_id: str, assignments: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         layout = self._repo.find_by_id(layout_id)
         if not layout:
             raise CmsLayoutNotFoundError(f"Layout {layout_id} not found")
 
         content_area_names = {
-            a["name"] for a in (layout.areas or []) if a.get("type") == _CONTENT_AREA_TYPE
+            a["name"]
+            for a in (layout.areas or [])
+            if a.get("type") == _CONTENT_AREA_TYPE
         }
         for a in assignments:
             if a.get("area_name") in content_area_names:
@@ -170,10 +187,17 @@ class CmsLayoutService:
             a_copy.pop("id", None)
             a_copy.pop("layout_id", None)
         if data.get("assignments"):
-            self._lw_repo.replace_for_layout(str(obj.id), [
-                {k: v for k, v in a.items() if k in ("area_name", "widget_id", "sort_order")}
-                for a in data["assignments"]
-            ])
+            self._lw_repo.replace_for_layout(
+                str(obj.id),
+                [
+                    {
+                        k: v
+                        for k, v in a.items()
+                        if k in ("area_name", "widget_id", "sort_order")
+                    }
+                    for a in data["assignments"]
+                ],
+            )
         return self._to_dto(obj)
 
     # ── private ──────────────────────────────────────────────────────────────
@@ -188,7 +212,9 @@ class CmsLayoutService:
         obj.is_active = data.get("is_active", True)
         return obj
 
-    def _to_dto(self, obj: CmsLayout, include_assignments: bool = False) -> Dict[str, Any]:
+    def _to_dto(
+        self, obj: CmsLayout, include_assignments: bool = False
+    ) -> Dict[str, Any]:
         d = obj.to_dict()
         if include_assignments:
             assignments = self._lw_repo.find_by_layout(str(obj.id))

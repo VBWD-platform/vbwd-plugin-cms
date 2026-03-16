@@ -40,6 +40,7 @@ class IpRangeMatcher:
         if rule.match_type != "ip_range":
             return False
         import ipaddress
+
         try:
             return ipaddress.ip_address(ctx.remote_addr) in ipaddress.ip_network(
                 rule.match_value or "", strict=False

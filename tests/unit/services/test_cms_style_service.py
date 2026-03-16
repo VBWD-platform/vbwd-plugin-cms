@@ -2,7 +2,9 @@
 import pytest
 from unittest.mock import MagicMock
 from plugins.cms.src.services.cms_style_service import (
-    CmsStyleService, CmsStyleNotFoundError, CmsStyleSlugConflictError,
+    CmsStyleService,
+    CmsStyleNotFoundError,
+    CmsStyleSlugConflictError,
 )
 from plugins.cms.src.models.cms_style import CmsStyle
 
@@ -20,13 +22,16 @@ def _make_service(styles=None):
         id_store[str(s.id)] = s
 
     repo.save.side_effect = _save
-    repo.find_by_ids.side_effect = lambda ids: [id_store[i] for i in ids if i in id_store]
+    repo.find_by_ids.side_effect = lambda ids: [
+        id_store[i] for i in ids if i in id_store
+    ]
     return CmsStyleService(repo), repo
 
 
 def _style(slug="my-style", name="My Style", css="body { color: red; }"):
     from uuid import uuid4
     import datetime
+
     s = CmsStyle()
     s.id = uuid4()
     s.slug = slug
@@ -41,7 +46,9 @@ def _style(slug="my-style", name="My Style", css="body { color: red; }"):
 class TestCreateStyle:
     def test_create_style_stores_source_css(self):
         svc, repo = _make_service()
-        result = svc.create_style({"name": "Footer Style", "source_css": "footer { color: blue; }"})
+        result = svc.create_style(
+            {"name": "Footer Style", "source_css": "footer { color: blue; }"}
+        )
         assert result["source_css"] == "footer { color: blue; }"
         repo.save.assert_called_once()
 
@@ -52,7 +59,9 @@ class TestCreateStyle:
 
     def test_create_style_uses_explicit_slug(self):
         svc, _ = _make_service()
-        result = svc.create_style({"name": "X", "slug": "custom-slug", "source_css": "p {}"})
+        result = svc.create_style(
+            {"name": "X", "slug": "custom-slug", "source_css": "p {}"}
+        )
         assert result["slug"] == "custom-slug"
 
     def test_create_style_rejects_duplicate_slug(self):
@@ -84,12 +93,16 @@ class TestImportStyle:
     def test_import_style_renames_slug_on_collision(self):
         existing = _style(slug="my-style")
         svc, _ = _make_service(styles=[existing])
-        result = svc.import_style({"name": "My Style", "slug": "my-style", "source_css": "a {}"})
+        result = svc.import_style(
+            {"name": "My Style", "slug": "my-style", "source_css": "a {}"}
+        )
         assert result["slug"] == "my-style-2"
 
     def test_import_style_uses_original_slug_when_no_collision(self):
         svc, _ = _make_service()
-        result = svc.import_style({"name": "Fresh", "slug": "fresh-style", "source_css": "a {}"})
+        result = svc.import_style(
+            {"name": "Fresh", "slug": "fresh-style", "source_css": "a {}"}
+        )
         assert result["slug"] == "fresh-style"
 
 

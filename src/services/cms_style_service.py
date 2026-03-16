@@ -70,7 +70,9 @@ class CmsStyleService:
             raise CmsStyleNotFoundError(f"Style {style_id} not found")
         if "slug" in data and data["slug"] != obj.slug:
             if self._repo.find_by_slug(data["slug"]):
-                raise CmsStyleSlugConflictError(f"Slug '{data['slug']}' is already in use")
+                raise CmsStyleSlugConflictError(
+                    f"Slug '{data['slug']}' is already in use"
+                )
         for field in ("name", "slug", "source_css", "sort_order", "is_active"):
             if field in data:
                 setattr(obj, field, data[field])
@@ -96,7 +98,9 @@ class CmsStyleService:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for s in styles:
-                zf.writestr(f"styles/{s.slug}.json", json.dumps(s.to_dict(), ensure_ascii=False))
+                zf.writestr(
+                    f"styles/{s.slug}.json", json.dumps(s.to_dict(), ensure_ascii=False)
+                )
         return buf.getvalue()
 
     def import_style(self, data: Dict[str, Any]) -> Dict[str, Any]:

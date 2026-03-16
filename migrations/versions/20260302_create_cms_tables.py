@@ -22,7 +22,12 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("slug", sa.String(128), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("parent_id", sa.UUID(), sa.ForeignKey("cms_category.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "parent_id",
+            sa.UUID(),
+            sa.ForeignKey("cms_category.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
@@ -30,7 +35,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_cms_category_slug", "cms_category", ["slug"], unique=True)
-    op.create_index("ix_cms_category_parent_id", "cms_category", ["parent_id"], unique=False)
+    op.create_index(
+        "ix_cms_category_parent_id", "cms_category", ["parent_id"], unique=False
+    )
 
     # ── cms_page ─────────────────────────────────────────────────────────────
     op.create_table(
@@ -40,7 +47,12 @@ def upgrade() -> None:
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("language", sa.String(8), nullable=False, server_default="en"),
         sa.Column("content_json", sa.JSON(), nullable=False),
-        sa.Column("category_id", sa.UUID(), sa.ForeignKey("cms_category.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "category_id",
+            sa.UUID(),
+            sa.ForeignKey("cms_category.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("is_published", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
         # SEO
@@ -51,7 +63,9 @@ def upgrade() -> None:
         sa.Column("og_description", sa.Text(), nullable=True),
         sa.Column("og_image_url", sa.String(512), nullable=True),
         sa.Column("canonical_url", sa.String(512), nullable=True),
-        sa.Column("robots", sa.String(64), nullable=False, server_default="index,follow"),
+        sa.Column(
+            "robots", sa.String(64), nullable=False, server_default="index,follow"
+        ),
         sa.Column("schema_json", sa.JSON(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
@@ -59,7 +73,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_cms_page_slug", "cms_page", ["slug"], unique=True)
-    op.create_index("ix_cms_page_category_id", "cms_page", ["category_id"], unique=False)
+    op.create_index(
+        "ix_cms_page_category_id", "cms_page", ["category_id"], unique=False
+    )
 
     # ── cms_image ─────────────────────────────────────────────────────────────
     op.create_table(

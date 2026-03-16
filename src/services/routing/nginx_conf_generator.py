@@ -14,9 +14,11 @@ class NginxConfGenerator:
 
     def generate(self, rules: List, default_slug: str) -> str:
         """Build nginx map/geo blocks from rules. Returns conf string."""
-        lines = ["# CMS routing rules — managed by vbwd-backend CmsRoutingService",
-                 "# Do not edit manually. Changes will be overwritten on next rule save.",
-                 ""]
+        lines = [
+            "# CMS routing rules — managed by vbwd-backend CmsRoutingService",
+            "# Do not edit manually. Changes will be overwritten on next rule save.",
+            "",
+        ]
 
         ip_rules = [r for r in rules if r.match_type == "ip_range"]
         lang_rules = [r for r in rules if r.match_type == "language"]

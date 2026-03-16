@@ -3,7 +3,9 @@ import pytest
 import json
 from unittest.mock import MagicMock
 from plugins.cms.src.services.cms_page_service import (
-    CmsPageService, CmsPageNotFoundError, CmsPageSlugConflictError,
+    CmsPageService,
+    CmsPageNotFoundError,
+    CmsPageSlugConflictError,
 )
 from plugins.cms.src.models.cms_page import CmsPage
 from plugins.cms.src.models.cms_category import CmsCategory
@@ -26,13 +28,16 @@ def _make_service(pages=None, categories=None):
         page_id_store[str(p.id)] = p
 
     page_repo.save.side_effect = _save
-    page_repo.find_by_ids.side_effect = lambda ids: [page_id_store[i] for i in ids if i in page_id_store]
+    page_repo.find_by_ids.side_effect = lambda ids: [
+        page_id_store[i] for i in ids if i in page_id_store
+    ]
 
     return CmsPageService(page_repo, cat_repo), page_repo, cat_repo
 
 
 def _page(slug="my-page", published=True, name="My Page"):
     from uuid import uuid4
+
     p = CmsPage()
     p.id = uuid4()
     p.slug = slug
@@ -136,6 +141,7 @@ class TestBulkActions:
 class TestExport:
     def test_export_json_includes_all_fields(self):
         from uuid import uuid4
+
         page = _page("export-me", published=True)
         page.meta_title = "Export Test"
         svc, repo, _ = _make_service(pages=[page])
@@ -151,6 +157,7 @@ class TestExport:
 
     def test_export_base64_encodes_payload(self):
         import base64
+
         page = _page("b64-page")
         svc, repo, _ = _make_service(pages=[page])
         repo.find_by_ids.return_value = [page]

@@ -34,7 +34,11 @@ class CmsRoutingRuleRepository:
         )
 
     def find_by_id(self, rule_id: str) -> Optional[CmsRoutingRule]:
-        return self.session.query(CmsRoutingRule).filter(CmsRoutingRule.id == rule_id).first()
+        return (
+            self.session.query(CmsRoutingRule)
+            .filter(CmsRoutingRule.id == rule_id)
+            .first()
+        )
 
     def save(self, rule: CmsRoutingRule) -> CmsRoutingRule:
         self.session.add(rule)

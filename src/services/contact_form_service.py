@@ -97,7 +97,10 @@ class ContactFormService:
         """Raise HoneypotError if the hidden honeypot field is not empty."""
         value = form_data.get("_hp", "")
         if value:
-            logger.info("[contact_form] Honeypot triggered from data=%s", form_data.get("widget_slug"))
+            logger.info(
+                "[contact_form] Honeypot triggered from data=%s",
+                form_data.get("widget_slug"),
+            )
             raise HoneypotError("Honeypot field filled")
 
     # ── Rate limiting ─────────────────────────────────────────────────────────
@@ -133,7 +136,10 @@ class ContactFormService:
             if count > max_requests:
                 logger.warning(
                     "[contact_form] Rate limit hit: widget=%s ip=%s count=%d max=%d",
-                    widget_slug, remote_ip, count, max_requests,
+                    widget_slug,
+                    remote_ip,
+                    count,
+                    max_requests,
                 )
                 raise RateLimitError(f"Rate limit exceeded ({count}/{max_requests})")
         except RateLimitError:
@@ -163,7 +169,9 @@ class ContactFormService:
             field_type: str = field.get("type", "text")
             raw_value: Any = submitted.get(field_id)
 
-            cleaned = self._sanitize_value(raw_value, field_type, field.get("options", []))
+            cleaned = self._sanitize_value(
+                raw_value, field_type, field.get("options", [])
+            )
 
             if required and not cleaned:
                 raise ValidationError(f"Field '{label}' is required")

@@ -28,7 +28,9 @@ def upgrade() -> None:
     # 2. Migrate content_html → content_json {"content": base64(html)}
     #    Only for html-type widgets that have non-null content_html.
     #    PostgreSQL encode(bytea, 'base64') produces standard base64.
-    op.execute(text("""
+    op.execute(
+        text(
+            """
         UPDATE cms_widget
         SET content_json = jsonb_build_object(
             'content',
@@ -37,7 +39,9 @@ def upgrade() -> None:
         WHERE widget_type = 'html'
           AND content_html IS NOT NULL
           AND content_html <> ''
-    """))
+    """
+        )
+    )
 
     # 3. Drop content_html
     op.drop_column("cms_widget", "content_html")
@@ -48,7 +52,9 @@ def downgrade() -> None:
     op.add_column("cms_widget", sa.Column("content_html", sa.Text, nullable=True))
 
     # Restore from base64 content_json
-    op.execute(text("""
+    op.execute(
+        text(
+            """
         UPDATE cms_widget
         SET content_html = convert_from(
             decode(content_json->>'content', 'base64'), 'UTF8'
@@ -56,6 +62,8 @@ def downgrade() -> None:
         WHERE widget_type = 'html'
           AND content_json ? 'content'
           AND content_json->>'content' IS NOT NULL
-    """))
+    """
+        )
+    )
 
     op.drop_column("cms_widget", "source_css")

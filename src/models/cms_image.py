@@ -10,8 +10,8 @@ class CmsImage(BaseModel):
 
     slug = db.Column(db.String(128), unique=True, nullable=False, index=True)
     caption = db.Column(db.String(255), nullable=True)
-    file_path = db.Column(db.String(512), nullable=False)   # relative to uploads root
-    url_path = db.Column(db.String(512), nullable=False)    # e.g. /uploads/images/foo.jpg
+    file_path = db.Column(db.String(512), nullable=False)  # relative to uploads root
+    url_path = db.Column(db.String(512), nullable=False)  # e.g. /uploads/images/foo.jpg
     mime_type = db.Column(db.String(64), nullable=True)
     file_size_bytes = db.Column(db.Integer, nullable=True)
     width_px = db.Column(db.Integer, nullable=True)

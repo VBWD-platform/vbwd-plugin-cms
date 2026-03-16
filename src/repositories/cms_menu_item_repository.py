@@ -16,16 +16,18 @@ class CmsMenuItemRepository:
             .all()
         )
 
-    def replace_tree(self, widget_id: str, items: List[Dict[str, Any]]) -> List[CmsMenuItem]:
+    def replace_tree(
+        self, widget_id: str, items: List[Dict[str, Any]]
+    ) -> List[CmsMenuItem]:
         """Delete all existing items for widget and insert new tree atomically.
 
         Remaps parent_id values from import-time placeholder IDs to the real
         UUIDs assigned during this insert, so multilevel menus from JSON import
         don't violate the self-referential FK constraint.
         """
-        self.session.query(CmsMenuItem).filter(CmsMenuItem.widget_id == widget_id).delete(
-            synchronize_session="fetch"
-        )
+        self.session.query(CmsMenuItem).filter(
+            CmsMenuItem.widget_id == widget_id
+        ).delete(synchronize_session="fetch")
         # Pass 1: assign new UUIDs and build old_id → new_id mapping
         id_map: Dict[str, Any] = {}
         created = []
@@ -57,8 +59,8 @@ class CmsMenuItemRepository:
         return [item for item, _ in created]
 
     def delete_by_widget(self, widget_id: str) -> None:
-        self.session.query(CmsMenuItem).filter(CmsMenuItem.widget_id == widget_id).delete(
-            synchronize_session="fetch"
-        )
+        self.session.query(CmsMenuItem).filter(
+            CmsMenuItem.widget_id == widget_id
+        ).delete(synchronize_session="fetch")
         self.session.flush()
         self.session.commit()

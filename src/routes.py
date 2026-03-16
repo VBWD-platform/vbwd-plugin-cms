@@ -33,7 +33,14 @@ Admin endpoints (require_admin):
 """
 import logging
 import os
-from flask import Blueprint, jsonify, request, current_app, send_from_directory, Response
+from flask import (
+    Blueprint,
+    jsonify,
+    request,
+    current_app,
+    send_from_directory,
+    Response,
+)
 from src.extensions import db
 from src.middleware.auth import require_auth, require_admin
 
@@ -41,29 +48,47 @@ from plugins.cms.src.repositories.cms_page_repository import CmsPageRepository
 from plugins.cms.src.repositories.cms_category_repository import CmsCategoryRepository
 from plugins.cms.src.repositories.cms_image_repository import CmsImageRepository
 from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
-from plugins.cms.src.repositories.cms_layout_widget_repository import CmsLayoutWidgetRepository
+from plugins.cms.src.repositories.cms_layout_widget_repository import (
+    CmsLayoutWidgetRepository,
+)
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.repositories.cms_menu_item_repository import CmsMenuItemRepository
 from plugins.cms.src.repositories.cms_style_repository import CmsStyleRepository
 from plugins.cms.src.services.cms_page_service import (
-    CmsPageService, CmsPageNotFoundError, CmsPageSlugConflictError,
+    CmsPageService,
+    CmsPageNotFoundError,
+    CmsPageSlugConflictError,
 )
 from plugins.cms.src.services.cms_category_service import (
-    CmsCategoryService, CmsCategoryConflictError,
+    CmsCategoryService,
+    CmsCategoryConflictError,
 )
-from plugins.cms.src.services.cms_image_service import CmsImageService, CmsImageNotFoundError
+from plugins.cms.src.services.cms_image_service import (
+    CmsImageService,
+    CmsImageNotFoundError,
+)
 from plugins.cms.src.services.cms_layout_service import (
-    CmsLayoutService, CmsLayoutNotFoundError, CmsLayoutSlugConflictError,
+    CmsLayoutService,
+    CmsLayoutNotFoundError,
+    CmsLayoutSlugConflictError,
 )
 from plugins.cms.src.services.cms_widget_service import (
-    CmsWidgetService, CmsWidgetNotFoundError, CmsWidgetSlugConflictError, CmsWidgetInUseError,
+    CmsWidgetService,
+    CmsWidgetNotFoundError,
+    CmsWidgetSlugConflictError,
+    CmsWidgetInUseError,
 )
 from plugins.cms.src.services.cms_style_service import (
-    CmsStyleService, CmsStyleNotFoundError, CmsStyleSlugConflictError,
+    CmsStyleService,
+    CmsStyleNotFoundError,
+    CmsStyleSlugConflictError,
 )
 from plugins.cms.src.services.file_storage import LocalFileStorage
 from plugins.cms.src.services.contact_form_service import (
-    ContactFormService, HoneypotError, RateLimitError, ValidationError,
+    ContactFormService,
+    HoneypotError,
+    RateLimitError,
+    ValidationError,
 )
 from plugins.cms.src.services.cms_import_export_service import CmsImportExportService
 
@@ -74,6 +99,7 @@ cms_bp = Blueprint("cms", __name__)
 
 
 # ── Service factory helpers ───────────────────────────────────────────────────
+
 
 def _page_service() -> CmsPageService:
     page_repo = CmsPageRepository(db.session)
@@ -117,7 +143,10 @@ def _style_service() -> CmsStyleService:
 
 
 def _import_export_service() -> CmsImportExportService:
-    from plugins.cms.src.repositories.routing_rule_repository import CmsRoutingRuleRepository
+    from plugins.cms.src.repositories.routing_rule_repository import (
+        CmsRoutingRuleRepository,
+    )
+
     config = _cms_config()
     storage = LocalFileStorage(
         base_path=config.get("uploads_base_path", "/app/uploads"),
@@ -151,6 +180,7 @@ def _cms_config() -> dict:
 # ════════════════════════════════════════════════════════════════════════════
 # CONTACT FORM — public POST endpoint
 # ════════════════════════════════════════════════════════════════════════════
+
 
 @cms_bp.route("/api/v1/contact", methods=["POST"])
 def submit_contact_form():
@@ -205,13 +235,16 @@ def submit_contact_form():
         return jsonify({"error": str(exc)}), 422
 
     event_bus.publish("contact_form.received", payload)
-    logger.info("[contact_form] Submitted widget=%s to=%s", widget_slug, recipient_email)
+    logger.info(
+        "[contact_form] Submitted widget=%s to=%s", widget_slug, recipient_email
+    )
     return jsonify({"ok": True}), 200
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # UPLOADS — serve uploaded media files
 # ════════════════════════════════════════════════════════════════════════════
+
 
 @cms_bp.route("/uploads/<path:filename>", methods=["GET"])
 def serve_upload(filename: str):
@@ -228,6 +261,7 @@ def serve_upload(filename: str):
 # ════════════════════════════════════════════════════════════════════════════
 # PUBLIC — CMS pages (no auth required)
 # ════════════════════════════════════════════════════════════════════════════
+
 
 @cms_bp.route("/api/v1/cms/categories", methods=["GET"])
 def list_public_categories():
@@ -264,6 +298,7 @@ def list_published_pages():
 # ADMIN — Pages
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @cms_bp.route("/api/v1/admin/cms/pages", methods=["GET"])
 @require_auth
 @require_admin
@@ -289,8 +324,10 @@ def admin_list_pages():
         filters["search"] = request.args.get("search")
 
     result = _page_service().list_pages(
-        page=page, per_page=per_page,
-        sort_by=sort_by, sort_dir=sort_dir,
+        page=page,
+        per_page=per_page,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
         filters=filters,
     )
     return jsonify(result), 200
@@ -343,13 +380,17 @@ def admin_export_pages():
     Body: {"ids": [...], "format": "json"}
     """
     from flask import Response
+
     data = request.get_json() or {}
     ids = data.get("ids", [])
     fmt = data.get("format", "json")
 
     payload = _page_service().export_pages(ids, fmt)
-    return Response(payload, mimetype="application/json",
-                    headers={"Content-Disposition": "attachment; filename=cms-pages.json"})
+    return Response(
+        payload,
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=cms-pages.json"},
+    )
 
 
 @cms_bp.route("/api/v1/admin/cms/pages/import", methods=["POST"])
@@ -413,6 +454,7 @@ def admin_delete_page(page_id: str):
 # ADMIN — Categories
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @cms_bp.route("/api/v1/admin/cms/categories", methods=["GET"])
 @require_auth
 @require_admin
@@ -469,6 +511,7 @@ def admin_delete_category(cat_id: str):
 # ADMIN — Images
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @cms_bp.route("/api/v1/admin/cms/images", methods=["GET"])
 @require_auth
 @require_admin
@@ -481,8 +524,10 @@ def admin_list_images():
     search = request.args.get("search")
 
     result = _image_service().list_images(
-        page=page, per_page=per_page,
-        sort_by=sort_by, sort_dir=sort_dir,
+        page=page,
+        per_page=per_page,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
         search=search,
     )
     return jsonify(result), 200
@@ -523,6 +568,7 @@ def admin_upload_image():
 def admin_export_images():
     """GET /api/v1/admin/cms/images/export?ids=id1,id2 — export ZIP of selected images."""
     from flask import Response
+
     ids_param = request.args.get("ids", "")
     ids = [i.strip() for i in ids_param.split(",") if i.strip()]
     if not ids:
@@ -607,6 +653,7 @@ def admin_delete_image(image_id: str):
 # PUBLIC — Layouts & Styles (no auth required)
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @cms_bp.route("/api/v1/cms/layouts/<layout_id>", methods=["GET"])
 def get_layout_public(layout_id: str):
     """GET /api/v1/cms/layouts/<id> — layout with embedded widget data for fe-user."""
@@ -664,18 +711,22 @@ def get_style_css_public(style_id: str):
 # ADMIN — Layouts
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @cms_bp.route("/api/v1/admin/cms/layouts", methods=["GET"])
 @require_auth
 @require_admin
 def admin_list_layouts():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
-    result = _layout_service().list_layouts({
-        "page": page, "per_page": per_page,
-        "sort_by": request.args.get("sort_by", "sort_order"),
-        "sort_dir": request.args.get("sort_dir", "asc"),
-        "query": request.args.get("query"),
-    })
+    result = _layout_service().list_layouts(
+        {
+            "page": page,
+            "per_page": per_page,
+            "sort_by": request.args.get("sort_by", "sort_order"),
+            "sort_dir": request.args.get("sort_dir", "asc"),
+            "query": request.args.get("query"),
+        }
+    )
     return jsonify(result), 200
 
 
@@ -715,6 +766,7 @@ def admin_export_layouts():
     if len(ids) == 1:
         payload = _layout_service().export_layout(ids[0])
         import json as _json
+
         return Response(
             _json.dumps(payload, ensure_ascii=False),
             mimetype="application/json",
@@ -733,6 +785,7 @@ def admin_export_layouts():
 @require_admin
 def admin_import_layouts():
     import json as _json
+
     raw = request.get_data()
     if not raw:
         return jsonify({"error": "Request body required"}), 400
@@ -800,19 +853,23 @@ def admin_set_layout_widgets(layout_id: str):
 # ADMIN — Widgets
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @cms_bp.route("/api/v1/admin/cms/widgets", methods=["GET"])
 @require_auth
 @require_admin
 def admin_list_widgets():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
-    result = _widget_service().list_widgets({
-        "page": page, "per_page": per_page,
-        "sort_by": request.args.get("sort_by", "sort_order"),
-        "sort_dir": request.args.get("sort_dir", "asc"),
-        "query": request.args.get("query"),
-        "widget_type": request.args.get("type"),
-    })
+    result = _widget_service().list_widgets(
+        {
+            "page": page,
+            "per_page": per_page,
+            "sort_by": request.args.get("sort_by", "sort_order"),
+            "sort_dir": request.args.get("sort_dir", "asc"),
+            "query": request.args.get("query"),
+            "widget_type": request.args.get("type"),
+        }
+    )
     return jsonify(result), 200
 
 
@@ -852,6 +909,7 @@ def admin_export_widgets():
     if len(ids) == 1:
         payload = _widget_service().export_widget(ids[0])
         import json as _json
+
         return Response(
             _json.dumps(payload, ensure_ascii=False),
             mimetype="application/json",
@@ -870,6 +928,7 @@ def admin_export_widgets():
 @require_admin
 def admin_import_widgets():
     import json as _json
+
     raw = request.get_data()
     if not raw:
         return jsonify({"error": "Request body required"}), 400
@@ -938,18 +997,22 @@ def admin_replace_widget_menu(widget_id: str):
 # ADMIN — Styles
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @cms_bp.route("/api/v1/admin/cms/styles", methods=["GET"])
 @require_auth
 @require_admin
 def admin_list_styles():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
-    result = _style_service().list_styles({
-        "page": page, "per_page": per_page,
-        "sort_by": request.args.get("sort_by", "sort_order"),
-        "sort_dir": request.args.get("sort_dir", "asc"),
-        "query": request.args.get("query"),
-    })
+    result = _style_service().list_styles(
+        {
+            "page": page,
+            "per_page": per_page,
+            "sort_by": request.args.get("sort_by", "sort_order"),
+            "sort_dir": request.args.get("sort_dir", "asc"),
+            "query": request.args.get("query"),
+        }
+    )
     return jsonify(result), 200
 
 
@@ -989,6 +1052,7 @@ def admin_export_styles():
     if len(ids) == 1:
         payload = _style_service().export_style(ids[0])
         import json as _json
+
         return Response(
             _json.dumps(payload, ensure_ascii=False),
             mimetype="application/json",
@@ -1007,6 +1071,7 @@ def admin_export_styles():
 @require_admin
 def admin_import_styles():
     import json as _json
+
     raw = request.get_data()
     if not raw:
         return jsonify({"error": "Request body required"}), 400
@@ -1059,8 +1124,11 @@ def admin_delete_style(style_id: str):
 # Routing Rules
 # ════════════════════════════════════════════════════════════════════════════
 
+
 def _routing_svc():
-    from plugins.cms.src.repositories.routing_rule_repository import CmsRoutingRuleRepository
+    from plugins.cms.src.repositories.routing_rule_repository import (
+        CmsRoutingRuleRepository,
+    )
     from plugins.cms.src.services.routing.routing_service import CmsRoutingService
     from plugins.cms.src.services.routing.nginx_conf_generator import NginxConfGenerator
     from plugins.cms.src.services.routing.nginx_reload_gateway import (
@@ -1068,6 +1136,7 @@ def _routing_svc():
         SubprocessNginxReloadGateway,
     )
     import os
+
     cfg = _cms_config()
     routing_cfg = cfg.get("routing", {})
     reload_cmd = routing_cfg.get("nginx_reload_command", "nginx -s reload")
@@ -1086,7 +1155,10 @@ def _routing_svc():
 @cms_bp.route("/api/v1/cms/routing-rules", methods=["GET"])
 def public_list_routing_rules():
     """GET /api/v1/cms/routing-rules — public, nginx-layer rules only."""
-    from plugins.cms.src.repositories.routing_rule_repository import CmsRoutingRuleRepository
+    from plugins.cms.src.repositories.routing_rule_repository import (
+        CmsRoutingRuleRepository,
+    )
+
     repo = CmsRoutingRuleRepository(db.session)
     rules = repo.find_all_active_for_layer("nginx")
     return jsonify([r.to_dict() for r in rules]), 200
@@ -1096,7 +1168,10 @@ def public_list_routing_rules():
 def public_list_middleware_routing_rules():
     """GET /api/v1/cms/routing-rules/middleware — public, middleware-layer rules only.
     Used by the fe-user SPA to resolve the homepage redirect client-side."""
-    from plugins.cms.src.repositories.routing_rule_repository import CmsRoutingRuleRepository
+    from plugins.cms.src.repositories.routing_rule_repository import (
+        CmsRoutingRuleRepository,
+    )
+
     repo = CmsRoutingRuleRepository(db.session)
     rules = repo.find_all_active_for_layer("middleware")
     return jsonify([r.to_dict() for r in rules]), 200
@@ -1142,7 +1217,10 @@ def admin_reload_nginx():
 @require_admin
 def admin_get_routing_rule(rule_id: str):
     """GET /api/v1/admin/cms/routing-rules/<id> — get a single routing rule."""
-    from plugins.cms.src.repositories.routing_rule_repository import CmsRoutingRuleRepository
+    from plugins.cms.src.repositories.routing_rule_repository import (
+        CmsRoutingRuleRepository,
+    )
+
     repo = CmsRoutingRuleRepository(db.session)
     rule = repo.find_by_id(rule_id)
     if not rule:
@@ -1155,7 +1233,10 @@ def admin_get_routing_rule(rule_id: str):
 @require_admin
 def admin_update_routing_rule(rule_id: str):
     """PUT /api/v1/admin/cms/routing-rules/<id> — update a routing rule."""
-    from plugins.cms.src.services.routing.routing_service import CmsRoutingRuleNotFoundError
+    from plugins.cms.src.services.routing.routing_service import (
+        CmsRoutingRuleNotFoundError,
+    )
+
     data = request.get_json()
     if not data:
         return jsonify({"error": "JSON body required"}), 400
@@ -1173,7 +1254,10 @@ def admin_update_routing_rule(rule_id: str):
 @require_admin
 def admin_delete_routing_rule(rule_id: str):
     """DELETE /api/v1/admin/cms/routing-rules/<id> — delete (returns 204)."""
-    from plugins.cms.src.services.routing.routing_service import CmsRoutingRuleNotFoundError
+    from plugins.cms.src.services.routing.routing_service import (
+        CmsRoutingRuleNotFoundError,
+    )
+
     try:
         _routing_svc().delete_rule(rule_id)
         return "", 204
@@ -1184,6 +1268,7 @@ def admin_delete_routing_rule(rule_id: str):
 # ════════════════════════════════════════════════════════════════════════════
 # CMS IMPORT / EXPORT
 # ════════════════════════════════════════════════════════════════════════════
+
 
 @cms_bp.route("/api/v1/admin/cms/export", methods=["POST"])
 @require_auth

@@ -23,7 +23,9 @@ class CmsLayoutWidgetRepository:
             .all()
         )
 
-    def replace_for_layout(self, layout_id: str, assignments: List[Dict[str, Any]]) -> List[CmsLayoutWidget]:
+    def replace_for_layout(
+        self, layout_id: str, assignments: List[Dict[str, Any]]
+    ) -> List[CmsLayoutWidget]:
         """Replace all widget assignments for a layout atomically."""
         self.session.query(CmsLayoutWidget).filter(
             CmsLayoutWidget.layout_id == layout_id

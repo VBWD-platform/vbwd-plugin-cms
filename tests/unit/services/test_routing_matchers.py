@@ -38,6 +38,7 @@ def _ctx(
 
 # ── DefaultMatcher ────────────────────────────────────────────────────────────
 
+
 def test_default_matcher_matches():
     m = DefaultMatcher()
     assert m.matches(_rule("default"), _ctx()) is True
@@ -49,6 +50,7 @@ def test_default_matcher_wrong_type():
 
 
 # ── LanguageMatcher ───────────────────────────────────────────────────────────
+
 
 def test_language_matcher_by_accept_language():
     m = LanguageMatcher()
@@ -75,6 +77,7 @@ def test_language_matcher_wrong_type():
 
 # ── IpRangeMatcher ────────────────────────────────────────────────────────────
 
+
 def test_ip_range_matcher_in_range():
     m = IpRangeMatcher()
     ctx = _ctx(remote_addr="203.0.113.5")
@@ -94,6 +97,7 @@ def test_ip_range_matcher_invalid_ip():
 
 
 # ── CountryMatcher ────────────────────────────────────────────────────────────
+
 
 def test_country_matcher_single():
     m = CountryMatcher()
@@ -115,6 +119,7 @@ def test_country_matcher_no_geoip():
 
 # ── PathPrefixMatcher ─────────────────────────────────────────────────────────
 
+
 def test_path_prefix_matcher_matches():
     m = PathPrefixMatcher()
     ctx = _ctx(path="/old-pricing/plan-a")
@@ -129,6 +134,7 @@ def test_path_prefix_matcher_no_match():
 
 # ── CookieMatcher ─────────────────────────────────────────────────────────────
 
+
 def test_cookie_matcher_matches():
     m = CookieMatcher()
     ctx = _ctx(cookie_lang="de")
@@ -142,6 +148,7 @@ def test_cookie_matcher_no_match():
 
 
 # ── matcher_for ───────────────────────────────────────────────────────────────
+
 
 def test_matcher_for_returns_correct_instance():
     assert isinstance(matcher_for("default"), DefaultMatcher)

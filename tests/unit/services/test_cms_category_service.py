@@ -2,7 +2,8 @@
 import pytest
 from unittest.mock import MagicMock
 from plugins.cms.src.services.cms_category_service import (
-    CmsCategoryService, CmsCategoryConflictError,
+    CmsCategoryService,
+    CmsCategoryConflictError,
 )
 from plugins.cms.src.models.cms_category import CmsCategory
 
@@ -22,6 +23,7 @@ def _make_service(categories=None):
 def _category(name="Tech", slug="tech"):
     from uuid import uuid4
     import datetime
+
     c = CmsCategory()
     c.id = uuid4()
     c.name = name

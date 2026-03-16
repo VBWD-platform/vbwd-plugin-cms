@@ -33,10 +33,17 @@ if TYPE_CHECKING:
 
 _VERSION = "1.0"
 
-VALID_SECTIONS = frozenset((
-    "categories", "styles", "widgets", "layouts",
-    "pages", "routing_rules", "images",
-))
+VALID_SECTIONS = frozenset(
+    (
+        "categories",
+        "styles",
+        "widgets",
+        "layouts",
+        "pages",
+        "routing_rules",
+        "images",
+    )
+)
 
 
 class CmsImportExportService:
@@ -69,7 +76,8 @@ class CmsImportExportService:
     def export(self, sections: List[str]) -> bytes:
         """Return a ZIP file as bytes containing the requested sections."""
         effective = (
-            set(VALID_SECTIONS) if ("all" in sections or "everything" in sections)
+            set(VALID_SECTIONS)
+            if ("all" in sections or "everything" in sections)
             else set(sections) & VALID_SECTIONS
         )
 
@@ -78,19 +86,22 @@ class CmsImportExportService:
             zf.writestr("manifest.json", self._manifest(sorted(effective)))
 
             if "categories" in effective:
-                zf.writestr("categories.json", _json(
-                    [c.to_dict() for c in self._cat.find_all()]
-                ))
+                zf.writestr(
+                    "categories.json",
+                    _json([c.to_dict() for c in self._cat.find_all()]),
+                )
 
             if "styles" in effective:
-                zf.writestr("styles.json", _json(
-                    [s.to_dict() for s in self._paginated(self._style)]
-                ))
+                zf.writestr(
+                    "styles.json",
+                    _json([s.to_dict() for s in self._paginated(self._style)]),
+                )
 
             if "widgets" in effective:
-                zf.writestr("widgets.json", _json(
-                    [w.to_dict() for w in self._paginated(self._widget)]
-                ))
+                zf.writestr(
+                    "widgets.json",
+                    _json([w.to_dict() for w in self._paginated(self._widget)]),
+                )
 
             if "layouts" in effective:
                 layouts = []
@@ -111,9 +122,10 @@ class CmsImportExportService:
                 zf.writestr("pages.json", _json(pages))
 
             if "routing_rules" in effective:
-                zf.writestr("routing_rules.json", _json(
-                    [r.to_dict() for r in self._routing.find_all()]
-                ))
+                zf.writestr(
+                    "routing_rules.json",
+                    _json([r.to_dict() for r in self._routing.find_all()]),
+                )
 
             if "images" in effective:
                 images = []
@@ -148,51 +160,71 @@ class CmsImportExportService:
             # Import in FK dependency order
             if "categories.json" in names:
                 n, e = self._import_entities(
-                    _load("categories.json"), conflict_strategy,
-                    repo=self._cat, factory=self._make_category,
+                    _load("categories.json"),
+                    conflict_strategy,
+                    repo=self._cat,
+                    factory=self._make_category,
                 )
-                counters["categories"] = n; errors.extend(e)
+                counters["categories"] = n
+                errors.extend(e)
 
             if "styles.json" in names:
                 n, e = self._import_entities(
-                    _load("styles.json"), conflict_strategy,
-                    repo=self._style, factory=self._make_style,
+                    _load("styles.json"),
+                    conflict_strategy,
+                    repo=self._style,
+                    factory=self._make_style,
                 )
-                counters["styles"] = n; errors.extend(e)
+                counters["styles"] = n
+                errors.extend(e)
 
             if "widgets.json" in names:
                 n, e = self._import_entities(
-                    _load("widgets.json"), conflict_strategy,
-                    repo=self._widget, factory=self._make_widget,
+                    _load("widgets.json"),
+                    conflict_strategy,
+                    repo=self._widget,
+                    factory=self._make_widget,
                 )
-                counters["widgets"] = n; errors.extend(e)
+                counters["widgets"] = n
+                errors.extend(e)
 
             if "layouts.json" in names:
                 n, e = self._import_layouts(_load("layouts.json"), conflict_strategy)
-                counters["layouts"] = n; errors.extend(e)
+                counters["layouts"] = n
+                errors.extend(e)
 
             if "pages.json" in names:
                 n, e = self._import_pages(_load("pages.json"), conflict_strategy)
-                counters["pages"] = n; errors.extend(e)
+                counters["pages"] = n
+                errors.extend(e)
 
             if "routing_rules.json" in names:
-                n, e = self._import_routing_rules(_load("routing_rules.json"), conflict_strategy)
-                counters["routing_rules"] = n; errors.extend(e)
+                n, e = self._import_routing_rules(
+                    _load("routing_rules.json"), conflict_strategy
+                )
+                counters["routing_rules"] = n
+                errors.extend(e)
 
             if "images.json" in names:
-                n, e = self._import_images(_load("images.json"), zf, names, conflict_strategy)
-                counters["images"] = n; errors.extend(e)
+                n, e = self._import_images(
+                    _load("images.json"), zf, names, conflict_strategy
+                )
+                counters["images"] = n
+                errors.extend(e)
 
         return {"imported": counters, "errors": errors}
 
     # ── EXPORT HELPERS ─────────────────────────────────────────────────────────
 
     def _manifest(self, sections: List[str]) -> str:
-        return json.dumps({
-            "version": _VERSION,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
-            "sections": sections,
-        }, indent=2)
+        return json.dumps(
+            {
+                "version": _VERSION,
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "sections": sections,
+            },
+            indent=2,
+        )
 
     def _paginated(self, repo) -> list:
         return repo.find_all(page=1, per_page=100000)["items"]
@@ -207,11 +239,13 @@ class CmsImportExportService:
         result = []
         for a in self._lw.find_by_layout(str(layout.id)):
             w = self._widget.find_by_id(str(a.widget_id))
-            result.append({
-                "widget_slug": w.slug if w else None,
-                "area_name": a.area_name,
-                "sort_order": a.sort_order,
-            })
+            result.append(
+                {
+                    "widget_slug": w.slug if w else None,
+                    "area_name": a.area_name,
+                    "sort_order": a.sort_order,
+                }
+            )
         return result
 
     # ── DROP-ALL HELPERS ───────────────────────────────────────────────────────
@@ -252,7 +286,7 @@ class CmsImportExportService:
         if strategy == "drop_all" or not repo.find_by_slug(base):
             return base
         if strategy == "add":
-            return ""   # skip
+            return ""  # skip
         # 'index': append -2, -3, …
         for i in range(2, 10_000):
             candidate = f"{base}-{i}"
@@ -292,9 +326,14 @@ class CmsImportExportService:
                 lay = self._make_layout(rec, slug)
                 saved = self._layout.save(lay)
                 assignments = [
-                    {"widget_id": str(w.id), "area_name": a["area_name"], "sort_order": a.get("sort_order", 0)}
+                    {
+                        "widget_id": str(w.id),
+                        "area_name": a["area_name"],
+                        "sort_order": a.get("sort_order", 0),
+                    }
                     for a in rec.get("widget_assignments", [])
-                    if a.get("widget_slug") and (w := self._widget.find_by_slug(a["widget_slug"]))
+                    if a.get("widget_slug")
+                    and (w := self._widget.find_by_slug(a["widget_slug"]))
                 ]
                 if assignments:
                     self._lw.replace_for_layout(str(saved.id), assignments)
@@ -316,7 +355,9 @@ class CmsImportExportService:
                 errors.append(f"{rec.get('slug', '?')}: {ex}")
         return count, errors
 
-    def _import_routing_rules(self, records: list, strategy: str) -> Tuple[int, List[str]]:
+    def _import_routing_rules(
+        self, records: list, strategy: str
+    ) -> Tuple[int, List[str]]:
         # Routing rules use 'name' (not slug) as identity key
         count, errors = 0, []
         existing = {r.name for r in self._routing.find_all()}
@@ -364,6 +405,7 @@ class CmsImportExportService:
 
     def _make_category(self, rec: dict, slug: str):
         from plugins.cms.src.models.cms_category import CmsCategory
+
         obj = CmsCategory()
         obj.id = uuid4()
         obj.slug = slug
@@ -374,6 +416,7 @@ class CmsImportExportService:
 
     def _make_style(self, rec: dict, slug: str):
         from plugins.cms.src.models.cms_style import CmsStyle
+
         obj = CmsStyle()
         obj.id = uuid4()
         obj.slug = slug
@@ -385,6 +428,7 @@ class CmsImportExportService:
 
     def _make_widget(self, rec: dict, slug: str):
         from plugins.cms.src.models.cms_widget import CmsWidget
+
         obj = CmsWidget()
         obj.id = uuid4()
         obj.slug = slug
@@ -399,6 +443,7 @@ class CmsImportExportService:
 
     def _make_layout(self, rec: dict, slug: str):
         from plugins.cms.src.models.cms_layout import CmsLayout
+
         obj = CmsLayout()
         obj.id = uuid4()
         obj.slug = slug
@@ -411,6 +456,7 @@ class CmsImportExportService:
 
     def _make_page(self, rec: dict, slug: str):
         from plugins.cms.src.models.cms_page import CmsPage
+
         obj = CmsPage()
         obj.id = uuid4()
         obj.slug = slug
@@ -430,12 +476,14 @@ class CmsImportExportService:
         obj.canonical_url = rec.get("canonical_url")
         obj.robots = rec.get("robots", "index,follow")
         obj.schema_json = rec.get("schema_json")
+
         # Resolve FK by slug
         def _resolve(repo, slug_val):
             if not slug_val:
                 return None
             obj = repo.find_by_slug(slug_val)
             return obj.id if obj else None
+
         obj.category_id = _resolve(self._cat, rec.get("category_slug"))
         obj.layout_id = _resolve(self._layout, rec.get("layout_slug"))
         obj.style_id = _resolve(self._style, rec.get("style_slug"))
@@ -443,6 +491,7 @@ class CmsImportExportService:
 
     def _make_routing_rule(self, rec: dict, name: str):
         from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
+
         obj = CmsRoutingRule()
         obj.id = uuid4()
         obj.name = name
@@ -458,6 +507,7 @@ class CmsImportExportService:
 
     def _make_image(self, rec: dict, slug: str, file_path: str):
         from plugins.cms.src.models.cms_image import CmsImage
+
         obj = CmsImage()
         obj.id = uuid4()
         obj.slug = slug
@@ -473,6 +523,7 @@ class CmsImportExportService:
 
 
 # ── Module-level helpers ───────────────────────────────────────────────────────
+
 
 def _json(data) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2, default=str)

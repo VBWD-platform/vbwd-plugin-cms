@@ -46,8 +46,11 @@ class CmsImageService:
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = self._repo.find_all(
-            page=page, per_page=per_page, sort_by=sort_by,
-            sort_dir=sort_dir, search=search,
+            page=page,
+            per_page=per_page,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            search=search,
         )
         result["items"] = [img.to_dict() for img in result["items"]]
         return result
@@ -88,7 +91,14 @@ class CmsImageService:
         if not image:
             raise CmsImageNotFoundError(f"Image {image_id} not found")
 
-        for field in ("caption", "alt_text", "slug", "og_image_url", "robots", "schema_json"):
+        for field in (
+            "caption",
+            "alt_text",
+            "slug",
+            "og_image_url",
+            "robots",
+            "schema_json",
+        ):
             if field in data:
                 setattr(image, field, data[field])
 
@@ -163,6 +173,7 @@ class CmsImageService:
             return None, None
         try:
             from PIL import Image as PILImage
+
             with PILImage.open(io.BytesIO(data)) as img:
                 return img.width, img.height
         except Exception:

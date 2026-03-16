@@ -17,7 +17,11 @@ class CmsCategoryRepository:
         )
 
     def find_by_id(self, category_id: str) -> Optional[CmsCategory]:
-        return self.session.query(CmsCategory).filter(CmsCategory.id == category_id).first()
+        return (
+            self.session.query(CmsCategory)
+            .filter(CmsCategory.id == category_id)
+            .first()
+        )
 
     def find_by_slug(self, slug: str) -> Optional[CmsCategory]:
         return self.session.query(CmsCategory).filter(CmsCategory.slug == slug).first()

@@ -17,6 +17,7 @@ def _make_rule(**kwargs):
     r = CmsRoutingRule()
     r.id = kwargs.get("id", "test-id-1")
     from uuid import uuid4
+
     r.id = uuid4()
     r.name = kwargs.get("name", "Test Rule")
     r.is_active = kwargs.get("is_active", True)
@@ -64,12 +65,18 @@ def _make_service(rules=None):
         rule_repo=rule_repo,
         conf_generator=conf_gen,
         nginx_gateway=nginx_gw,
-        config={"routing": {"nginx_conf_path": "/tmp/test_cms_routing.conf", "default_slug": "home"}},
+        config={
+            "routing": {
+                "nginx_conf_path": "/tmp/test_cms_routing.conf",
+                "default_slug": "home",
+            }
+        },
     )
     return svc, rule_repo, nginx_gw
 
 
 # ── list_rules ────────────────────────────────────────────────────────────────
+
 
 def test_list_rules_returns_dicts():
     rule = _make_rule()
@@ -80,6 +87,7 @@ def test_list_rules_returns_dicts():
 
 
 # ── create_rule ───────────────────────────────────────────────────────────────
+
 
 def test_create_rule_valid():
     svc, repo, _ = _make_service()
@@ -97,26 +105,31 @@ def test_create_rule_valid():
 def test_create_rule_invalid_match_type():
     svc, _, _ = _make_service()
     with pytest.raises(ValueError, match="match_type"):
-        svc.create_rule({
-            "name": "Bad",
-            "match_type": "invalid",
-            "target_slug": "home",
-        })
+        svc.create_rule(
+            {
+                "name": "Bad",
+                "match_type": "invalid",
+                "target_slug": "home",
+            }
+        )
 
 
 def test_create_rule_invalid_redirect_code():
     svc, _, _ = _make_service()
     with pytest.raises(ValueError, match="redirect_code"):
-        svc.create_rule({
-            "name": "Bad",
-            "match_type": "language",
-            "match_value": "de",
-            "target_slug": "home",
-            "redirect_code": 200,
-        })
+        svc.create_rule(
+            {
+                "name": "Bad",
+                "match_type": "language",
+                "match_value": "de",
+                "target_slug": "home",
+                "redirect_code": 200,
+            }
+        )
 
 
 # ── update_rule ───────────────────────────────────────────────────────────────
+
 
 def test_update_rule_updates_fields():
     rule = _make_rule(name="Old Name")
@@ -133,6 +146,7 @@ def test_update_rule_not_found():
 
 # ── delete_rule ───────────────────────────────────────────────────────────────
 
+
 def test_delete_rule_success():
     rule = _make_rule()
     svc, repo, _ = _make_service([rule])
@@ -147,6 +161,7 @@ def test_delete_rule_not_found():
 
 
 # ── evaluate ─────────────────────────────────────────────────────────────────
+
 
 def test_evaluate_returns_instruction():
     rule = _make_rule(match_type="language", match_value="de", target_slug="home-de")

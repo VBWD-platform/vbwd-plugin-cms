@@ -21,6 +21,7 @@ class CmsRoutingMiddleware:
         if _is_passthrough(request.path):
             return None
         from plugins.cms.src.services.routing.matchers import RequestContext
+
         ctx = RequestContext(
             path=request.path,
             accept_language=request.headers.get("Accept-Language", ""),

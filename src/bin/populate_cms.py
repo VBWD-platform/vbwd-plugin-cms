@@ -42,6 +42,7 @@ from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule  # noqa: E402
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _split_widget_content(html: str) -> tuple:
     """Extract <style> blocks → CSS; base64-encode the remaining HTML.
 
@@ -54,7 +55,9 @@ def _split_widget_content(html: str) -> tuple:
         css_parts.append(m.group(1).strip())
         return ""
 
-    html_clean = re.sub(r"<style[^>]*>(.*?)</style>", _grab, html, flags=re.DOTALL).strip()
+    html_clean = re.sub(
+        r"<style[^>]*>(.*?)</style>", _grab, html, flags=re.DOTALL
+    ).strip()
     b64 = base64.b64encode(html_clean.encode("utf-8")).decode("ascii")
     return {"content": b64}, "\n\n".join(css_parts)
 
@@ -85,7 +88,8 @@ STYLES = [
         "slug": "light-clean",
         "name": "Light — Clean",
         "sort_order": 10,
-        "source_css": LIGHT_BASE + """
+        "source_css": LIGHT_BASE
+        + """
 :root {
   --color-primary: #2563eb;
   --color-link: #2563eb;
@@ -106,7 +110,8 @@ footer { background: var(--color-surface); border-top: 1px solid var(--color-bor
         "slug": "light-warm",
         "name": "Light — Warm",
         "sort_order": 11,
-        "source_css": LIGHT_BASE + """
+        "source_css": LIGHT_BASE
+        + """
 :root {
   --color-primary: #d97706;
   --color-link: #b45309;
@@ -128,7 +133,8 @@ footer { background: #fef3c7; border-top: 1px solid var(--color-border); padding
         "slug": "light-cool",
         "name": "Light — Cool",
         "sort_order": 12,
-        "source_css": LIGHT_BASE + """
+        "source_css": LIGHT_BASE
+        + """
 :root {
   --color-primary: #0284c7;
   --color-link: #0369a1;
@@ -149,7 +155,8 @@ footer { background: var(--color-surface); border-top: 1px solid var(--color-bor
         "slug": "light-soft",
         "name": "Light — Soft Pastel",
         "sort_order": 13,
-        "source_css": LIGHT_BASE + """
+        "source_css": LIGHT_BASE
+        + """
 :root {
   --color-primary: #8b5cf6;
   --color-link: #7c3aed;
@@ -171,7 +178,8 @@ footer { background: var(--color-surface); border-top: 1px solid var(--color-bor
         "slug": "light-paper",
         "name": "Light — Paper",
         "sort_order": 14,
-        "source_css": LIGHT_BASE + """
+        "source_css": LIGHT_BASE
+        + """
 :root {
   --color-primary: #1a1a1a;
   --color-link: #374151;
@@ -195,7 +203,8 @@ footer { background: var(--color-surface); border-top: 2px solid var(--color-tex
         "slug": "dark-midnight",
         "name": "Dark — Midnight",
         "sort_order": 20,
-        "source_css": DARK_BASE + """
+        "source_css": DARK_BASE
+        + """
 :root {
   --color-primary: #60a5fa;
   --color-link: #93c5fd;
@@ -220,7 +229,8 @@ section { border-bottom: 1px solid var(--color-border); }
         "slug": "dark-charcoal",
         "name": "Dark — Charcoal",
         "sort_order": 21,
-        "source_css": DARK_BASE + """
+        "source_css": DARK_BASE
+        + """
 :root {
   --color-primary: #f97316;
   --color-link: #fb923c;
@@ -244,7 +254,8 @@ footer { background: #111113; border-top: 1px solid var(--color-border); padding
         "slug": "dark-forest",
         "name": "Dark — Forest",
         "sort_order": 22,
-        "source_css": DARK_BASE + """
+        "source_css": DARK_BASE
+        + """
 :root {
   --color-primary: #4ade80;
   --color-link: #86efac;
@@ -268,7 +279,8 @@ footer { background: var(--color-surface); border-top: 1px solid var(--color-bor
         "slug": "dark-purple",
         "name": "Dark — Purple",
         "sort_order": 23,
-        "source_css": DARK_BASE + """
+        "source_css": DARK_BASE
+        + """
 :root {
   --color-primary: #a78bfa;
   --color-link: #c4b5fd;
@@ -293,7 +305,8 @@ footer { background: var(--color-surface); border-top: 1px solid var(--color-bor
         "slug": "dark-carbon",
         "name": "Dark — Carbon",
         "sort_order": 24,
-        "source_css": DARK_BASE + """
+        "source_css": DARK_BASE
+        + """
 :root {
   --color-primary: #e4e4e7;
   --color-link: #a1a1aa;
@@ -810,8 +823,8 @@ CONTACT_FORM_CONFIG = {
     "recipient_email": "root@localhost.local",
     "success_message": "Thank you! Your message has been sent.",
     "fields": [
-        {"id": "name",    "type": "text",     "label": "Name",    "required": True},
-        {"id": "email",   "type": "email",    "label": "Email",   "required": True},
+        {"id": "name", "type": "text", "label": "Name", "required": True},
+        {"id": "email", "type": "email", "label": "Email", "required": True},
         {"id": "field_1", "type": "textarea", "label": "Message", "required": False},
     ],
     "rate_limit_enabled": True,
@@ -884,32 +897,137 @@ STANDARD_CONTENT_HTML = """
 STANDARD_CONTENT_JSON = {
     "type": "doc",
     "content": [
-        {"type": "heading", "attrs": {"level": 1},
-         "content": [{"type": "text", "text": "About VBWD"}]},
-        {"type": "paragraph",
-         "content": [{"type": "text", "text": "VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product."}]},
-        {"type": "heading", "attrs": {"level": 2},
-         "content": [{"type": "text", "text": "What We Build"}]},
-        {"type": "paragraph",
-         "content": [{"type": "text", "text": "VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system."}]},
-        {"type": "bulletList", "content": [
-            {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Subscription billing — Stripe, PayPal, and YooKassa ship out of the box"}]}]},
-            {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "User management — registration, login, roles, profiles, invoices"}]}]},
-            {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "CMS — pages, layouts, widgets, styles — all manageable from the admin panel"}]}]},
-            {"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Plugin system — add features without touching core code"}]}]},
-        ]},
-        {"type": "heading", "attrs": {"level": 2},
-         "content": [{"type": "text", "text": "Our Philosophy"}]},
-        {"type": "paragraph",
-         "content": [{"type": "text", "text": "We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it."}]},
-        {"type": "heading", "attrs": {"level": 2},
-         "content": [{"type": "text", "text": "Community & Support"}]},
-        {"type": "paragraph",
-         "content": [{"type": "text", "text": "VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below."}]},
-        {"type": "heading", "attrs": {"level": 2},
-         "content": [{"type": "text", "text": "Contact"}]},
-        {"type": "paragraph",
-         "content": [{"type": "text", "text": "Questions? Reach us at hello@vbwd.dev or open an issue on GitHub."}]},
+        {
+            "type": "heading",
+            "attrs": {"level": 1},
+            "content": [{"type": "text", "text": "About VBWD"}],
+        },
+        {
+            "type": "paragraph",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product.",
+                }
+            ],
+        },
+        {
+            "type": "heading",
+            "attrs": {"level": 2},
+            "content": [{"type": "text", "text": "What We Build"}],
+        },
+        {
+            "type": "paragraph",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system.",
+                }
+            ],
+        },
+        {
+            "type": "bulletList",
+            "content": [
+                {
+                    "type": "listItem",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Subscription billing — Stripe, PayPal, and YooKassa ship out of the box",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "type": "listItem",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "User management — registration, login, roles, profiles, invoices",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "type": "listItem",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "CMS — pages, layouts, widgets, styles — all manageable from the admin panel",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "type": "listItem",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Plugin system — add features without touching core code",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "heading",
+            "attrs": {"level": 2},
+            "content": [{"type": "text", "text": "Our Philosophy"}],
+        },
+        {
+            "type": "paragraph",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it.",
+                }
+            ],
+        },
+        {
+            "type": "heading",
+            "attrs": {"level": 2},
+            "content": [{"type": "text", "text": "Community & Support"}],
+        },
+        {
+            "type": "paragraph",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below.",
+                }
+            ],
+        },
+        {
+            "type": "heading",
+            "attrs": {"level": 2},
+            "content": [{"type": "text", "text": "Contact"}],
+        },
+        {
+            "type": "paragraph",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Questions? Reach us at hello@vbwd.dev or open an issue on GitHub.",
+                }
+            ],
+        },
     ],
 }
 
@@ -922,15 +1040,15 @@ LAYOUTS = [
         "description": "Page layout with header, content area, contact form widget, and footer.",
         "sort_order": 0,
         "areas": [
-            {"name": "header",       "type": "header",  "label": ""},
-            {"name": "content",      "type": "content", "label": ""},
-            {"name": "contact form", "type": "vue",     "label": ""},
-            {"name": "footer",       "type": "footer",  "label": ""},
+            {"name": "header", "type": "header", "label": ""},
+            {"name": "content", "type": "content", "label": ""},
+            {"name": "contact form", "type": "vue", "label": ""},
+            {"name": "footer", "type": "footer", "label": ""},
         ],
         "widget_assignments": [
-            ("header",       "header-nav"),
+            ("header", "header-nav"),
             ("contact form", "contact-form"),
-            ("footer",       "footer-nav"),
+            ("footer", "footer-nav"),
         ],
     },
     {
@@ -939,16 +1057,16 @@ LAYOUTS = [
         "description": "GHRM plugin: software catalogue listing with breadcrumbs and category browser.",
         "sort_order": 10,
         "areas": [
-            {"name": "header",          "type": "header", "label": "Header"},
-            {"name": "breadcrumbs",     "type": "vue",    "label": ""},
-            {"name": "ghrm-categories", "type": "vue",    "label": "Categories"},
-            {"name": "footer",          "type": "footer", "label": "Footer"},
+            {"name": "header", "type": "header", "label": "Header"},
+            {"name": "breadcrumbs", "type": "vue", "label": ""},
+            {"name": "ghrm-categories", "type": "vue", "label": "Categories"},
+            {"name": "footer", "type": "footer", "label": "Footer"},
         ],
         "widget_assignments": [
-            ("header",          "header-nav"),
-            ("breadcrumbs",     "breadcrumbs"),
+            ("header", "header-nav"),
+            ("breadcrumbs", "breadcrumbs"),
             ("ghrm-categories", "ghrm-categories"),
-            ("footer",          "footer-nav"),
+            ("footer", "footer-nav"),
         ],
     },
     {
@@ -957,16 +1075,16 @@ LAYOUTS = [
         "description": "GHRM plugin: individual software package detail page.",
         "sort_order": 11,
         "areas": [
-            {"name": "header",               "type": "header", "label": "Header"},
-            {"name": "breadcrumbs",          "type": "vue",    "label": ""},
-            {"name": "ghrm-software-detail", "type": "vue",    "label": "Software Detail"},
-            {"name": "footer",               "type": "footer", "label": "Footer"},
+            {"name": "header", "type": "header", "label": "Header"},
+            {"name": "breadcrumbs", "type": "vue", "label": ""},
+            {"name": "ghrm-software-detail", "type": "vue", "label": "Software Detail"},
+            {"name": "footer", "type": "footer", "label": "Footer"},
         ],
         "widget_assignments": [
-            ("header",               "header-nav"),
-            ("breadcrumbs",          "breadcrumbs"),
+            ("header", "header-nav"),
+            ("breadcrumbs", "breadcrumbs"),
             ("ghrm-software-detail", "ghrm-software-detail"),
-            ("footer",               "footer-nav"),
+            ("footer", "footer-nav"),
         ],
     },
     {
@@ -1069,6 +1187,7 @@ LAYOUTS = [
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
+
 def _get_or_create_style(slug: str, data: dict) -> "CmsStyle":
     existing = db.session.query(CmsStyle).filter_by(slug=slug).first()
     if existing:
@@ -1091,11 +1210,15 @@ def _get_or_create_style(slug: str, data: dict) -> "CmsStyle":
     return obj
 
 
-def _get_or_create_widget(slug: str, name: str, widget_type: str,
-                           content_html: str = None,
-                           content_json: dict = None,
-                           source_css: str = None,
-                           config: dict = None) -> "CmsWidget":
+def _get_or_create_widget(
+    slug: str,
+    name: str,
+    widget_type: str,
+    content_html: str = None,
+    content_json: dict = None,
+    source_css: str = None,
+    config: dict = None,
+) -> "CmsWidget":
     if widget_type == "html" and content_html is not None:
         content_json, extracted_css = _split_widget_content(content_html)
         source_css = source_css or extracted_css
@@ -1184,7 +1307,9 @@ def _get_or_create_layout(data: dict, widget_map: dict) -> "CmsLayout":
     db.session.add(layout)
     db.session.flush()
     # Assign widgets
-    for order, (area_name, widget_slug) in enumerate(data.get("widget_assignments", [])):
+    for order, (area_name, widget_slug) in enumerate(
+        data.get("widget_assignments", [])
+    ):
         widget = widget_map.get(widget_slug)
         if not widget:
             print(f"    ! widget '{widget_slug}' not found, skipping assignment")
@@ -1215,14 +1340,19 @@ def _get_or_create_category(slug: str, name: str, sort_order: int = 0):
     return obj, True
 
 
-def _get_or_create_page(slug: str, name: str, layout: "CmsLayout",
-                          style: "CmsStyle", content_json: dict = None,
-                          content_html: str = None,
-                          meta_description: str = None,
-                          sort_order: int = 0,
-                          category_id: str = None,
-                          robots: str = "index,follow",
-                          is_published: bool = True) -> None:
+def _get_or_create_page(
+    slug: str,
+    name: str,
+    layout: "CmsLayout",
+    style: "CmsStyle",
+    content_json: dict = None,
+    content_html: str = None,
+    meta_description: str = None,
+    sort_order: int = 0,
+    category_id: str = None,
+    robots: str = "index,follow",
+    is_published: bool = True,
+) -> None:
     existing = db.session.query(CmsPage).filter_by(slug=slug).first()
     if existing:
         existing.name = name
@@ -1296,92 +1426,135 @@ def populate_cms() -> None:
     header_nav = _get_or_create_widget("header-nav", "Header Navigation", "menu")
     widget_map["header-nav"] = header_nav
     _clear_menu_items(header_nav)
-    _add_menu_items(header_nav, [
-        {"label": "Home", "page_slug": "home1"},
-        {
-            "label": "Features",
-            "page_slug": "features",
-        },
-        {
-            "label": "Pricing",
-            "url": None,
-            "children": [
-                {"label": "Embedded Pricing", "page_slug": "pricing-embedded"},
-                {"label": "Native CMS Pricing", "page_slug": "pricing-native"},
-                {"label": "All Plans", "url": "/#pricing"},
-            ],
-        },
-        {"label": "About", "page_slug": "about"},
-        {"label": "Software", "url": "/category"},
-    ])
+    _add_menu_items(
+        header_nav,
+        [
+            {"label": "Home", "page_slug": "home1"},
+            {
+                "label": "Features",
+                "page_slug": "features",
+            },
+            {
+                "label": "Pricing",
+                "url": None,
+                "children": [
+                    {"label": "Embedded Pricing", "page_slug": "pricing-embedded"},
+                    {"label": "Native CMS Pricing", "page_slug": "pricing-native"},
+                    {"label": "All Plans", "url": "/#pricing"},
+                ],
+            },
+            {"label": "About", "page_slug": "about"},
+            {"label": "Software", "url": "/category"},
+        ],
+    )
 
-    footer_nav = _get_or_create_widget("footer-nav", "Footer Navigation", "menu",
-                                        source_css=FOOTER_NAV_CSS)
+    footer_nav = _get_or_create_widget(
+        "footer-nav", "Footer Navigation", "menu", source_css=FOOTER_NAV_CSS
+    )
     widget_map["footer-nav"] = footer_nav
     if db.session.query(CmsMenuItem).filter_by(widget_id=footer_nav.id).count() == 0:
-        _add_menu_items(footer_nav, [
-            {"label": "Privacy Policy", "page_slug": "privacy"},
-            {"label": "Terms of Service", "page_slug": "terms"},
-            {"label": "Contact", "page_slug": "contact"},
-            {"label": "Software", "url": "/category"},
-        ])
+        _add_menu_items(
+            footer_nav,
+            [
+                {"label": "Privacy Policy", "page_slug": "privacy"},
+                {"label": "Terms of Service", "page_slug": "terms"},
+                {"label": "Contact", "page_slug": "contact"},
+                {"label": "Software", "url": "/category"},
+            ],
+        )
 
     # HTML widgets
     widget_map["hero-home1"] = _get_or_create_widget(
-        "hero-home1", "Hero — Home v1", "html", content_html=HERO_HOME1_HTML,
+        "hero-home1",
+        "Hero — Home v1",
+        "html",
+        content_html=HERO_HOME1_HTML,
     )
     widget_map["hero-home2"] = _get_or_create_widget(
-        "hero-home2", "Hero — Home v2 Split", "html", content_html=HERO_HOME2_HTML,
+        "hero-home2",
+        "Hero — Home v2 Split",
+        "html",
+        content_html=HERO_HOME2_HTML,
     )
     widget_map["cta-primary"] = _get_or_create_widget(
-        "cta-primary", "CTA — Get Started", "html", content_html=CTA_PRIMARY_HTML,
+        "cta-primary",
+        "CTA — Get Started",
+        "html",
+        content_html=CTA_PRIMARY_HTML,
     )
     widget_map["features-3col"] = _get_or_create_widget(
-        "features-3col", "Features — 3 Columns", "html", content_html=FEATURES_3COL_HTML,
+        "features-3col",
+        "Features — 3 Columns",
+        "html",
+        content_html=FEATURES_3COL_HTML,
     )
     widget_map["pricing-2col"] = _get_or_create_widget(
-        "pricing-2col", "Pricing — 2 Plans", "html", content_html=PRICING_2COL_HTML,
+        "pricing-2col",
+        "Pricing — 2 Plans",
+        "html",
+        content_html=PRICING_2COL_HTML,
     )
     widget_map["testimonials"] = _get_or_create_widget(
-        "testimonials", "Testimonials", "html", content_html=TESTIMONIALS_HTML,
+        "testimonials",
+        "Testimonials",
+        "html",
+        content_html=TESTIMONIALS_HTML,
     )
     widget_map["tarif-plans-root"] = _get_or_create_widget(
-        "tarif-plans-root", "Tarif Plans — Root (all plans)", "html",
+        "tarif-plans-root",
+        "Tarif Plans — Root (all plans)",
+        "html",
         content_html=TARIF_PLANS_ROOT_HTML,
     )
     widget_map["tarif-plans-backend"] = _get_or_create_widget(
-        "tarif-plans-backend", "Tarif Plans — Backend plugins", "html",
+        "tarif-plans-backend",
+        "Tarif Plans — Backend plugins",
+        "html",
         content_html=TARIF_PLANS_BACKEND_HTML,
     )
     widget_map["features-slideshow"] = _get_or_create_widget(
-        "features-slideshow", "Features — Slideshow", "html",
+        "features-slideshow",
+        "Features — Slideshow",
+        "html",
         content_html=FEATURES_SLIDESHOW_HTML,
     )
     widget_map["pricing-embed-demo"] = _get_or_create_widget(
-        "pricing-embed-demo", "Pricing — Embedded Widget Guide", "html",
+        "pricing-embed-demo",
+        "Pricing — Embedded Widget Guide",
+        "html",
         content_html=PRICING_EMBED_GUIDE_HTML,
     )
     widget_map["pricing-native-plans"] = _get_or_create_widget(
-        "pricing-native-plans", "Pricing — Native CMS Plans", "vue-component",
+        "pricing-native-plans",
+        "Pricing — Native CMS Plans",
+        "vue-component",
         content_json={"component": "NativePricingPlans"},
         config=NATIVE_PRICING_CONFIG,
     )
     widget_map["breadcrumbs"] = _get_or_create_widget(
-        "breadcrumbs", "Breadcrumbs", "vue-component",
+        "breadcrumbs",
+        "Breadcrumbs",
+        "vue-component",
         content_json={"component": "CmsBreadcrumb"},
         config=BREADCRUMBS_CONFIG,
     )
     widget_map["contact-form"] = _get_or_create_widget(
-        "contact-form", "Contact Form", "vue-component",
+        "contact-form",
+        "Contact Form",
+        "vue-component",
         content_json={"component": "ContactForm"},
         config=CONTACT_FORM_CONFIG,
     )
     widget_map["ghrm-categories"] = _get_or_create_widget(
-        "ghrm-categories", "GHRM Categories", "vue-component",
+        "ghrm-categories",
+        "GHRM Categories",
+        "vue-component",
         content_json={"component": "GhrmCatalogueContent", "items_per_page": 12},
     )
     widget_map["ghrm-software-detail"] = _get_or_create_widget(
-        "ghrm-software-detail", "GHRM Software Detail", "vue-component",
+        "ghrm-software-detail",
+        "GHRM Software Detail",
+        "vue-component",
         content_json={"component": "GhrmPackageDetail", "items_per_page": 12},
     )
 
@@ -1398,7 +1571,9 @@ def populate_cms() -> None:
     print("\n── Categories ──────────────────────────────────────────────────")
     cat_about, _ = _get_or_create_category("about", "About", sort_order=0)
     cat_blog, _ = _get_or_create_category("blog", "Blog", sort_order=0)
-    cat_static, _ = _get_or_create_category("static-pages", "Static Pages", sort_order=0)
+    cat_static, _ = _get_or_create_category(
+        "static-pages", "Static Pages", sort_order=0
+    )
     cat_ghrm, _ = _get_or_create_category("ghrm", "Software Catalogue", sort_order=0)
     db.session.commit()
 
@@ -1414,27 +1589,42 @@ def populate_cms() -> None:
     ghrm_detail_layout = layout_map.get("ghrm-software-detail")
 
     _get_or_create_page(
-        "home1", "Home — Version 1", home_v1, default_light,
+        "home1",
+        "Home — Version 1",
+        home_v1,
+        default_light,
         meta_description="Welcome to our platform. Build something amazing today.",
         sort_order=10,
     )
     _get_or_create_page(
-        "home2", "Home — Version 2", home_v2, default_dark,
+        "home2",
+        "Home — Version 2",
+        home_v2,
+        default_dark,
         meta_description="Smarter workflows, faster results. Try it free.",
         sort_order=11,
     )
     _get_or_create_page(
-        "landing2", "Landing Page — Version 2", landing, style_map.get("light-cool"),
+        "landing2",
+        "Landing Page — Version 2",
+        landing,
+        style_map.get("light-cool"),
         meta_description="Discover why 10,000+ teams choose our platform.",
         sort_order=12,
     )
     _get_or_create_page(
-        "landing3", "Landing Page — Version 3", landing, style_map.get("dark-purple"),
+        "landing3",
+        "Landing Page — Version 3",
+        landing,
+        style_map.get("dark-purple"),
         meta_description="The developer platform built for speed and scale.",
         sort_order=13,
     )
     _get_or_create_page(
-        "about", "About Us", content_page, default_light,
+        "about",
+        "About Us",
+        content_page,
+        default_light,
         content_json=STANDARD_CONTENT_JSON,
         content_html=STANDARD_CONTENT_HTML,
         meta_description="Learn about our team, our story, and our values.",
@@ -1442,25 +1632,49 @@ def populate_cms() -> None:
         category_id=cat_about.id,
     )
     _get_or_create_page(
-        "privacy", "Privacy Policy", content_page, default_light,
+        "privacy",
+        "Privacy Policy",
+        content_page,
+        default_light,
         content_html="<h1>Privacy Policy</h1><p>Your privacy policy content goes here.</p>",
         meta_description="Read our privacy policy.",
         sort_order=30,
         category_id=cat_about.id,
     )
     _get_or_create_page(
-        "terms", "Terms of Service", content_page, default_light,
+        "terms",
+        "Terms of Service",
+        content_page,
+        default_light,
         content_html="<h1>Terms of Service</h1><p>Your terms of service content goes here.</p>",
         meta_description="Read our terms of service.",
         sort_order=31,
         category_id=cat_about.id,
     )
     _get_or_create_page(
-        "contact", "Contact", contact_form_layout, default_light,
-        content_json={"type": "doc", "content": [
-            {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "Contact Us"}]},
-            {"type": "paragraph", "content": [{"type": "text", "text": "Get in touch with our team. We will answer you shortly"}]},
-        ]},
+        "contact",
+        "Contact",
+        contact_form_layout,
+        default_light,
+        content_json={
+            "type": "doc",
+            "content": [
+                {
+                    "type": "heading",
+                    "attrs": {"level": 1},
+                    "content": [{"type": "text", "text": "Contact Us"}],
+                },
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Get in touch with our team. We will answer you shortly",
+                        }
+                    ],
+                },
+            ],
+        },
         meta_description="Contact our team.",
         sort_order=32,
         category_id=cat_about.id,
@@ -1468,26 +1682,38 @@ def populate_cms() -> None:
 
     native_pricing_layout = layout_map.get("native-pricing-page")
     _get_or_create_page(
-        "features", "Features", content_page, default_light,
+        "features",
+        "Features",
+        content_page,
+        default_light,
         content_html=FEATURES_SLIDESHOW_HTML,
         meta_description="Explore the key features of the VBWD platform: billing, user management, plugins, CMS, and more.",
         sort_order=40,
         category_id=cat_about.id,
     )
     _get_or_create_page(
-        "pricing-embedded", "Embedded Pricing Guide", content_page, default_light,
+        "pricing-embedded",
+        "Embedded Pricing Guide",
+        content_page,
+        default_light,
         content_html=PRICING_EMBED_GUIDE_HTML,
         meta_description="Learn how to embed the VBWD pricing widget in any website with a single script tag.",
         sort_order=41,
         category_id=cat_blog.id,
     )
     _get_or_create_page(
-        "pricing-native", "Native CMS Pricing", native_pricing_layout, default_light,
+        "pricing-native",
+        "Native CMS Pricing",
+        native_pricing_layout,
+        default_light,
         meta_description="View our subscription plans rendered natively within the VBWD CMS.",
         sort_order=42,
     )
     _get_or_create_page(
-        "we-are-launching-soon", "We are launching soon!", content_page, default_light,
+        "we-are-launching-soon",
+        "We are launching soon!",
+        content_page,
+        default_light,
         content_html="<h1>We are launching soon!</h1><p>Stay tuned for our upcoming launch. Sign up to be notified.</p>",
         meta_description="We are launching soon. Stay tuned.",
         sort_order=50,
@@ -1497,7 +1723,10 @@ def populate_cms() -> None:
     # ── GHRM pages (Software Catalogue plugin) ──────────────────────────────
     # Template pages (not published) — used as bases by the GHRM plugin
     _get_or_create_page(
-        "ghrm-software-catalogue", "GHRM Catalogue Template", ghrm_catalogue_layout, None,
+        "ghrm-software-catalogue",
+        "GHRM Catalogue Template",
+        ghrm_catalogue_layout,
+        None,
         meta_description="Browse our software catalogue.",
         sort_order=0,
         category_id=cat_ghrm.id,
@@ -1505,38 +1734,56 @@ def populate_cms() -> None:
         is_published=False,
     )
     _get_or_create_page(
-        "ghrm-software-detail", "GHRM Detail Template", ghrm_detail_layout, None,
+        "ghrm-software-detail",
+        "GHRM Detail Template",
+        ghrm_detail_layout,
+        None,
         meta_description="Software package details.",
         sort_order=1,
         category_id=cat_ghrm.id,
     )
     # Published catalogue pages
     _get_or_create_page(
-        "software", "Software", ghrm_catalogue_layout, default_dark,
+        "software",
+        "Software",
+        ghrm_catalogue_layout,
+        default_dark,
         meta_description="Browse all software packages.",
         sort_order=0,
         category_id=cat_ghrm.id,
     )
     _get_or_create_page(
-        "category", "Software Catalogue", ghrm_catalogue_layout, default_light,
+        "category",
+        "Software Catalogue",
+        ghrm_catalogue_layout,
+        default_light,
         meta_description="Browse software packages by category.",
         sort_order=0,
         category_id=cat_ghrm.id,
     )
     _get_or_create_page(
-        "category/backend", "Backend Packages", ghrm_catalogue_layout, default_light,
+        "category/backend",
+        "Backend Packages",
+        ghrm_catalogue_layout,
+        default_light,
         meta_description="Backend software packages.",
         sort_order=1,
         category_id=cat_ghrm.id,
     )
     _get_or_create_page(
-        "category/fe-user", "Fe User Packages", ghrm_catalogue_layout, default_light,
+        "category/fe-user",
+        "Fe User Packages",
+        ghrm_catalogue_layout,
+        default_light,
         meta_description="Frontend user packages.",
         sort_order=2,
         category_id=cat_ghrm.id,
     )
     _get_or_create_page(
-        "category/fe-admin", "Fe Admin Packages", ghrm_catalogue_layout, default_light,
+        "category/fe-admin",
+        "Fe Admin Packages",
+        ghrm_catalogue_layout,
+        default_light,
         meta_description="Frontend admin packages.",
         sort_order=3,
         category_id=cat_ghrm.id,
@@ -1545,7 +1792,11 @@ def populate_cms() -> None:
     db.session.commit()
 
     print("\n── Routing Rules ───────────────────────────────────────────────")
-    rule = db.session.query(CmsRoutingRule).filter_by(match_type="default", layer="middleware").first()
+    rule = (
+        db.session.query(CmsRoutingRule)
+        .filter_by(match_type="default", layer="middleware")
+        .first()
+    )
     if not rule:
         rule = CmsRoutingRule(
             name="home",
@@ -1566,13 +1817,19 @@ def populate_cms() -> None:
     print("\n" + "=" * 55)
     print("✓ CMS demo data population complete")
     print(f"  Styles      : {len(STYLES)} (5 light + 5 dark)")
-    print(f"  Widgets     : {len(widget_map)} (incl. breadcrumbs, contact-form, ghrm-* vue-components)")
+    print(
+        f"  Widgets     : {len(widget_map)} (incl. breadcrumbs, contact-form, ghrm-* vue-components)"
+    )
     print(f"  Layouts     : {len(LAYOUTS)}")
     print("  Categories  : about, blog, static-pages, ghrm")
-    print("  Pages       : 19 (home1, home2, landing2, landing3, about, privacy, terms,")
+    print(
+        "  Pages       : 19 (home1, home2, landing2, landing3, about, privacy, terms,"
+    )
     print("                    contact, features, pricing-embedded, pricing-native,")
     print("                    we-are-launching-soon, ghrm-software-catalogue,")
-    print("                    ghrm-software-detail, software, category, category/backend,")
+    print(
+        "                    ghrm-software-detail, software, category, category/backend,"
+    )
     print("                    category/fe-user, category/fe-admin)")
     print("  Routing     : default → home1")
     print("  Header nav  : Home | Features | Pricing (submenu) | About | Software")

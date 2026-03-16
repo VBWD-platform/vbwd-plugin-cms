@@ -2,11 +2,19 @@
 from src.extensions import db
 from src.models.base import BaseModel
 
-AREA_TYPES = frozenset({
-    "header", "footer", "hero", "slideshow",
-    "content", "three-column", "two-column", "cta-bar",
-    "vue",
-})
+AREA_TYPES = frozenset(
+    {
+        "header",
+        "footer",
+        "hero",
+        "slideshow",
+        "content",
+        "three-column",
+        "two-column",
+        "cta-bar",
+        "vue",
+    }
+)
 
 
 class CmsLayout(BaseModel):

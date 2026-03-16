@@ -2,9 +2,18 @@
 from typing import List, Optional, Dict, Any
 
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
-from plugins.cms.src.services.routing.matchers import RequestContext, RedirectInstruction, matcher_for
-from plugins.cms.src.services.routing.nginx_conf_generator import NginxConfGenerator, NginxConfInvalidError
-from plugins.cms.src.services.routing.nginx_reload_gateway import SubprocessNginxReloadGateway
+from plugins.cms.src.services.routing.matchers import (
+    RequestContext,
+    RedirectInstruction,
+    matcher_for,
+)
+from plugins.cms.src.services.routing.nginx_conf_generator import (
+    NginxConfGenerator,
+    NginxConfInvalidError,
+)
+from plugins.cms.src.services.routing.nginx_reload_gateway import (
+    SubprocessNginxReloadGateway,
+)
 
 
 class CmsRoutingRuleNotFoundError(Exception):
@@ -12,7 +21,14 @@ class CmsRoutingRuleNotFoundError(Exception):
 
 
 class CmsRoutingService:
-    VALID_MATCH_TYPES = {"default", "language", "ip_range", "country", "path_prefix", "cookie"}
+    VALID_MATCH_TYPES = {
+        "default",
+        "language",
+        "ip_range",
+        "country",
+        "path_prefix",
+        "cookie",
+    }
     VALID_REDIRECT_CODES = {301, 302}
     VALID_LAYERS = {"nginx", "middleware"}
 
@@ -56,8 +72,17 @@ class CmsRoutingService:
         if not rule:
             raise CmsRoutingRuleNotFoundError(rule_id)
         self._validate(data, require_all=False)
-        updatable = ("name", "is_active", "priority", "match_type", "match_value",
-                     "target_slug", "redirect_code", "is_rewrite", "layer")
+        updatable = (
+            "name",
+            "is_active",
+            "priority",
+            "match_type",
+            "match_value",
+            "target_slug",
+            "redirect_code",
+            "is_rewrite",
+            "layer",
+        )
         for field in updatable:
             if field in data:
                 setattr(rule, field, data[field])
@@ -81,7 +106,9 @@ class CmsRoutingService:
 
     def sync_nginx(self) -> None:
         routing_cfg = self._config.get("routing", {})
-        conf_path = routing_cfg.get("nginx_conf_path", "/etc/nginx/conf.d/cms_routing.conf")
+        conf_path = routing_cfg.get(
+            "nginx_conf_path", "/etc/nginx/conf.d/cms_routing.conf"
+        )
         default_slug = routing_cfg.get("default_slug", "home1")
         rules = self._rule_repo.find_all_active_for_layer("nginx")
         conf_str = self._conf_generator.generate(rules, default_slug)
@@ -98,7 +125,11 @@ class CmsRoutingService:
         for rule in rules:
             m = matcher_for(rule.match_type)
             if m and m.matches(rule, ctx):
-                location = rule.target_slug if rule.target_slug.startswith("/") else f"/{rule.target_slug}"
+                location = (
+                    rule.target_slug
+                    if rule.target_slug.startswith("/")
+                    else f"/{rule.target_slug}"
+                )
                 return RedirectInstruction(
                     location=location,
                     code=rule.redirect_code,
@@ -113,7 +144,9 @@ class CmsRoutingService:
         if require_all or "match_type" in data:
             mt = data.get("match_type", "")
             if mt not in self.VALID_MATCH_TYPES:
-                errors.append(f"match_type must be one of {sorted(self.VALID_MATCH_TYPES)}")
+                errors.append(
+                    f"match_type must be one of {sorted(self.VALID_MATCH_TYPES)}"
+                )
         if require_all or "redirect_code" in data:
             rc = int(data.get("redirect_code", 302))
             if rc not in self.VALID_REDIRECT_CODES:

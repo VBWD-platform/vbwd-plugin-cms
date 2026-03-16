@@ -46,6 +46,7 @@ class CmsPlugin(BasePlugin):
 
     def get_blueprint(self) -> Optional["Blueprint"]:
         from plugins.cms.src.routes import cms_bp
+
         return cms_bp
 
     def get_url_prefix(self) -> Optional[str]:
@@ -55,9 +56,13 @@ class CmsPlugin(BasePlugin):
     def on_enable(self) -> None:
         from flask import current_app
         from plugins.cms.src.middleware.routing_middleware import CmsRoutingMiddleware
-        from plugins.cms.src.repositories.routing_rule_repository import CmsRoutingRuleRepository
+        from plugins.cms.src.repositories.routing_rule_repository import (
+            CmsRoutingRuleRepository,
+        )
         from plugins.cms.src.services.routing.routing_service import CmsRoutingService
-        from plugins.cms.src.services.routing.nginx_conf_generator import NginxConfGenerator
+        from plugins.cms.src.services.routing.nginx_conf_generator import (
+            NginxConfGenerator,
+        )
         from plugins.cms.src.services.routing.nginx_reload_gateway import (
             StubNginxReloadGateway,
             SubprocessNginxReloadGateway,

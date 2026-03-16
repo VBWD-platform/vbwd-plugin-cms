@@ -7,7 +7,9 @@ import base64
 from typing import List, Dict, Any, Optional
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.repositories.cms_menu_item_repository import CmsMenuItemRepository
-from plugins.cms.src.repositories.cms_layout_widget_repository import CmsLayoutWidgetRepository
+from plugins.cms.src.repositories.cms_layout_widget_repository import (
+    CmsLayoutWidgetRepository,
+)
 from plugins.cms.src.models.cms_widget import CmsWidget, WIDGET_TYPES
 from plugins.cms.src.services._slug import unique_slug
 
@@ -30,6 +32,7 @@ class CmsWidgetSlugConflictError(Exception):
 
 class CmsWidgetInUseError(Exception):
     """Raised when trying to delete a widget that is assigned to a layout."""
+
     pass
 
 
@@ -85,8 +88,18 @@ class CmsWidgetService:
             raise CmsWidgetNotFoundError(f"Widget {widget_id} not found")
         if "slug" in data and data["slug"] != obj.slug:
             if self._repo.find_by_slug(data["slug"]):
-                raise CmsWidgetSlugConflictError(f"Slug '{data['slug']}' is already in use")
-        for field in ("name", "slug", "content_json", "source_css", "config", "sort_order", "is_active"):
+                raise CmsWidgetSlugConflictError(
+                    f"Slug '{data['slug']}' is already in use"
+                )
+        for field in (
+            "name",
+            "slug",
+            "content_json",
+            "source_css",
+            "config",
+            "sort_order",
+            "is_active",
+        ):
             if field in data:
                 setattr(obj, field, data[field])
         self._repo.save(obj)
@@ -95,7 +108,9 @@ class CmsWidgetService:
     def delete_widget(self, widget_id: str) -> None:
         in_use = self._lw_repo.find_by_widget(widget_id)
         if in_use:
-            raise CmsWidgetInUseError(f"Widget {widget_id} is assigned to {len(in_use)} layout(s)")
+            raise CmsWidgetInUseError(
+                f"Widget {widget_id} is assigned to {len(in_use)} layout(s)"
+            )
         if not self._repo.delete(widget_id):
             raise CmsWidgetNotFoundError(f"Widget {widget_id} not found")
 
@@ -103,7 +118,9 @@ class CmsWidgetService:
         count = self._repo.bulk_delete(ids)
         return {"deleted": count}
 
-    def replace_menu_tree(self, widget_id: str, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def replace_menu_tree(
+        self, widget_id: str, items: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         obj = self._repo.find_by_id(widget_id)
         if not obj:
             raise CmsWidgetNotFoundError(f"Widget {widget_id} not found")

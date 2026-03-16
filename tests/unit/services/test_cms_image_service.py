@@ -3,7 +3,10 @@ import io
 import zipfile
 import pytest
 from unittest.mock import MagicMock, patch
-from plugins.cms.src.services.cms_image_service import CmsImageService, CmsImageNotFoundError
+from plugins.cms.src.services.cms_image_service import (
+    CmsImageService,
+    CmsImageNotFoundError,
+)
 from plugins.cms.src.services.file_storage import InMemoryFileStorage
 from plugins.cms.src.models.cms_image import CmsImage
 
@@ -17,9 +20,13 @@ def _make_service(images=None):
 
     repo.find_by_id.side_effect = lambda iid: img_store.get(str(iid))
     repo.find_by_slug.side_effect = lambda slug: slug_store.get(slug)
-    repo.find_by_ids.side_effect = lambda ids: [img_store[i] for i in ids if i in img_store]
+    repo.find_by_ids.side_effect = lambda ids: [
+        img_store[i] for i in ids if i in img_store
+    ]
     repo.save.side_effect = lambda img: (img_store.update({str(img.id): img}), img)[1]
-    repo.bulk_delete.side_effect = lambda ids: [img_store.pop(str(i)) for i in ids if str(i) in img_store]
+    repo.bulk_delete.side_effect = lambda ids: [
+        img_store.pop(str(i)) for i in ids if str(i) in img_store
+    ]
 
     return CmsImageService(repo, storage), repo, storage
 
@@ -27,6 +34,7 @@ def _make_service(images=None):
 def _image(slug="test-image"):
     from uuid import uuid4
     import datetime
+
     img = CmsImage()
     img.id = uuid4()
     img.slug = slug

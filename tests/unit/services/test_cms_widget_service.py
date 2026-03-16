@@ -2,7 +2,9 @@
 import pytest
 from unittest.mock import MagicMock
 from plugins.cms.src.services.cms_widget_service import (
-    CmsWidgetService, CmsWidgetNotFoundError, CmsWidgetSlugConflictError,
+    CmsWidgetService,
+    CmsWidgetNotFoundError,
+    CmsWidgetSlugConflictError,
     CmsWidgetInUseError,
 )
 from plugins.cms.src.models.cms_widget import CmsWidget
@@ -26,19 +28,26 @@ def _make_service(widgets=None, menu_items=None, layout_widgets=None):
         id_store[str(w.id)] = w
 
     widget_repo.save.side_effect = _save
-    widget_repo.find_by_ids.side_effect = lambda ids: [id_store[i] for i in ids if i in id_store]
+    widget_repo.find_by_ids.side_effect = lambda ids: [
+        id_store[i] for i in ids if i in id_store
+    ]
 
     menu_repo.find_tree_by_widget.return_value = menu_items or []
     menu_repo.replace_tree.side_effect = lambda wid, items: items
 
     lw_repo.find_by_widget.return_value = layout_widgets or []
 
-    return CmsWidgetService(widget_repo, menu_repo, image_repo, lw_repo), widget_repo, menu_repo
+    return (
+        CmsWidgetService(widget_repo, menu_repo, image_repo, lw_repo),
+        widget_repo,
+        menu_repo,
+    )
 
 
 def _widget(slug="my-widget", widget_type="html", name="My Widget"):
     from uuid import uuid4
     import datetime
+
     w = CmsWidget()
     w.id = uuid4()
     w.slug = slug
@@ -58,12 +67,14 @@ class TestCreateWidget:
         svc, repo, _ = _make_service()
         b64 = "PHA+aGVsbG88L3A+"  # base64("<p>hello</p>")
         content = {"content": b64}
-        result = svc.create_widget({
-            "name": "Header Widget",
-            "widget_type": "html",
-            "content_json": content,
-            "source_css": ".hero { color: red; }",
-        })
+        result = svc.create_widget(
+            {
+                "name": "Header Widget",
+                "widget_type": "html",
+                "content_json": content,
+                "source_css": ".hero { color: red; }",
+            }
+        )
         assert result["content_json"] == content
         assert result["source_css"] == ".hero { color: red; }"
         repo.save.assert_called_once()
@@ -90,10 +101,13 @@ class TestUpdateWidget:
         w = _widget()
         svc, repo, _ = _make_service(widgets=[w])
         b64_html = "PHAgY2xhc3M9InRlc3QiPnVwZGF0ZWQ8L3A+"  # base64("<p class="test">updated</p>")
-        result = svc.update_widget(str(w.id), {
-            "content_json": {"content": b64_html},
-            "source_css": ".test { color: red; }",
-        })
+        result = svc.update_widget(
+            str(w.id),
+            {
+                "content_json": {"content": b64_html},
+                "source_css": ".test { color: red; }",
+            },
+        )
         assert result["content_json"] == {"content": b64_html}
         assert result["source_css"] == ".test { color: red; }"
         repo.save.assert_called()
@@ -102,6 +116,7 @@ class TestUpdateWidget:
 class TestDeleteWidget:
     def test_delete_widget_used_in_layout_raises_conflict(self):
         from unittest.mock import MagicMock as MM
+
         w = _widget()
         svc, _, _ = _make_service(widgets=[w], layout_widgets=[MM()])
         with pytest.raises(CmsWidgetInUseError):
@@ -127,22 +142,26 @@ class TestImportWidget:
     def test_import_widget_renames_slug_on_collision(self):
         existing = _widget(slug="my-widget")
         svc, _, _ = _make_service(widgets=[existing])
-        result = svc.import_widget({
-            "name": "My Widget",
-            "slug": "my-widget",
-            "widget_type": "html",
-            "content_json": {},
-            "content_html": "",
-        })
+        result = svc.import_widget(
+            {
+                "name": "My Widget",
+                "slug": "my-widget",
+                "widget_type": "html",
+                "content_json": {},
+                "content_html": "",
+            }
+        )
         assert result["slug"] == "my-widget-2"
 
     def test_import_widget_uses_original_slug_when_no_collision(self):
         svc, _, _ = _make_service()
-        result = svc.import_widget({
-            "name": "Fresh",
-            "slug": "fresh-widget",
-            "widget_type": "html",
-            "content_json": {},
-            "content_html": "",
-        })
+        result = svc.import_widget(
+            {
+                "name": "Fresh",
+                "slug": "fresh-widget",
+                "widget_type": "html",
+                "content_json": {},
+                "content_html": "",
+            }
+        )
         assert result["slug"] == "fresh-widget"
