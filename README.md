@@ -319,3 +319,14 @@ Seeds 10 styles, widgets (including breadcrumbs, native pricing plans, and conta
 ```bash
 docker compose run --rm test python -m pytest plugins/cms/tests/ -v
 ```
+
+---
+
+## Related
+
+| | Repository |
+|-|------------|
+| 👤 Frontend (user) | [vbwd-fe-user-plugin-cms](https://github.com/VBWD-platform/vbwd-fe-user-plugin-cms) |
+| 🛠 Frontend (admin) | [vbwd-fe-admin-plugin-cms](https://github.com/VBWD-platform/vbwd-fe-admin-plugin-cms) |
+
+**Core:** [vbwd-backend](https://github.com/VBWD-platform/vbwd-backend)
