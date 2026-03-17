@@ -32,7 +32,6 @@ Admin endpoints (require_admin):
         GET    /api/v1/admin/cms/images/export
 """
 import logging
-import os
 from flask import (
     Blueprint,
     jsonify,

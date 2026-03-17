@@ -10,7 +10,6 @@ import zipfile
 from unittest.mock import MagicMock
 from uuid import uuid4
 import datetime
-import pytest
 
 from plugins.cms.src.services.cms_import_export_service import CmsImportExportService
 from plugins.cms.src.services.file_storage import InMemoryFileStorage
@@ -445,7 +444,7 @@ class TestImportIndex:
             ]
         )
         svc, _, _, widget_repo, *_ = _make_svc(widgets=[w1, w2])
-        result = svc.import_zip(data, "index")
+        svc.import_zip(data, "index")
         saved_obj = widget_repo.save.call_args[0][0]
         assert saved_obj.slug == "nav-3"
 
@@ -465,7 +464,7 @@ class TestImportIndex:
             ]
         )
         svc, _, _, widget_repo, *_ = _make_svc()
-        result = svc.import_zip(data, "index")
+        svc.import_zip(data, "index")
         saved_obj = widget_repo.save.call_args[0][0]
         assert saved_obj.slug == "unique-slug"
 

@@ -12,7 +12,7 @@ Tests cover:
 from __future__ import annotations
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from plugins.cms.src.services.contact_form_service import (
     ContactFormService,

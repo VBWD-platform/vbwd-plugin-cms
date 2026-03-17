@@ -11,9 +11,6 @@ from plugins.cms.src.services.routing.nginx_conf_generator import (
     NginxConfGenerator,
     NginxConfInvalidError,
 )
-from plugins.cms.src.services.routing.nginx_reload_gateway import (
-    SubprocessNginxReloadGateway,
-)
 
 
 class CmsRoutingRuleNotFoundError(Exception):

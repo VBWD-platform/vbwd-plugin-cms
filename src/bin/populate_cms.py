@@ -73,7 +73,7 @@ a { color: var(--color-link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 img { max-width: 100%; height: auto; display: block; }
 .container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
-.btn { display: inline-flex; align-items: center; padding: 0.65rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+.btn { display: inline-flex; align-items: center; padding: 0.65rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }  # noqa: E501
 .btn-primary { background: var(--color-primary); color: #fff; }
 .btn-primary:hover { filter: brightness(1.1); }
 .btn-outline { background: transparent; border-color: var(--color-primary); color: var(--color-primary); }
@@ -103,7 +103,7 @@ body { background: var(--color-bg); color: var(--color-text); }
 header { background: #fff; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
 nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
 nav a:hover { color: var(--color-primary); text-decoration: none; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     {
@@ -126,7 +126,7 @@ header { background: #fff8ed; border-bottom: 1px solid var(--color-border); padd
 nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
 nav a:hover { color: var(--color-primary); text-decoration: none; }
 h1, h2 { color: #92400e; }
-footer { background: #fef3c7; border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: #fef3c7; border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     {
@@ -148,7 +148,7 @@ body { background: var(--color-bg); color: var(--color-text); }
 header { background: #ffffff; border-bottom: 2px solid var(--color-primary); padding: 0.75rem 0; }
 nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
 nav a:hover { color: var(--color-primary); text-decoration: none; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     {
@@ -170,8 +170,8 @@ body { background: var(--color-bg); color: var(--color-text); }
 header { background: #fff; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
 nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
 nav a:hover { color: var(--color-primary); text-decoration: none; }
-h1, h2 { background: linear-gradient(135deg, #7c3aed, #2563eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+h1, h2 { background: linear-gradient(135deg, #7c3aed, #2563eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }  # noqa: E501
+footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     {
@@ -192,10 +192,10 @@ footer { background: var(--color-surface); border-top: 1px solid var(--color-bor
 body { background: var(--color-bg); color: var(--color-text); font-family: 'Georgia', 'Times New Roman', serif; }
 h1, h2, h3 { font-family: 'Georgia', serif; }
 header { background: var(--color-surface); border-bottom: 2px solid var(--color-text); padding: 0.75rem 0; }
-nav a { color: var(--color-text); font-weight: 600; padding: 0 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.85rem; }
+nav a { color: var(--color-text); font-weight: 600; padding: 0 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.85rem; }  # noqa: E501
 nav a:hover { color: #555; text-decoration: none; border-bottom: 2px solid currentColor; }
 .btn-primary { background: var(--color-text); color: #faf7f2; border-radius: 0; }
-footer { background: var(--color-surface); border-top: 2px solid var(--color-text); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: var(--color-surface); border-top: 2px solid var(--color-text); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     # ── Dark themes ───────────────────────────────────────────────────────────
@@ -221,7 +221,7 @@ nav a:hover { color: var(--color-primary); text-decoration: none; }
 a { color: var(--color-link); }
 h1, h2 { color: #f1f5f9; }
 .btn-primary { background: var(--color-primary); color: #0f172a; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 section { border-bottom: 1px solid var(--color-border); }
 """,
     },
@@ -247,7 +247,7 @@ nav a:hover { color: var(--color-primary); text-decoration: none; }
 a { color: var(--color-link); }
 h1, h2 { color: #fafafa; }
 .btn-primary { background: var(--color-primary); color: #18181b; font-weight: 700; }
-footer { background: #111113; border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: #111113; border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     {
@@ -272,7 +272,7 @@ nav a:hover { color: var(--color-primary); text-decoration: none; }
 a { color: var(--color-link); }
 h1, h2 { color: #f0fdf4; text-shadow: 0 0 20px rgba(74, 222, 128, 0.2); }
 .btn-primary { background: var(--color-primary); color: #052e16; font-weight: 700; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     {
@@ -298,7 +298,7 @@ a { color: var(--color-link); }
 h1, h2 { color: #f5f3ff; }
 .btn-primary { background: linear-gradient(135deg, #7c3aed, #2563eb); color: #fff; border: none; }
 .btn-primary:hover { filter: brightness(1.15); }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }
+footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
 """,
     },
     {
@@ -318,12 +318,12 @@ footer { background: var(--color-surface); border-top: 1px solid var(--color-bor
 }
 body { background: var(--color-bg); color: var(--color-text); font-family: 'JetBrains Mono', 'Fira Code', monospace; }
 header { background: #09090b; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-muted); font-weight: 500; padding: 0 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.8rem; }
+nav a { color: var(--color-muted); font-weight: 500; padding: 0 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.8rem; }  # noqa: E501
 nav a:hover { color: #fff; text-decoration: none; }
 a { color: var(--color-link); }
 h1, h2 { color: #fff; letter-spacing: -0.02em; }
-.btn-primary { background: #fafafa; color: #09090b; border-radius: 0; font-family: inherit; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.75rem; font-family: inherit; }
+.btn-primary { background: #fafafa; color: #09090b; border-radius: 0; font-family: inherit; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; }  # noqa: E501
+footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.75rem; font-family: inherit; }  # noqa: E501
 """,
     },
 ]
@@ -368,10 +368,10 @@ HERO_HOME2_HTML = """
 .hero-split { padding: 5rem 0; }
 .hero-split .container { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
 @media (max-width: 768px) { .hero-split .container { grid-template-columns: 1fr; } }
-.badge { display: inline-block; padding: 2px 10px; border-radius: 12px; background: var(--color-primary); color: #fff; font-size: 0.8rem; font-weight: 600; margin-bottom: 1rem; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 12px; background: var(--color-primary); color: #fff; font-size: 0.8rem; font-weight: 600; margin-bottom: 1rem; }  # noqa: E501
 .hero-split h1 { font-size: clamp(1.75rem, 3.5vw, 3rem); margin-bottom: 1rem; }
 .hero-split p { font-size: 1.1rem; opacity: 0.8; margin-bottom: 2rem; }
-.hero-placeholder { font-size: 8rem; text-align: center; line-height: 1; background: var(--color-surface, #f8fafc); border-radius: 16px; padding: 3rem; }
+.hero-placeholder { font-size: 8rem; text-align: center; line-height: 1; background: var(--color-surface, #f8fafc); border-radius: 16px; padding: 3rem; }  # noqa: E501
 </style>
 """
 
@@ -417,7 +417,7 @@ FEATURES_3COL_HTML: str = """
 .features { padding: 5rem 0; }
 .features__title { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
 .features__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2rem; }
-.feature-card { padding: 2rem; border-radius: 12px; background: var(--color-surface, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); }
+.feature-card { padding: 2rem; border-radius: 12px; background: var(--color-surface, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); }  # noqa: E501
 .feature-icon { font-size: 2.5rem; margin-bottom: 1rem; }
 .feature-card h3 { font-size: 1.2rem; margin-bottom: 0.5rem; }
 .feature-card p { opacity: 0.75; font-size: 0.95rem; }
@@ -446,7 +446,7 @@ PRICING_2COL_HTML = """
           <li>✓ Priority support</li><li>✓ Advanced analytics</li>
           <li>✓ Custom domains</li><li>✓ Team collaboration</li>
         </ul>
-        <a href="/signup?plan=pro" class="btn btn-primary" style="width:100%;justify-content:center">Start Free Trial</a>
+        <a href="/signup?plan=pro" class="btn btn-primary" style="width:100%;justify-content:center">Start Free Trial</a>  # noqa: E501
       </div>
     </div>
   </div>
@@ -454,10 +454,10 @@ PRICING_2COL_HTML = """
 <style>
 .pricing { padding: 5rem 0; }
 .pricing__title { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
-.pricing__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; max-width: 720px; margin: 0 auto; }
-.pricing-card { padding: 2.5rem; border-radius: 12px; background: var(--color-surface, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); }
-.pricing-card--featured { border-color: var(--color-primary, #2563eb); box-shadow: 0 0 0 2px var(--color-primary, #2563eb); }
-.pricing-card__tier { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; margin-bottom: 0.5rem; }
+.pricing__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; max-width: 720px; margin: 0 auto; }  # noqa: E501
+.pricing-card { padding: 2.5rem; border-radius: 12px; background: var(--color-surface, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); }  # noqa: E501
+.pricing-card--featured { border-color: var(--color-primary, #2563eb); box-shadow: 0 0 0 2px var(--color-primary, #2563eb); }  # noqa: E501
+.pricing-card__tier { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; margin-bottom: 0.5rem; }  # noqa: E501
 .pricing-card__price { font-size: 2.5rem; font-weight: 800; margin-bottom: 1.5rem; }
 .pricing-card__price span { font-size: 1rem; font-weight: 400; opacity: 0.6; }
 .pricing-card__features { list-style: none; padding: 0; margin: 0 0 2rem; }
@@ -497,7 +497,7 @@ FEATURES_SLIDESHOW_HTML = """
 <section class="features-hero">
   <div class="container">
     <h1>VBWD Platform Features</h1>
-    <p class="features-hero__sub">Everything you need to build, launch, and scale a SaaS product — without months of boilerplate.</p>
+    <p class="features-hero__sub">Everything you need to build, launch, and scale a SaaS product — without months of boilerplate.</p>  # noqa: E501
   </div>
 </section>
 
@@ -507,32 +507,32 @@ FEATURES_SLIDESHOW_HTML = """
       <div class="slide slide--active">
         <div class="slide__icon">💳</div>
         <h2>Subscription Billing</h2>
-        <p>Stripe, PayPal, and YooKassa out of the box. Monthly, annual, and usage-based plans. Automated invoicing and dunning sequences.</p>
+        <p>Stripe, PayPal, and YooKassa out of the box. Monthly, annual, and usage-based plans. Automated invoicing and dunning sequences.</p>  # noqa: E501
       </div>
       <div class="slide">
         <div class="slide__icon">👥</div>
         <h2>User Management</h2>
-        <p>Registration, login, roles, profiles, and invitations. JWT-based authentication with refresh tokens and session management.</p>
+        <p>Registration, login, roles, profiles, and invitations. JWT-based authentication with refresh tokens and session management.</p>  # noqa: E501
       </div>
       <div class="slide">
         <div class="slide__icon">🧩</div>
         <h2>Plugin System</h2>
-        <p>Extend without touching core. Frontend and backend plugins with lifecycle hooks, dependency resolution, and hot registration.</p>
+        <p>Extend without touching core. Frontend and backend plugins with lifecycle hooks, dependency resolution, and hot registration.</p>  # noqa: E501
       </div>
       <div class="slide">
         <div class="slide__icon">📄</div>
         <h2>CMS &amp; Pages</h2>
-        <p>Manage layouts, widgets, menus, styles, and content pages from the admin panel. No code changes required for content updates.</p>
+        <p>Manage layouts, widgets, menus, styles, and content pages from the admin panel. No code changes required for content updates.</p>  # noqa: E501
       </div>
       <div class="slide">
         <div class="slide__icon">📦</div>
         <h2>Software Catalogue (GHRM)</h2>
-        <p>Subscription-gated access to GitHub repositories. Deploy tokens, collaborator management, and automatic version tracking.</p>
+        <p>Subscription-gated access to GitHub repositories. Deploy tokens, collaborator management, and automatic version tracking.</p>  # noqa: E501
       </div>
       <div class="slide">
         <div class="slide__icon">🔌</div>
         <h2>Embeddable Pricing</h2>
-        <p>Drop a &lt;script&gt; tag on any page. A responsive pricing table renders inside a sandboxed iframe. Zero framework dependency.</p>
+        <p>Drop a &lt;script&gt; tag on any page. A responsive pricing table renders inside a sandboxed iframe. Zero framework dependency.</p>  # noqa: E501
       </div>
     </div>
 
@@ -586,17 +586,17 @@ FEATURES_SLIDESHOW_HTML = """
 .features-hero__sub { font-size: 1.1rem; opacity: 0.75; max-width: 540px; margin: 0 auto; }
 .features-slideshow { padding: 3rem 0 4rem; }
 .slideshow { position: relative; }
-.slide { display: none; text-align: center; padding: 2.5rem 2rem; background: var(--color-surface, #f8fafc); border-radius: 16px; border: 1px solid var(--color-border, #e2e8f0); animation: vbwdFadeIn 0.4s ease; }
+.slide { display: none; text-align: center; padding: 2.5rem 2rem; background: var(--color-surface, #f8fafc); border-radius: 16px; border: 1px solid var(--color-border, #e2e8f0); animation: vbwdFadeIn 0.4s ease; }  # noqa: E501
 .slide--active { display: block; }
 @keyframes vbwdFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .slide__icon { font-size: 3rem; margin-bottom: 1rem; }
 .slide h2 { font-size: 1.5rem; margin-bottom: 0.75rem; }
 .slide p { opacity: 0.8; font-size: 1rem; max-width: 520px; margin: 0 auto; }
 .slideshow-controls { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.5rem; }
-.slide-btn { background: none; border: 2px solid var(--color-border, #e2e8f0); border-radius: 50%; width: 40px; height: 40px; font-size: 1.4rem; cursor: pointer; color: var(--color-text, #1e293b); transition: all 0.15s; line-height: 1; }
+.slide-btn { background: none; border: 2px solid var(--color-border, #e2e8f0); border-radius: 50%; width: 40px; height: 40px; font-size: 1.4rem; cursor: pointer; color: var(--color-text, #1e293b); transition: all 0.15s; line-height: 1; }  # noqa: E501
 .slide-btn:hover { border-color: var(--color-primary, #2563eb); color: var(--color-primary, #2563eb); }
 .slide-dots { display: flex; gap: 6px; }
-.slide-dot { width: 8px; height: 8px; border-radius: 50%; border: none; background: var(--color-border, #e2e8f0); cursor: pointer; padding: 0; transition: background 0.2s; }
+.slide-dot { width: 8px; height: 8px; border-radius: 50%; border: none; background: var(--color-border, #e2e8f0); cursor: pointer; padding: 0; transition: background 0.2s; }  # noqa: E501
 .slide-dot--active { background: var(--color-primary, #2563eb); }
 .features-docs-link { text-align: center; padding: 1rem 0 3rem; }
 .features-docs-link p { opacity: 0.75; }
@@ -610,7 +610,7 @@ PRICING_EMBED_GUIDE_HTML = """
 <section class="embed-hero">
   <div class="container">
     <h1>Embedded Pricing</h1>
-    <p class="embed-hero__sub">Add a fully hosted, responsive pricing table to any page with a single &lt;script&gt; tag. No React, no Vue, no build step required.</p>
+    <p class="embed-hero__sub">Add a fully hosted, responsive pricing table to any page with a single &lt;script&gt; tag. No React, no Vue, no build step required.</p>  # noqa: E501
   </div>
 </section>
 
@@ -649,7 +649,7 @@ PRICING_EMBED_GUIDE_HTML = """
 &gt;&lt;/script&gt;</code></pre>
       </li>
       <li>
-        <strong>3 — Done.</strong> The widget renders inside a sandboxed iframe. Billing, checkout, and plan management are fully handled by your VBWD backend.
+        <strong>3 — Done.</strong> The widget renders inside a sandboxed iframe. Billing, checkout, and plan management are fully handled by your VBWD backend.  # noqa: E501
       </li>
     </ol>
 
@@ -659,13 +659,13 @@ PRICING_EMBED_GUIDE_HTML = """
         <tr><th>Attribute</th><th>Required</th><th>Default</th><th>Description</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>data-embed</code></td><td>Yes</td><td>—</td><td>Widget preset. Use <code>landing1</code> for the standard pricing table.</td></tr>
-        <tr><td><code>data-category</code></td><td>No</td><td><code>root</code></td><td>Tariff plan category slug. <code>root</code> shows all plans.</td></tr>
-        <tr><td><code>data-container</code></td><td>Yes</td><td>—</td><td>ID of the host <code>&lt;div&gt;</code>.</td></tr>
-        <tr><td><code>data-locale</code></td><td>No</td><td><code>en</code></td><td>UI language: <code>en</code>, <code>ru</code>, <code>fr</code>, <code>de</code>, …</td></tr>
-        <tr><td><code>data-theme</code></td><td>No</td><td><code>light</code></td><td><code>light</code> or <code>dark</code>.</td></tr>
+        <tr><td><code>data-embed</code></td><td>Yes</td><td>—</td><td>Widget preset. Use <code>landing1</code> for the standard pricing table.</td></tr>  # noqa: E501
+        <tr><td><code>data-category</code></td><td>No</td><td><code>root</code></td><td>Tariff plan category slug. <code>root</code> shows all plans.</td></tr>  # noqa: E501
+        <tr><td><code>data-container</code></td><td>Yes</td><td>—</td><td>ID of the host <code>&lt;div&gt;</code>.</td></tr>  # noqa: E501
+        <tr><td><code>data-locale</code></td><td>No</td><td><code>en</code></td><td>UI language: <code>en</code>, <code>ru</code>, <code>fr</code>, <code>de</code>, …</td></tr>  # noqa: E501
+        <tr><td><code>data-theme</code></td><td>No</td><td><code>light</code></td><td><code>light</code> or <code>dark</code>.</td></tr>  # noqa: E501
         <tr><td><code>data-height</code></td><td>No</td><td><code>700</code></td><td>iframe height in pixels.</td></tr>
-        <tr><td><code>data-plans</code></td><td>No</td><td>all</td><td>Comma-separated plan slugs to display (e.g. <code>starter,pro</code>).</td></tr>
+        <tr><td><code>data-plans</code></td><td>No</td><td>all</td><td>Comma-separated plan slugs to display (e.g. <code>starter,pro</code>).</td></tr>  # noqa: E501
       </tbody>
     </table>
 
@@ -695,18 +695,18 @@ PRICING_EMBED_GUIDE_HTML = """
 .embed-hero h1 { font-size: clamp(1.75rem, 4vw, 2.75rem); margin-bottom: 0.75rem; }
 .embed-hero__sub { font-size: 1.1rem; opacity: 0.75; max-width: 600px; margin: 0 auto; }
 .embed-guide { padding: 3rem 0 5rem; }
-.embed-guide h2 { font-size: 1.4rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border, #e2e8f0); }
+.embed-guide h2 { font-size: 1.4rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-border, #e2e8f0); }  # noqa: E501
 .embed-steps { padding-left: 0; list-style: none; }
 .embed-steps li { margin-bottom: 2rem; }
 .embed-steps strong { display: block; margin-bottom: 0.5rem; font-size: 1rem; }
-pre { background: var(--color-surface, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 0.5rem 0 1rem; }
+pre { background: var(--color-surface, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 0.5rem 0 1rem; }  # noqa: E501
 code { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.875rem; }
 .embed-table { width: 100%; border-collapse: collapse; margin: 1rem 0 2rem; font-size: 0.875rem; }
-.embed-table th { background: var(--color-surface, #f8fafc); padding: 0.6rem 0.875rem; text-align: left; border: 1px solid var(--color-border, #e2e8f0); font-weight: 600; }
+.embed-table th { background: var(--color-surface, #f8fafc); padding: 0.6rem 0.875rem; text-align: left; border: 1px solid var(--color-border, #e2e8f0); font-weight: 600; }  # noqa: E501
 .embed-table td { padding: 0.6rem 0.875rem; border: 1px solid var(--color-border, #e2e8f0); vertical-align: top; }
-.embed-table td code, .embed-table th code { background: var(--color-surface, #f8fafc); padding: 2px 5px; border-radius: 3px; font-size: 0.8rem; border: 1px solid var(--color-border, #e2e8f0); }
+.embed-table td code, .embed-table th code { background: var(--color-surface, #f8fafc); padding: 2px 5px; border-radius: 3px; font-size: 0.8rem; border: 1px solid var(--color-border, #e2e8f0); }  # noqa: E501
 .embed-live-label { color: var(--color-muted, #64748b); font-size: 0.9rem; margin-bottom: 1rem; }
-.embed-live-wrap { border: 2px dashed var(--color-border, #e2e8f0); border-radius: 12px; padding: 1rem; margin-bottom: 2.5rem; min-height: 100px; }
+.embed-live-wrap { border: 2px dashed var(--color-border, #e2e8f0); border-radius: 12px; padding: 1rem; margin-bottom: 2.5rem; min-height: 100px; }  # noqa: E501
 </style>
 """
 
@@ -865,7 +865,7 @@ TESTIMONIALS_HTML = """
 .testimonials { padding: 5rem 0; }
 .testimonials__title { text-align: center; font-size: 2rem; margin-bottom: 3rem; }
 .testimonials__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
-.testimonial { margin: 0; padding: 2rem; border-radius: 12px; background: var(--color-surface, #f8fafc); border-left: 4px solid var(--color-primary, #2563eb); }
+.testimonial { margin: 0; padding: 2rem; border-radius: 12px; background: var(--color-surface, #f8fafc); border-left: 4px solid var(--color-primary, #2563eb); }  # noqa: E501
 .testimonial p { font-size: 1rem; font-style: italic; margin-bottom: 1rem; opacity: 0.9; }
 .testimonial cite { font-size: 0.875rem; opacity: 0.65; font-style: normal; font-weight: 600; }
 </style>
@@ -873,10 +873,10 @@ TESTIMONIALS_HTML = """
 
 STANDARD_CONTENT_HTML = """
 <h1>About VBWD</h1>
-<p>VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product.</p>
+<p>VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product.</p>  # noqa: E501
 
 <h2>What We Build</h2>
-<p>VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system.</p>
+<p>VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system.</p>  # noqa: E501
 <ul>
   <li><strong>Subscription billing</strong> — Stripe, PayPal, and YooKassa ship out of the box</li>
   <li><strong>User management</strong> — registration, login, roles, profiles, invoices</li>
@@ -885,10 +885,10 @@ STANDARD_CONTENT_HTML = """
 </ul>
 
 <h2>Our Philosophy</h2>
-<p>We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it.</p>
+<p>We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it.</p>  # noqa: E501
 
 <h2>Community &amp; Support</h2>
-<p>VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below.</p>
+<p>VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below.</p>  # noqa: E501
 
 <h2>Contact</h2>
 <p>Questions? Reach us at <a href="mailto:hello@vbwd.dev">hello@vbwd.dev</a> or open an issue on GitHub.</p>
@@ -907,7 +907,7 @@ STANDARD_CONTENT_JSON = {
             "content": [
                 {
                     "type": "text",
-                    "text": "VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product.",
+                    "text": "VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product.",  # noqa: E501
                 }
             ],
         },
@@ -921,7 +921,7 @@ STANDARD_CONTENT_JSON = {
             "content": [
                 {
                     "type": "text",
-                    "text": "VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system.",
+                    "text": "VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system.",  # noqa: E501
                 }
             ],
         },
@@ -964,7 +964,7 @@ STANDARD_CONTENT_JSON = {
                             "content": [
                                 {
                                     "type": "text",
-                                    "text": "CMS — pages, layouts, widgets, styles — all manageable from the admin panel",
+                                    "text": "CMS — pages, layouts, widgets, styles — all manageable from the admin panel",  # noqa: E501
                                 }
                             ],
                         }
@@ -996,7 +996,7 @@ STANDARD_CONTENT_JSON = {
             "content": [
                 {
                     "type": "text",
-                    "text": "We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it.",
+                    "text": "We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it.",  # noqa: E501
                 }
             ],
         },
@@ -1010,7 +1010,7 @@ STANDARD_CONTENT_JSON = {
             "content": [
                 {
                     "type": "text",
-                    "text": "VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below.",
+                    "text": "VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below.",  # noqa: E501
                 }
             ],
         },
@@ -1687,7 +1687,7 @@ def populate_cms() -> None:
         content_page,
         default_light,
         content_html=FEATURES_SLIDESHOW_HTML,
-        meta_description="Explore the key features of the VBWD platform: billing, user management, plugins, CMS, and more.",
+        meta_description="Explore the key features of the VBWD platform: billing, user management, plugins, CMS, and more.",  # noqa: E501
         sort_order=40,
         category_id=cat_about.id,
     )
@@ -1714,7 +1714,7 @@ def populate_cms() -> None:
         "We are launching soon!",
         content_page,
         default_light,
-        content_html="<h1>We are launching soon!</h1><p>Stay tuned for our upcoming launch. Sign up to be notified.</p>",
+        content_html="<h1>We are launching soon!</h1><p>Stay tuned for our upcoming launch. Sign up to be notified.</p>",  # noqa: E501
         meta_description="We are launching soon. Stay tuned.",
         sort_order=50,
         category_id=cat_static.id,

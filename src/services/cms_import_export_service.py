@@ -257,7 +257,7 @@ class CmsImportExportService:
             if ids:
                 self._page.bulk_delete(ids)
         if "layouts.json" in names:
-            ids = [str(l.id) for l in self._paginated(self._layout)]
+            ids = [str(layout.id) for layout in self._paginated(self._layout)]
             if ids:
                 self._layout.bulk_delete(ids)
         if "widgets.json" in names:

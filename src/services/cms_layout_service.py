@@ -68,7 +68,7 @@ class CmsLayoutService:
             sort_dir=params.get("sort_dir", "asc"),
             query=params.get("query"),
         )
-        result["items"] = [self._to_dto(l) for l in result["items"]]
+        result["items"] = [self._to_dto(layout) for layout in result["items"]]
         return result
 
     def get_layout(self, layout_id: str) -> Dict[str, Any]:
@@ -165,11 +165,11 @@ class CmsLayoutService:
         layouts = self._repo.find_by_ids(ids)
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for l in layouts:
-                assignments = self._lw_repo.find_by_layout(str(l.id))
-                d = l.to_dict()
+            for layout in layouts:
+                assignments = self._lw_repo.find_by_layout(str(layout.id))
+                d = layout.to_dict()
                 d["assignments"] = [lw.to_dict() for lw in assignments]
-                zf.writestr(f"layouts/{l.slug}.json", json.dumps(d, ensure_ascii=False))
+                zf.writestr(f"layouts/{layout.slug}.json", json.dumps(d, ensure_ascii=False))
         return buf.getvalue()
 
     def import_layout(self, payload: Dict[str, Any]) -> Dict[str, Any]:

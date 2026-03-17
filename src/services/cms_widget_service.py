@@ -3,7 +3,6 @@ import re
 import json
 import zipfile
 import io
-import base64
 from typing import List, Dict, Any, Optional
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.repositories.cms_menu_item_repository import CmsMenuItemRepository

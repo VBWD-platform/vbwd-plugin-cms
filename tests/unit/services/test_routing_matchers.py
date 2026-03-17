@@ -1,5 +1,4 @@
 """Unit tests for CMS routing rule matchers."""
-import pytest
 from unittest.mock import MagicMock
 from plugins.cms.src.services.routing.matchers import (
     RequestContext,

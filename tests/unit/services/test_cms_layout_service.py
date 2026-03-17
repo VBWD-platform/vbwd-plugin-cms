@@ -3,7 +3,6 @@ import pytest
 from unittest.mock import MagicMock
 from plugins.cms.src.services.cms_layout_service import (
     CmsLayoutService,
-    CmsLayoutNotFoundError,
     CmsLayoutSlugConflictError,
 )
 from plugins.cms.src.models.cms_layout import CmsLayout
@@ -22,15 +21,15 @@ def _make_service(layouts=None, lw_assignments=None):
     widget_repo = MagicMock()
     page_repo = MagicMock()
 
-    store = {l.slug: l for l in (layouts or [])}
-    id_store = {str(l.id): l for l in (layouts or [])}
+    store = {lo.slug: lo for lo in (layouts or [])}
+    id_store = {str(lo.id): lo for lo in (layouts or [])}
 
     layout_repo.find_by_slug.side_effect = lambda slug: store.get(slug)
     layout_repo.find_by_id.side_effect = lambda lid: id_store.get(str(lid))
 
-    def _save(l):
-        store[l.slug] = l
-        id_store[str(l.id)] = l
+    def _save(lo):
+        store[lo.slug] = lo
+        id_store[str(lo.id)] = lo
 
     layout_repo.save.side_effect = _save
     lw_repo.find_by_layout.return_value = lw_assignments or []
@@ -47,16 +46,16 @@ def _layout(slug="my-layout", areas=None):
     from uuid import uuid4
     import datetime
 
-    l = CmsLayout()
-    l.id = uuid4()
-    l.slug = slug
-    l.name = "My Layout"
-    l.description = ""
-    l.areas = areas or VALID_AREAS
-    l.sort_order = 0
-    l.is_active = True
-    l.created_at = l.updated_at = datetime.datetime.utcnow()
-    return l
+    lo = CmsLayout()
+    lo.id = uuid4()
+    lo.slug = slug
+    lo.name = "My Layout"
+    lo.description = ""
+    lo.areas = areas or VALID_AREAS
+    lo.sort_order = 0
+    lo.is_active = True
+    lo.created_at = lo.updated_at = datetime.datetime.utcnow()
+    return lo
 
 
 class TestCreateLayout:
