@@ -1,5 +1,5 @@
 """CmsRoutingMiddleware — Flask before_request hook for URL routing."""
-from typing import Optional
+from typing import Any, Optional
 
 from flask import request, redirect, Response, g
 
@@ -17,7 +17,7 @@ class CmsRoutingMiddleware:
     def __init__(self, routing_service) -> None:
         self._service = routing_service
 
-    def before_request(self) -> Optional[Response]:
+    def before_request(self) -> Optional[Any]:
         if _is_passthrough(request.path):
             return None
         from plugins.cms.src.services.routing.matchers import RequestContext

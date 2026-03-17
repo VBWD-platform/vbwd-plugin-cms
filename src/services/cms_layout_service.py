@@ -3,7 +3,7 @@ import re
 import json
 import zipfile
 import io
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
 from plugins.cms.src.repositories.cms_layout_widget_repository import (
     CmsLayoutWidgetRepository,
@@ -150,7 +150,13 @@ class CmsLayoutService:
                 )
 
         created = self._lw_repo.replace_for_layout(layout_id, assignments)
-        return [lw.to_dict() if hasattr(lw, "to_dict") else lw for lw in created]
+        return cast(
+            List[Dict[str, Any]],
+            [
+                assignment.to_dict() if hasattr(assignment, "to_dict") else assignment
+                for assignment in created
+            ],
+        )
 
     def export_layout(self, layout_id: str) -> Dict[str, Any]:
         obj = self._repo.find_by_id(layout_id)

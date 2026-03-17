@@ -407,7 +407,6 @@ class CmsImportExportService:
         from plugins.cms.src.models.cms_category import CmsCategory
 
         obj = CmsCategory()
-        obj.id = uuid4()
         obj.slug = slug
         obj.name = rec.get("name", slug)
         obj.parent_id = None
@@ -418,7 +417,6 @@ class CmsImportExportService:
         from plugins.cms.src.models.cms_style import CmsStyle
 
         obj = CmsStyle()
-        obj.id = uuid4()
         obj.slug = slug
         obj.name = rec.get("name", slug)
         obj.source_css = rec.get("source_css", "")
@@ -430,7 +428,6 @@ class CmsImportExportService:
         from plugins.cms.src.models.cms_widget import CmsWidget
 
         obj = CmsWidget()
-        obj.id = uuid4()
         obj.slug = slug
         obj.name = rec.get("name", slug)
         obj.widget_type = rec.get("widget_type", "html")
@@ -445,7 +442,6 @@ class CmsImportExportService:
         from plugins.cms.src.models.cms_layout import CmsLayout
 
         obj = CmsLayout()
-        obj.id = uuid4()
         obj.slug = slug
         obj.name = rec.get("name", slug)
         obj.description = rec.get("description", "")
@@ -458,7 +454,6 @@ class CmsImportExportService:
         from plugins.cms.src.models.cms_page import CmsPage
 
         obj = CmsPage()
-        obj.id = uuid4()
         obj.slug = slug
         obj.name = rec.get("name", slug)
         obj.language = rec.get("language", "en")
@@ -493,7 +488,6 @@ class CmsImportExportService:
         from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
 
         obj = CmsRoutingRule()
-        obj.id = uuid4()
         obj.name = name
         obj.is_active = rec.get("is_active", True)
         obj.priority = rec.get("priority", 0)
@@ -509,7 +503,6 @@ class CmsImportExportService:
         from plugins.cms.src.models.cms_image import CmsImage
 
         obj = CmsImage()
-        obj.id = uuid4()
         obj.slug = slug
         obj.caption = rec.get("caption", "")
         obj.file_path = file_path

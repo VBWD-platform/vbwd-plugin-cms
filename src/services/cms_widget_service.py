@@ -3,7 +3,7 @@ import re
 import json
 import zipfile
 import io
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.repositories.cms_menu_item_repository import CmsMenuItemRepository
 from plugins.cms.src.repositories.cms_layout_widget_repository import (
@@ -124,7 +124,13 @@ class CmsWidgetService:
         if not obj:
             raise CmsWidgetNotFoundError(f"Widget {widget_id} not found")
         created = self._menu_repo.replace_tree(widget_id, items)
-        return [i.to_dict() if hasattr(i, "to_dict") else i for i in created]
+        return cast(
+            List[Dict[str, Any]],
+            [
+                menu_item.to_dict() if hasattr(menu_item, "to_dict") else menu_item
+                for menu_item in created
+            ],
+        )
 
     def export_widget(self, widget_id: str) -> Dict[str, Any]:
         obj = self._repo.find_by_id(widget_id)

@@ -1,5 +1,5 @@
 """CmsMenuItem repository."""
-from typing import List, Dict, Any
+from typing import List, Dict, Any, cast
 from uuid import uuid4
 from plugins.cms.src.models.cms_menu_item import CmsMenuItem
 
@@ -37,7 +37,7 @@ class CmsMenuItemRepository:
             if old_id:
                 id_map[str(old_id)] = new_id
             item = CmsMenuItem()
-            item.id = new_id
+            cast(Any, item).id = new_id
             item.widget_id = widget_id
             item.parent_id = None  # will be set in pass 2
             item.label = item_data.get("label", "")

@@ -1,5 +1,5 @@
 """CMS Pages plugin — pages, categories, and image gallery."""
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, Union, TYPE_CHECKING
 from src.plugins.base import BasePlugin, PluginMetadata
 
 if TYPE_CHECKING:
@@ -73,12 +73,11 @@ class CmsPlugin(BasePlugin):
         cfg = self._config or {}
         routing_cfg = cfg.get("routing", {})
         reload_cmd = routing_cfg.get("nginx_reload_command", "nginx -s reload")
+        nginx_gw: Union[StubNginxReloadGateway, SubprocessNginxReloadGateway]
         if os.environ.get("TESTING") == "true":
             nginx_gw = StubNginxReloadGateway()
         else:
             nginx_gw = SubprocessNginxReloadGateway(reload_cmd)
-
-        app = current_app._get_current_object()
 
         routing_svc = CmsRoutingService(
             rule_repo=CmsRoutingRuleRepository(db.session),
@@ -87,7 +86,7 @@ class CmsPlugin(BasePlugin):
             config=cfg,
         )
         middleware = CmsRoutingMiddleware(routing_svc)
-        app.before_request(middleware.before_request)
+        current_app.before_request(middleware.before_request)
 
     def on_disable(self) -> None:
         pass

@@ -1,6 +1,5 @@
 """CmsLayoutWidget repository."""
 from typing import List, Dict, Any
-from uuid import uuid4
 from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget
 
 
@@ -32,14 +31,13 @@ class CmsLayoutWidgetRepository:
         ).delete(synchronize_session="fetch")
         created = []
         for a in assignments:
-            lw = CmsLayoutWidget()
-            lw.id = uuid4()
-            lw.layout_id = layout_id
-            lw.widget_id = a["widget_id"]
-            lw.area_name = a["area_name"]
-            lw.sort_order = a.get("sort_order", 0)
-            self.session.add(lw)
-            created.append(lw)
+            layout_widget = CmsLayoutWidget()
+            layout_widget.layout_id = layout_id
+            layout_widget.widget_id = a["widget_id"]
+            layout_widget.area_name = a["area_name"]
+            layout_widget.sort_order = a.get("sort_order", 0)
+            self.session.add(layout_widget)
+            created.append(layout_widget)
         self.session.flush()
         self.session.commit()
         return created

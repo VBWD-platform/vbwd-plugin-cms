@@ -25,6 +25,7 @@ import sys
 import re
 import base64
 from pathlib import Path
+from typing import Optional, cast
 
 project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -1214,10 +1215,10 @@ def _get_or_create_widget(
     slug: str,
     name: str,
     widget_type: str,
-    content_html: str = None,
-    content_json: dict = None,
-    source_css: str = None,
-    config: dict = None,
+    content_html: Optional[str] = None,
+    content_json: Optional[dict] = None,
+    source_css: Optional[str] = None,
+    config: Optional[dict] = None,
 ) -> "CmsWidget":
     if widget_type == "html" and content_html is not None:
         content_json, extracted_css = _split_widget_content(content_html)
@@ -1343,13 +1344,13 @@ def _get_or_create_category(slug: str, name: str, sort_order: int = 0):
 def _get_or_create_page(
     slug: str,
     name: str,
-    layout: "CmsLayout",
-    style: "CmsStyle",
-    content_json: dict = None,
-    content_html: str = None,
-    meta_description: str = None,
+    layout: Optional["CmsLayout"],
+    style: Optional["CmsStyle"],
+    content_json: Optional[dict] = None,
+    content_html: Optional[str] = None,
+    meta_description: Optional[str] = None,
     sort_order: int = 0,
-    category_id: str = None,
+    category_id: Optional[str] = None,
     robots: str = "index,follow",
     is_published: bool = True,
 ) -> None:
@@ -1395,7 +1396,8 @@ def populate_cms() -> None:
     print("\n── Styles ──────────────────────────────────────────────────────")
     style_map: dict[str, "CmsStyle"] = {}
     for s in STYLES:
-        style_map[s["slug"]] = _get_or_create_style(s["slug"], s)
+        style_slug = cast(str, s["slug"])
+        style_map[style_slug] = _get_or_create_style(style_slug, s)
     db.session.commit()
     print(f"  Styles: {len(style_map)} total")
 
@@ -1564,7 +1566,8 @@ def populate_cms() -> None:
     print("\n── Layouts ─────────────────────────────────────────────────────")
     layout_map: dict[str, "CmsLayout"] = {}
     for ld in LAYOUTS:
-        layout_map[ld["slug"]] = _get_or_create_layout(ld, widget_map)
+        layout_slug = cast(str, ld["slug"])
+        layout_map[layout_slug] = _get_or_create_layout(ld, widget_map)
     db.session.commit()
     print(f"  Layouts: {len(layout_map)} total")
 

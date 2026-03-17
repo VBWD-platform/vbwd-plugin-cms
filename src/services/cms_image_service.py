@@ -3,9 +3,9 @@ import io
 import re
 import zipfile
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 from plugins.cms.src.repositories.cms_image_repository import CmsImageRepository
-from plugins.cms.src.services.file_storage import IFileStorage
+from plugins.cms.src.services.file_storage import IFileStorage, InMemoryFileStorage
 from plugins.cms.src.models.cms_image import CmsImage
 
 
@@ -162,7 +162,9 @@ class CmsImageService:
                             zf.writestr(os.path.basename(file_path), f.read())
                     else:
                         # InMemoryFileStorage
-                        data = self._storage._store.get(file_path, b"")
+                        data = cast(InMemoryFileStorage, self._storage)._store.get(
+                            file_path, b""
+                        )
                         zf.writestr(os.path.basename(file_path), data)
         return buf.getvalue()
 
