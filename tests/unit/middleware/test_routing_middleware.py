@@ -1,5 +1,6 @@
 """Unit tests for CmsRoutingMiddleware."""
-from unittest.mock import MagicMock
+import pytest
+from unittest.mock import MagicMock, patch
 from flask import Flask
 
 from plugins.cms.src.middleware.routing_middleware import (

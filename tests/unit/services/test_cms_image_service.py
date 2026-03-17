@@ -2,7 +2,7 @@
 import io
 import zipfile
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from plugins.cms.src.services.cms_image_service import (
     CmsImageService,
     CmsImageNotFoundError,
