@@ -167,9 +167,14 @@ class CmsLayoutService:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for layout in layouts:
                 assignments = self._lw_repo.find_by_layout(str(layout.id))
-                d = layout.to_dict()
-                d["assignments"] = [lw.to_dict() for lw in assignments]
-                zf.writestr(f"layouts/{layout.slug}.json", json.dumps(d, ensure_ascii=False))
+                layout_data = layout.to_dict()
+                layout_data["assignments"] = [
+                    assignment.to_dict() for assignment in assignments
+                ]
+                zf.writestr(
+                    f"layouts/{layout.slug}.json",
+                    json.dumps(layout_data, ensure_ascii=False),
+                )
         return buf.getvalue()
 
     def import_layout(self, payload: Dict[str, Any]) -> Dict[str, Any]:
