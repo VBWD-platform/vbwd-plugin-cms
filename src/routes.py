@@ -40,8 +40,8 @@ from flask import (
     send_from_directory,
     Response,
 )
-from src.extensions import db
-from src.middleware.auth import require_auth, require_admin
+from vbwd.extensions import db
+from vbwd.middleware.auth import require_auth, require_admin
 
 from plugins.cms.src.repositories.cms_page_repository import CmsPageRepository
 from plugins.cms.src.repositories.cms_category_repository import CmsCategoryRepository
@@ -192,8 +192,8 @@ def submit_contact_form():
 
     Returns 200 on success, 404/422/429 on failure.
     """
-    from src.events.bus import event_bus
-    from src.utils.redis_client import redis_client
+    from vbwd.events.bus import event_bus
+    from vbwd.utils.redis_client import redis_client
 
     body = request.get_json(silent=True) or {}
     widget_slug: str = str(body.get("widget_slug", "")).strip()

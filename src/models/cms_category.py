@@ -2,8 +2,8 @@
 from __future__ import annotations
 from typing import List, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, relationship
-from src.extensions import db
-from src.models.base import BaseModel
+from vbwd.extensions import db
+from vbwd.models.base import BaseModel
 
 if TYPE_CHECKING:
     pass

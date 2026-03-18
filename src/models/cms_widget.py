@@ -1,6 +1,6 @@
 """CmsWidget model — reusable content block assigned to layout areas."""
-from src.extensions import db
-from src.models.base import BaseModel
+from vbwd.extensions import db
+from vbwd.models.base import BaseModel
 
 WIDGET_TYPES = frozenset({"html", "menu", "slideshow", "vue-component"})
 

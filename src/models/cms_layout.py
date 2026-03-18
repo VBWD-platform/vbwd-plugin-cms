@@ -1,6 +1,6 @@
 """CmsLayout model — named page structure template with ordered area slots."""
-from src.extensions import db
-from src.models.base import BaseModel
+from vbwd.extensions import db
+from vbwd.models.base import BaseModel
 
 AREA_TYPES = frozenset(
     {

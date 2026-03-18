@@ -30,7 +30,7 @@ from typing import Optional, cast
 project_root = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.extensions import db  # noqa: E402
+from vbwd.extensions import db  # noqa: E402
 from plugins.cms.src.models.cms_style import CmsStyle  # noqa: E402
 from plugins.cms.src.models.cms_widget import CmsWidget  # noqa: E402
 from plugins.cms.src.models.cms_menu_item import CmsMenuItem  # noqa: E402
@@ -1840,7 +1840,7 @@ def populate_cms() -> None:
 
 
 if __name__ == "__main__":
-    from src.app import create_app
+    from vbwd.app import create_app
 
     app = create_app()
     with app.app_context():

@@ -17,7 +17,7 @@ import logging
 from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.utils.redis_client import RedisClient
+    from vbwd.utils.redis_client import RedisClient
 
 logger = logging.getLogger(__name__)
 

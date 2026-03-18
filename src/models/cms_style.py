@@ -1,6 +1,6 @@
 """CmsStyle model — plain CSS stylesheet assignable to pages."""
-from src.extensions import db
-from src.models.base import BaseModel
+from vbwd.extensions import db
+from vbwd.models.base import BaseModel
 
 
 class CmsStyle(BaseModel):

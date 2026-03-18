@@ -1,6 +1,6 @@
 """CMS Pages plugin — pages, categories, and image gallery."""
 from typing import Optional, Dict, Any, Union, TYPE_CHECKING
-from src.plugins.base import BasePlugin, PluginMetadata
+from vbwd.plugins.base import BasePlugin, PluginMetadata
 
 if TYPE_CHECKING:
     from flask import Blueprint
@@ -67,7 +67,7 @@ class CmsPlugin(BasePlugin):
             StubNginxReloadGateway,
             SubprocessNginxReloadGateway,
         )
-        from src.extensions import db
+        from vbwd.extensions import db
         import os
 
         cfg = self._config or {}

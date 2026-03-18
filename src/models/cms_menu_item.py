@@ -1,6 +1,6 @@
 """CmsMenuItem model — node in a multilevel navigation menu widget."""
-from src.extensions import db
-from src.models.base import BaseModel
+from vbwd.extensions import db
+from vbwd.models.base import BaseModel
 
 
 class CmsMenuItem(BaseModel):
