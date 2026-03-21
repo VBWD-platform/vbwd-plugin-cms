@@ -54,39 +54,46 @@ class CmsPlugin(BasePlugin):
         return ""
 
     def on_enable(self) -> None:
-        from flask import current_app
-        from plugins.cms.src.middleware.routing_middleware import CmsRoutingMiddleware
-        from plugins.cms.src.repositories.routing_rule_repository import (
-            CmsRoutingRuleRepository,
-        )
-        from plugins.cms.src.services.routing.routing_service import CmsRoutingService
-        from plugins.cms.src.services.routing.nginx_conf_generator import (
-            NginxConfGenerator,
-        )
-        from plugins.cms.src.services.routing.nginx_reload_gateway import (
-            StubNginxReloadGateway,
-            SubprocessNginxReloadGateway,
-        )
-        from vbwd.extensions import db
+        import logging
         import os
 
-        cfg = self._config or {}
-        routing_cfg = cfg.get("routing", {})
-        reload_cmd = routing_cfg.get("nginx_reload_command", "nginx -s reload")
-        nginx_gw: Union[StubNginxReloadGateway, SubprocessNginxReloadGateway]
-        if os.environ.get("TESTING") == "true":
-            nginx_gw = StubNginxReloadGateway()
-        else:
-            nginx_gw = SubprocessNginxReloadGateway(reload_cmd)
+        try:
+            from flask import current_app
+            from plugins.cms.src.middleware.routing_middleware import CmsRoutingMiddleware
+            from plugins.cms.src.repositories.routing_rule_repository import (
+                CmsRoutingRuleRepository,
+            )
+            from plugins.cms.src.services.routing.routing_service import CmsRoutingService
+            from plugins.cms.src.services.routing.nginx_conf_generator import (
+                NginxConfGenerator,
+            )
+            from plugins.cms.src.services.routing.nginx_reload_gateway import (
+                StubNginxReloadGateway,
+                SubprocessNginxReloadGateway,
+            )
+            from vbwd.extensions import db
 
-        routing_svc = CmsRoutingService(
-            rule_repo=CmsRoutingRuleRepository(db.session),
-            conf_generator=NginxConfGenerator(),
-            nginx_gateway=nginx_gw,
-            config=cfg,
-        )
-        middleware = CmsRoutingMiddleware(routing_svc)
-        current_app.before_request(middleware.before_request)
+            cfg = self._config or {}
+            routing_cfg = cfg.get("routing", {})
+            reload_cmd = routing_cfg.get("nginx_reload_command", "nginx -s reload")
+            nginx_gw: Union[StubNginxReloadGateway, SubprocessNginxReloadGateway]
+            if os.environ.get("TESTING") == "true":
+                nginx_gw = StubNginxReloadGateway()
+            else:
+                nginx_gw = SubprocessNginxReloadGateway(reload_cmd)
+
+            routing_svc = CmsRoutingService(
+                rule_repo=CmsRoutingRuleRepository(db.session),
+                conf_generator=NginxConfGenerator(),
+                nginx_gateway=nginx_gw,
+                config=cfg,
+            )
+            middleware = CmsRoutingMiddleware(routing_svc)
+            current_app.before_request(middleware.before_request)
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                f"CMS routing middleware not initialized: {exc}"
+            )
 
     def on_disable(self) -> None:
         pass
