@@ -270,8 +270,17 @@ def list_public_categories():
 
 @cms_bp.route("/api/v1/cms/pages/<path:slug>", methods=["GET"])
 def get_published_page(slug: str):
-    """GET /api/v1/cms/pages/<slug> — fetch a published page by slug."""
+    """GET /api/v1/cms/pages/<slug> — fetch a published page by slug.
+
+    Supports preview via ?preview_token=<token> for unpublished pages.
+    """
+    preview_token = request.args.get("preview_token")
     try:
+        if preview_token:
+            page = _page_service().get_page(slug, published_only=False)
+            if page.get("preview_token") != preview_token:
+                return jsonify({"error": "Invalid preview token"}), 403
+            return jsonify(page), 200
         page = _page_service().get_page(slug, published_only=True)
         return jsonify(page), 200
     except CmsPageNotFoundError as e:

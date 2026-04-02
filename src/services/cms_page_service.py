@@ -80,10 +80,21 @@ class CmsPageService:
         if existing:
             raise CmsPageSlugConflictError(f"Slug '{slug}' is already in use")
 
+        import uuid as _uuid
+
         page = CmsPage()
+        page.preview_token = _uuid.uuid4().hex  # 32-char hex token for preview URLs
+        # Extract content_blocks before applying — need page.id first
+        content_blocks = data.pop("content_blocks", None)
         self._apply_data(page, data)
         page.slug = slug
         self._repo.save(page)
+
+        # Now apply content blocks (page has ID after save)
+        if content_blocks:
+            self._apply_data(page, {"content_blocks": content_blocks})
+            self._repo.save(page)
+
         return page.to_dict()
 
     def update_page(self, page_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -178,3 +189,30 @@ class CmsPageService:
         ):
             if field in data:
                 setattr(page, field, data[field])
+
+        # Handle multi-content blocks: { "content_blocks": { "area-name": { content_json, content_html, source_css } } }
+        if "content_blocks" in data and isinstance(data["content_blocks"], dict):
+            from plugins.cms.src.models.cms_page_content_block import CmsPageContentBlock
+            from vbwd.extensions import db
+
+            existing_blocks = {block.area_name: block for block in (page.content_blocks or [])}
+
+            for area_name, block_data in data["content_blocks"].items():
+                if area_name in existing_blocks:
+                    block = existing_blocks[area_name]
+                    if "content_json" in block_data:
+                        block.content_json = block_data["content_json"]
+                    if "content_html" in block_data:
+                        block.content_html = block_data["content_html"]
+                    if "source_css" in block_data:
+                        block.source_css = block_data["source_css"]
+                else:
+                    block = CmsPageContentBlock(
+                        page_id=page.id,
+                        area_name=area_name,
+                        content_json=block_data.get("content_json"),
+                        content_html=block_data.get("content_html"),
+                        source_css=block_data.get("source_css"),
+                        sort_order=block_data.get("sort_order", 0),
+                    )
+                    db.session.add(block)

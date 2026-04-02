@@ -47,12 +47,21 @@ class CmsPage(BaseModel):
         index=True,
     )
     use_theme_switcher_styles = db.Column(db.Boolean, nullable=False, default=True)
+    preview_token = db.Column(db.String(64), nullable=True, index=True)
 
     category = db.relationship(
         "CmsCategory",
         backref="pages",
         foreign_keys=[category_id],
         lazy="selectin",
+    )
+
+    content_blocks = db.relationship(
+        "CmsPageContentBlock",
+        backref="page",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="CmsPageContentBlock.sort_order",
     )
 
     def to_dict(self) -> dict:
@@ -79,6 +88,11 @@ class CmsPage(BaseModel):
             "layout_id": str(self.layout_id) if self.layout_id else None,
             "style_id": str(self.style_id) if self.style_id else None,
             "use_theme_switcher_styles": self.use_theme_switcher_styles,
+            "preview_token": self.preview_token,
+            "content_blocks": {
+                block.area_name: block.to_dict()
+                for block in (self.content_blocks or [])
+            },
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
