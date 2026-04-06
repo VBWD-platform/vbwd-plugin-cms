@@ -53,6 +53,20 @@ class CmsPlugin(BasePlugin):
         # Routes are defined with absolute paths — no prefix needed.
         return ""
 
+    @property
+    def admin_permissions(self):
+        return [
+            {"key": "cms.pages.view", "label": "View pages", "group": "CMS"},
+            {"key": "cms.pages.manage", "label": "Manage pages", "group": "CMS"},
+            {"key": "cms.images.view", "label": "View images", "group": "CMS"},
+            {"key": "cms.images.manage", "label": "Manage images", "group": "CMS"},
+            {"key": "cms.widgets.view", "label": "View widgets", "group": "CMS"},
+            {"key": "cms.widgets.manage", "label": "Manage widgets", "group": "CMS"},
+            {"key": "cms.layouts.manage", "label": "Manage layouts", "group": "CMS"},
+            {"key": "cms.styles.manage", "label": "Manage styles", "group": "CMS"},
+            {"key": "cms.configure", "label": "CMS settings", "group": "CMS"},
+        ]
+
     def on_enable(self) -> None:
         import logging
         import os

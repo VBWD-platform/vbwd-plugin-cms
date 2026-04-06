@@ -41,7 +41,7 @@ from flask import (
     Response,
 )
 from vbwd.extensions import db
-from vbwd.middleware.auth import require_auth, require_admin
+from vbwd.middleware.auth import require_auth, require_admin, require_permission
 
 from plugins.cms.src.repositories.cms_page_repository import CmsPageRepository
 from plugins.cms.src.repositories.cms_category_repository import CmsCategoryRepository
@@ -310,6 +310,7 @@ def list_published_pages():
 @cms_bp.route("/api/v1/admin/cms/pages", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.view")
 def admin_list_pages():
     """GET /api/v1/admin/cms/pages — paginated list with filters."""
     page = request.args.get("page", 1, type=int)
@@ -344,6 +345,7 @@ def admin_list_pages():
 @cms_bp.route("/api/v1/admin/cms/pages", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_create_page():
     """POST /api/v1/admin/cms/pages — create a new page."""
     data = request.get_json()
@@ -361,6 +363,7 @@ def admin_create_page():
 @cms_bp.route("/api/v1/admin/cms/pages/bulk", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_bulk_pages():
     """POST /api/v1/admin/cms/pages/bulk — bulk actions on pages.
 
@@ -382,6 +385,7 @@ def admin_bulk_pages():
 @cms_bp.route("/api/v1/admin/cms/pages/export", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_export_pages():
     """POST /api/v1/admin/cms/pages/export — export pages as JSON.
 
@@ -404,6 +408,7 @@ def admin_export_pages():
 @cms_bp.route("/api/v1/admin/cms/pages/import", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_import_pages():
     """POST /api/v1/admin/cms/pages/import — import pages from JSON."""
     raw = request.get_data()
@@ -419,6 +424,7 @@ def admin_import_pages():
 @cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.view")
 def admin_get_page(page_id: str):
     """GET /api/v1/admin/cms/pages/<id> — get a single page (any publish state)."""
     svc = _page_service()
@@ -432,6 +438,7 @@ def admin_get_page(page_id: str):
 @cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_update_page(page_id: str):
     """PUT /api/v1/admin/cms/pages/<id> — update a page."""
     data = request.get_json()
@@ -449,6 +456,7 @@ def admin_update_page(page_id: str):
 @cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["DELETE"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_delete_page(page_id: str):
     """DELETE /api/v1/admin/cms/pages/<id> — delete a page."""
     try:
@@ -466,6 +474,7 @@ def admin_delete_page(page_id: str):
 @cms_bp.route("/api/v1/admin/cms/categories", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.view")
 def admin_list_categories():
     """GET /api/v1/admin/cms/categories — list all categories."""
     return jsonify(_category_service().list_categories()), 200
@@ -474,6 +483,7 @@ def admin_list_categories():
 @cms_bp.route("/api/v1/admin/cms/categories", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_create_category():
     """POST /api/v1/admin/cms/categories — create a category."""
     data = request.get_json()
@@ -489,6 +499,7 @@ def admin_create_category():
 @cms_bp.route("/api/v1/admin/cms/categories/<cat_id>", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_update_category(cat_id: str):
     """PUT /api/v1/admin/cms/categories/<id> — update a category."""
     data = request.get_json()
@@ -504,6 +515,7 @@ def admin_update_category(cat_id: str):
 @cms_bp.route("/api/v1/admin/cms/categories/<cat_id>", methods=["DELETE"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_delete_category(cat_id: str):
     """DELETE /api/v1/admin/cms/categories/<id> — delete a category."""
     try:
@@ -523,6 +535,7 @@ def admin_delete_category(cat_id: str):
 @cms_bp.route("/api/v1/admin/cms/images", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.images.view")
 def admin_list_images():
     """GET /api/v1/admin/cms/images — paginated image list."""
     page = request.args.get("page", 1, type=int)
@@ -544,6 +557,7 @@ def admin_list_images():
 @cms_bp.route("/api/v1/admin/cms/images/upload", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.images.manage")
 def admin_upload_image():
     """POST /api/v1/admin/cms/images/upload — upload an image (multipart/form-data)."""
     if "file" not in request.files:
@@ -573,6 +587,7 @@ def admin_upload_image():
 @cms_bp.route("/api/v1/admin/cms/images/export", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.images.view")
 def admin_export_images():
     """GET /api/v1/admin/cms/images/export?ids=id1,id2 — export ZIP of selected images."""
     from flask import Response
@@ -593,6 +608,7 @@ def admin_export_images():
 @cms_bp.route("/api/v1/admin/cms/images/bulk", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.images.manage")
 def admin_bulk_images():
     """POST /api/v1/admin/cms/images/bulk — bulk delete.
 
@@ -613,6 +629,7 @@ def admin_bulk_images():
 @cms_bp.route("/api/v1/admin/cms/images/<image_id>", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.images.manage")
 def admin_update_image(image_id: str):
     """PUT /api/v1/admin/cms/images/<id> — update image caption/SEO."""
     data = request.get_json()
@@ -628,6 +645,7 @@ def admin_update_image(image_id: str):
 @cms_bp.route("/api/v1/admin/cms/images/<image_id>/resize", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.images.manage")
 def admin_resize_image(image_id: str):
     """POST /api/v1/admin/cms/images/<id>/resize — resize an image.
 
@@ -648,6 +666,7 @@ def admin_resize_image(image_id: str):
 @cms_bp.route("/api/v1/admin/cms/images/<image_id>", methods=["DELETE"])
 @require_auth
 @require_admin
+@require_permission("cms.images.manage")
 def admin_delete_image(image_id: str):
     """DELETE /api/v1/admin/cms/images/<id> — delete an image and its file."""
     try:
@@ -723,6 +742,7 @@ def get_style_css_public(style_id: str):
 @cms_bp.route("/api/v1/admin/cms/layouts", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_list_layouts():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
@@ -741,6 +761,7 @@ def admin_list_layouts():
 @cms_bp.route("/api/v1/admin/cms/layouts", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_create_layout():
     data = request.get_json()
     if not data:
@@ -757,6 +778,7 @@ def admin_create_layout():
 @cms_bp.route("/api/v1/admin/cms/layouts/bulk", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_bulk_layouts():
     data = request.get_json()
     if not data or "ids" not in data:
@@ -768,6 +790,7 @@ def admin_bulk_layouts():
 @cms_bp.route("/api/v1/admin/cms/layouts/export", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_export_layouts():
     data = request.get_json() or {}
     ids = data.get("ids", [])
@@ -791,6 +814,7 @@ def admin_export_layouts():
 @cms_bp.route("/api/v1/admin/cms/layouts/import", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_import_layouts():
     import json as _json
 
@@ -808,6 +832,7 @@ def admin_import_layouts():
 @cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_get_layout(layout_id: str):
     try:
         return jsonify(_layout_service().get_layout(layout_id)), 200
@@ -818,6 +843,7 @@ def admin_get_layout(layout_id: str):
 @cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_update_layout(layout_id: str):
     data = request.get_json()
     if not data:
@@ -833,6 +859,7 @@ def admin_update_layout(layout_id: str):
 @cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>", methods=["DELETE"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_delete_layout(layout_id: str):
     try:
         _layout_service().delete_layout(layout_id)
@@ -844,6 +871,7 @@ def admin_delete_layout(layout_id: str):
 @cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>/widgets", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.layouts.manage")
 def admin_set_layout_widgets(layout_id: str):
     data = request.get_json()
     if not isinstance(data, list):
@@ -865,6 +893,7 @@ def admin_set_layout_widgets(layout_id: str):
 @cms_bp.route("/api/v1/admin/cms/widgets", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.view")
 def admin_list_widgets():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
@@ -884,6 +913,7 @@ def admin_list_widgets():
 @cms_bp.route("/api/v1/admin/cms/widgets", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.manage")
 def admin_create_widget():
     data = request.get_json()
     if not data:
@@ -900,6 +930,7 @@ def admin_create_widget():
 @cms_bp.route("/api/v1/admin/cms/widgets/bulk", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.manage")
 def admin_bulk_widgets():
     data = request.get_json()
     if not data or "ids" not in data:
@@ -911,6 +942,7 @@ def admin_bulk_widgets():
 @cms_bp.route("/api/v1/admin/cms/widgets/export", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.manage")
 def admin_export_widgets():
     data = request.get_json() or {}
     ids = data.get("ids", [])
@@ -934,6 +966,7 @@ def admin_export_widgets():
 @cms_bp.route("/api/v1/admin/cms/widgets/import", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.manage")
 def admin_import_widgets():
     import json as _json
 
@@ -952,6 +985,7 @@ def admin_import_widgets():
 @cms_bp.route("/api/v1/admin/cms/widgets/<widget_id>", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.view")
 def admin_get_widget(widget_id: str):
     try:
         return jsonify(_widget_service().get_widget(widget_id)), 200
@@ -962,6 +996,7 @@ def admin_get_widget(widget_id: str):
 @cms_bp.route("/api/v1/admin/cms/widgets/<widget_id>", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.manage")
 def admin_update_widget(widget_id: str):
     data = request.get_json()
     if not data:
@@ -977,6 +1012,7 @@ def admin_update_widget(widget_id: str):
 @cms_bp.route("/api/v1/admin/cms/widgets/<widget_id>", methods=["DELETE"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.manage")
 def admin_delete_widget(widget_id: str):
     try:
         _widget_service().delete_widget(widget_id)
@@ -990,6 +1026,7 @@ def admin_delete_widget(widget_id: str):
 @cms_bp.route("/api/v1/admin/cms/widgets/<widget_id>/menu", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.widgets.manage")
 def admin_replace_widget_menu(widget_id: str):
     data = request.get_json()
     if not isinstance(data, list):
@@ -1009,6 +1046,7 @@ def admin_replace_widget_menu(widget_id: str):
 @cms_bp.route("/api/v1/admin/cms/styles", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_list_styles():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
@@ -1027,6 +1065,7 @@ def admin_list_styles():
 @cms_bp.route("/api/v1/admin/cms/styles", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_create_style():
     data = request.get_json()
     if not data:
@@ -1043,6 +1082,7 @@ def admin_create_style():
 @cms_bp.route("/api/v1/admin/cms/styles/bulk", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_bulk_styles():
     data = request.get_json()
     if not data or "ids" not in data:
@@ -1054,6 +1094,7 @@ def admin_bulk_styles():
 @cms_bp.route("/api/v1/admin/cms/styles/export", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_export_styles():
     data = request.get_json() or {}
     ids = data.get("ids", [])
@@ -1077,6 +1118,7 @@ def admin_export_styles():
 @cms_bp.route("/api/v1/admin/cms/styles/import", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_import_styles():
     import json as _json
 
@@ -1095,6 +1137,7 @@ def admin_import_styles():
 @cms_bp.route("/api/v1/admin/cms/styles/<style_id>", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_get_style(style_id: str):
     try:
         return jsonify(_style_service().get_style(style_id)), 200
@@ -1105,6 +1148,7 @@ def admin_get_style(style_id: str):
 @cms_bp.route("/api/v1/admin/cms/styles/<style_id>", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_update_style(style_id: str):
     data = request.get_json()
     if not data:
@@ -1120,6 +1164,7 @@ def admin_update_style(style_id: str):
 @cms_bp.route("/api/v1/admin/cms/styles/<style_id>", methods=["DELETE"])
 @require_auth
 @require_admin
+@require_permission("cms.styles.manage")
 def admin_delete_style(style_id: str):
     try:
         _style_service().delete_style(style_id)
@@ -1188,6 +1233,7 @@ def public_list_middleware_routing_rules():
 @cms_bp.route("/api/v1/admin/cms/routing-rules", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.configure")
 def admin_list_routing_rules():
     """GET /api/v1/admin/cms/routing-rules — all rules ordered by priority."""
     return jsonify(_routing_svc().list_rules()), 200
@@ -1196,6 +1242,7 @@ def admin_list_routing_rules():
 @cms_bp.route("/api/v1/admin/cms/routing-rules", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.configure")
 def admin_create_routing_rule():
     """POST /api/v1/admin/cms/routing-rules — create a new routing rule."""
     data = request.get_json()
@@ -1211,6 +1258,7 @@ def admin_create_routing_rule():
 @cms_bp.route("/api/v1/admin/cms/routing-rules/reload", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.configure")
 def admin_reload_nginx():
     """POST /api/v1/admin/cms/routing-rules/reload — force nginx reload."""
     try:
@@ -1223,6 +1271,7 @@ def admin_reload_nginx():
 @cms_bp.route("/api/v1/admin/cms/routing-rules/<rule_id>", methods=["GET"])
 @require_auth
 @require_admin
+@require_permission("cms.configure")
 def admin_get_routing_rule(rule_id: str):
     """GET /api/v1/admin/cms/routing-rules/<id> — get a single routing rule."""
     from plugins.cms.src.repositories.routing_rule_repository import (
@@ -1239,6 +1288,7 @@ def admin_get_routing_rule(rule_id: str):
 @cms_bp.route("/api/v1/admin/cms/routing-rules/<rule_id>", methods=["PUT"])
 @require_auth
 @require_admin
+@require_permission("cms.configure")
 def admin_update_routing_rule(rule_id: str):
     """PUT /api/v1/admin/cms/routing-rules/<id> — update a routing rule."""
     from plugins.cms.src.services.routing.routing_service import (
@@ -1260,6 +1310,7 @@ def admin_update_routing_rule(rule_id: str):
 @cms_bp.route("/api/v1/admin/cms/routing-rules/<rule_id>", methods=["DELETE"])
 @require_auth
 @require_admin
+@require_permission("cms.configure")
 def admin_delete_routing_rule(rule_id: str):
     """DELETE /api/v1/admin/cms/routing-rules/<id> — delete (returns 204)."""
     from plugins.cms.src.services.routing.routing_service import (
@@ -1281,6 +1332,7 @@ def admin_delete_routing_rule(rule_id: str):
 @cms_bp.route("/api/v1/admin/cms/export", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_cms_export():
     """POST /api/v1/admin/cms/export — export CMS content as a ZIP.
 
@@ -1308,6 +1360,7 @@ def admin_cms_export():
 @cms_bp.route("/api/v1/admin/cms/import", methods=["POST"])
 @require_auth
 @require_admin
+@require_permission("cms.pages.manage")
 def admin_cms_import():
     """POST /api/v1/admin/cms/import — import CMS content from a ZIP.
 
