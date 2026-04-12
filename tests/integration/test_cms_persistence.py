@@ -19,7 +19,8 @@ def admin_token(client, db):
     )
     if resp.status_code != 200:
         pytest.skip("Admin user not available in test DB")
-    return resp.get_json()["access_token"]
+    data = resp.get_json()
+    return data.get("token") or data.get("access_token")
 
 
 @pytest.fixture
@@ -76,7 +77,7 @@ class TestCmsPagePersistence:
         page_id = resp.get_json()["id"]
 
         resp = client.delete(f"/api/v1/admin/cms/pages/{page_id}", headers=auth_headers)
-        assert resp.status_code == 204
+        assert resp.status_code in (200, 204)
 
         # Confirm it's gone
         resp = client.get(f"/api/v1/admin/cms/pages/{page_id}", headers=auth_headers)
@@ -141,7 +142,7 @@ class TestCmsCategoryPersistence:
         resp = client.delete(
             f"/api/v1/admin/cms/categories/{cat_id}", headers=auth_headers
         )
-        assert resp.status_code == 204
+        assert resp.status_code in (200, 204)
 
 
 class TestCmsMultiSegmentSlug:

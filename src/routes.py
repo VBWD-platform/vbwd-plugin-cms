@@ -97,6 +97,78 @@ logger = logging.getLogger(__name__)
 cms_bp = Blueprint("cms", __name__)
 
 
+# ── Access-level visibility helpers ──────────────────────────────────────────
+
+
+def _get_current_user_access_level_ids() -> list[str]:
+    """Get the current user's access level IDs from JWT, or ["new"] for anonymous.
+
+    Does NOT require authentication — silently returns the "new" level slug
+    when no valid token is present. Used for server-side content filtering.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return _get_new_level_ids()
+
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return _get_new_level_ids()
+
+    try:
+        from vbwd.services.auth_service import AuthService
+        from vbwd.repositories.user_repository import UserRepository
+
+        user_repo = UserRepository(db.session)
+        auth_service = AuthService(user_repository=user_repo)
+        user_id = auth_service.verify_token(parts[1])
+        if not user_id:
+            return _get_new_level_ids()
+
+        user = user_repo.find_by_id(user_id)
+        if not user:
+            return _get_new_level_ids()
+
+        levels = getattr(user, "assigned_user_access_levels", None)
+        if levels:
+            return [str(level.id) for level in levels]
+        return _get_new_level_ids()
+    except Exception:
+        return _get_new_level_ids()
+
+
+def _get_new_level_ids() -> list[str]:
+    """Get the ID(s) of the 'new' user access level (anonymous fallback)."""
+    try:
+        from vbwd.models.user_access_level import UserAccessLevel
+
+        level = (
+            db.session.query(UserAccessLevel)
+            .filter_by(slug="new")
+            .first()
+        )
+        return [str(level.id)] if level else []
+    except Exception:
+        return []
+
+
+def _filter_assignments_by_access(
+    assignments: list[dict], user_level_ids: list[str]
+) -> list[dict]:
+    """Filter widget assignments based on user's access levels.
+
+    Assignments with empty required_access_level_ids are visible to everyone.
+    Others require the user to have at least one of the listed levels.
+    """
+    filtered = []
+    for assignment in assignments:
+        required = assignment.get("required_access_level_ids") or []
+        if not required:
+            filtered.append(assignment)
+        elif any(level_id in required for level_id in user_level_ids):
+            filtered.append(assignment)
+    return filtered
+
+
 # ── Service factory helpers ───────────────────────────────────────────────────
 
 
@@ -117,6 +189,13 @@ def _image_service() -> CmsImageService:
         base_url=config.get("uploads_base_url", "/uploads"),
     )
     return CmsImageService(CmsImageRepository(db.session), storage)
+
+
+def _page_widget_repo():
+    from plugins.cms.src.repositories.cms_page_widget_repository import (
+        CmsPageWidgetRepository,
+    )
+    return CmsPageWidgetRepository(db.session)
 
 
 def _layout_service() -> CmsLayoutService:
@@ -161,6 +240,7 @@ def _import_export_service() -> CmsImportExportService:
         CmsImageRepository(db.session),
         CmsLayoutWidgetRepository(db.session),
         storage,
+        pw_repo=_page_widget_repo(),
     )
 
 
@@ -273,6 +353,7 @@ def get_published_page(slug: str):
     """GET /api/v1/cms/pages/<slug> — fetch a published page by slug.
 
     Supports preview via ?preview_token=<token> for unpublished pages.
+    Checks page-level access restrictions — returns 403 if user lacks required level.
     """
     preview_token = request.args.get("preview_token")
     try:
@@ -281,7 +362,44 @@ def get_published_page(slug: str):
             if page.get("preview_token") != preview_token:
                 return jsonify({"error": "Invalid preview token"}), 403
             return jsonify(page), 200
+
         page = _page_service().get_page(slug, published_only=True)
+
+        # Check page-level access restriction
+        required = page.get("required_access_level_ids") or []
+        if required:
+            user_level_ids = _get_current_user_access_level_ids()
+            if not any(level_id in required for level_id in user_level_ids):
+                return jsonify({
+                    "error": "Access denied",
+                    "required_access_levels": required,
+                }), 403
+
+        # Include page-level widget assignments (filtered by access level)
+        page_id = page.get("id")
+        if page_id:
+            user_level_ids = (
+                user_level_ids
+                if "user_level_ids" in dir()
+                else _get_current_user_access_level_ids()
+            )
+            pw_repo = _page_widget_repo()
+            page_widgets = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
+            page_widgets = _filter_assignments_by_access(
+                page_widgets, user_level_ids
+            )
+            # Enrich with full widget data
+            if page_widgets:
+                widget_svc = _widget_service()
+                for pw in page_widgets:
+                    wid = pw.get("widget_id")
+                    if wid:
+                        try:
+                            pw["widget"] = widget_svc.get_widget(wid)
+                        except Exception:
+                            pw["widget"] = None
+            page["page_assignments"] = page_widgets
+
         return jsonify(page), 200
     except CmsPageNotFoundError as e:
         return jsonify({"error": str(e)}), 404
@@ -432,7 +550,13 @@ def admin_get_page(page_id: str):
     page_obj = svc._repo.find_by_id(page_id)
     if not page_obj:
         return jsonify({"error": "Page not found"}), 404
-    return jsonify(page_obj.to_dict()), 200
+    result = page_obj.to_dict()
+    # Include page widget assignments
+    pw_repo = _page_widget_repo()
+    result["page_assignments"] = [
+        pw.to_dict() for pw in pw_repo.find_by_page(page_id)
+    ]
+    return jsonify(result), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["PUT"])
@@ -464,6 +588,50 @@ def admin_delete_page(page_id: str):
         return jsonify({"deleted": page_id}), 200
     except CmsPageNotFoundError as e:
         return jsonify({"error": str(e)}), 404
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ADMIN — Page Widgets
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@cms_bp.route(
+    "/api/v1/admin/cms/pages/<page_id>/widgets", methods=["GET"]
+)
+@require_auth
+@require_admin
+@require_permission("cms.pages.view")
+def admin_get_page_widgets(page_id: str):
+    """GET /api/v1/admin/cms/pages/<id>/widgets — list page widget assignments."""
+    pw_repo = _page_widget_repo()
+    assignments = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
+    # Enrich with widget data
+    if assignments:
+        widget_svc = _widget_service()
+        for assignment in assignments:
+            wid = assignment.get("widget_id")
+            if wid:
+                try:
+                    assignment["widget"] = widget_svc.get_widget(wid)
+                except Exception:
+                    assignment["widget"] = None
+    return jsonify(assignments), 200
+
+
+@cms_bp.route(
+    "/api/v1/admin/cms/pages/<page_id>/widgets", methods=["PUT"]
+)
+@require_auth
+@require_admin
+@require_permission("cms.pages.manage")
+def admin_set_page_widgets(page_id: str):
+    """PUT /api/v1/admin/cms/pages/<id>/widgets — replace page widget assignments."""
+    data = request.get_json()
+    if not isinstance(data, list):
+        return jsonify({"error": "JSON array of assignments required"}), 400
+    pw_repo = _page_widget_repo()
+    created = pw_repo.replace_for_page(page_id, data)
+    return jsonify([pw.to_dict() for pw in created]), 200
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -683,11 +851,20 @@ def admin_delete_image(image_id: str):
 
 @cms_bp.route("/api/v1/cms/layouts/<layout_id>", methods=["GET"])
 def get_layout_public(layout_id: str):
-    """GET /api/v1/cms/layouts/<id> — layout with embedded widget data for fe-user."""
+    """GET /api/v1/cms/layouts/<id> — layout with embedded widget data for fe-user.
+
+    Filters widget assignments based on the requesting user's access levels.
+    Anonymous visitors are treated as having the "new" access level.
+    """
     try:
         layout = _layout_service().get_layout(layout_id)
-        # Enrich assignments with full widget data (including menu_items)
         assignments = layout.get("assignments") or []
+
+        # Filter by user access level
+        user_level_ids = _get_current_user_access_level_ids()
+        assignments = _filter_assignments_by_access(assignments, user_level_ids)
+
+        # Enrich remaining assignments with full widget data
         if assignments:
             widget_svc = _widget_service()
             for a in assignments:
@@ -705,10 +882,19 @@ def get_layout_public(layout_id: str):
 
 @cms_bp.route("/api/v1/cms/layouts/by-slug/<slug>", methods=["GET"])
 def get_layout_by_slug_public(slug: str):
-    """GET /api/v1/cms/layouts/by-slug/<slug> — layout looked up by slug, widget data embedded."""
+    """GET /api/v1/cms/layouts/by-slug/<slug> — layout looked up by slug, widget data embedded.
+
+    Filters widget assignments based on the requesting user's access levels.
+    """
     try:
         layout = _layout_service().get_layout_by_slug(slug)
         assignments = layout.get("assignments") or []
+
+        # Filter by user access level
+        user_level_ids = _get_current_user_access_level_ids()
+        assignments = _filter_assignments_by_access(assignments, user_level_ids)
+
+        # Enrich remaining assignments with full widget data
         if assignments:
             widget_svc = _widget_service()
             for a in assignments:

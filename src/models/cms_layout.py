@@ -13,6 +13,7 @@ AREA_TYPES = frozenset(
         "two-column",
         "cta-bar",
         "vue",
+        "page-widget",
     }
 )
 

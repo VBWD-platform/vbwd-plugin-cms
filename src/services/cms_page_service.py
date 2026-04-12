@@ -186,6 +186,7 @@ class CmsPageService:
             "layout_id",
             "style_id",
             "use_theme_switcher_styles",
+            "required_access_level_ids",
         ):
             if field in data:
                 setattr(page, field, data[field])

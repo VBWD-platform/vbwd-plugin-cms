@@ -1,16 +1,20 @@
-"""CmsLayoutWidget model — assigns a widget to an area slot in a layout."""
+"""CmsPageWidget model — assigns a widget to an area of a specific page."""
 from vbwd.extensions import db
 from vbwd.models.base import BaseModel
 
 
-class CmsLayoutWidget(BaseModel):
-    """Join table: a widget assigned to a named area of a layout."""
+class CmsPageWidget(BaseModel):
+    """Page-level widget assignment.
 
-    __tablename__ = "cms_layout_widget"
+    Overrides layout-level widget assignments for the same area.
+    Allows pages to have unique widgets without creating separate layouts.
+    """
 
-    layout_id = db.Column(
+    __tablename__ = "cms_page_widget"
+
+    page_id = db.Column(
         db.UUID,
-        db.ForeignKey("cms_layout.id", ondelete="CASCADE"),
+        db.ForeignKey("cms_page.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -29,13 +33,18 @@ class CmsLayoutWidget(BaseModel):
     def to_dict(self) -> dict:
         return {
             "id": str(self.id),
-            "layout_id": str(self.layout_id),
+            "page_id": str(self.page_id),
             "widget_id": str(self.widget_id),
             "area_name": self.area_name,
             "sort_order": self.sort_order,
             "required_access_level_ids": self.required_access_level_ids or [],
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": (
+                self.created_at.isoformat() if self.created_at else None
+            ),
         }
 
     def __repr__(self) -> str:
-        return f"<CmsLayoutWidget(layout='{self.layout_id}', area='{self.area_name}')>"
+        return (
+            f"<CmsPageWidget(page='{self.page_id}', "
+            f"area='{self.area_name}')>"
+        )

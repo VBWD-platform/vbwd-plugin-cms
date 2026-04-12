@@ -1353,7 +1353,7 @@ def _get_or_create_page(
     category_id: Optional[str] = None,
     robots: str = "index,follow",
     is_published: bool = True,
-) -> None:
+) -> "CmsPage":
     existing = db.session.query(CmsPage).filter_by(slug=slug).first()
     if existing:
         existing.name = name
@@ -1371,7 +1371,7 @@ def _get_or_create_page(
         existing.robots = robots
         db.session.flush()
         print(f"  ~ page '{slug}' (updated)")
-        return
+        return existing
     page = CmsPage(
         slug=slug,
         name=name,
@@ -1389,7 +1389,42 @@ def _get_or_create_page(
         robots=robots,
     )
     db.session.add(page)
+    db.session.flush()
     print(f"  + page '{slug}' (layout={layout.slug if layout else None})")
+    return page
+
+
+def _set_page_widgets(
+    page: "CmsPage",
+    assignments: list[tuple[str, str]],
+    widget_map: dict[str, "CmsWidget"],
+) -> None:
+    """Assign page-level widgets. Idempotent — skips if already assigned."""
+    from plugins.cms.src.models.cms_page_widget import CmsPageWidget
+
+    existing = (
+        db.session.query(CmsPageWidget)
+        .filter_by(page_id=page.id)
+        .count()
+    )
+    if existing > 0:
+        return
+    for order, (area_name, widget_slug) in enumerate(assignments):
+        widget = widget_map.get(widget_slug)
+        if not widget:
+            print(f"    ! widget '{widget_slug}' not found, skipping")
+            continue
+        pw = CmsPageWidget(
+            page_id=page.id,
+            widget_id=widget.id,
+            area_name=area_name,
+            sort_order=order,
+        )
+        db.session.add(pw)
+    db.session.flush()
+    print(
+        f"    + {len(assignments)} page widget(s) for '{page.slug}'"
+    )
 
 
 def populate_cms() -> None:
@@ -1623,7 +1658,7 @@ def populate_cms() -> None:
         meta_description="The developer platform built for speed and scale.",
         sort_order=13,
     )
-    _get_or_create_page(
+    about_page = _get_or_create_page(
         "about",
         "About Us",
         content_page,
@@ -1792,6 +1827,12 @@ def populate_cms() -> None:
         category_id=cat_ghrm.id,
     )
 
+    db.session.commit()
+
+    print("\n── Page Widgets ────────────────────────────────────────────────")
+    # Demo: "About Us" page gets a page-specific testimonials widget
+    # that overrides the layout's footer area
+    _set_page_widgets(about_page, [("footer", "testimonials")], widget_map)
     db.session.commit()
 
     print("\n── Routing Rules ───────────────────────────────────────────────")

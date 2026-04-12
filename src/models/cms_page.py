@@ -48,6 +48,9 @@ class CmsPage(BaseModel):
     )
     use_theme_switcher_styles = db.Column(db.Boolean, nullable=False, default=True)
     preview_token = db.Column(db.String(64), nullable=True, index=True)
+    required_access_level_ids = db.Column(
+        db.JSON, nullable=False, default=list
+    )
 
     category = db.relationship(
         "CmsCategory",
@@ -89,6 +92,7 @@ class CmsPage(BaseModel):
             "style_id": str(self.style_id) if self.style_id else None,
             "use_theme_switcher_styles": self.use_theme_switcher_styles,
             "preview_token": self.preview_token,
+            "required_access_level_ids": self.required_access_level_ids or [],
             "content_blocks": {
                 block.area_name: block.to_dict()
                 for block in (self.content_blocks or [])

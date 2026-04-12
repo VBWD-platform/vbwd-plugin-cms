@@ -138,15 +138,21 @@ class CmsLayoutService:
         if not layout:
             raise CmsLayoutNotFoundError(f"Layout {layout_id} not found")
 
-        content_area_names = {
+        # Content and page-widget areas cannot have layout-level widgets
+        excluded_area_names = {
             a["name"]
             for a in (layout.areas or [])
-            if a.get("type") == _CONTENT_AREA_TYPE
+            if a.get("type") in (_CONTENT_AREA_TYPE, "page-widget")
         }
         for a in assignments:
-            if a.get("area_name") in content_area_names:
+            if a.get("area_name") in excluded_area_names:
+                area_type = next(
+                    (ar["type"] for ar in layout.areas if ar["name"] == a["area_name"]),
+                    "unknown",
+                )
                 raise ValueError(
-                    f"area '{a['area_name']}' is a content area and cannot have a widget assigned"
+                    f"area '{a['area_name']}' is a {area_type} area "
+                    f"and cannot have a layout-level widget assigned"
                 )
 
         created = self._lw_repo.replace_for_layout(layout_id, assignments)

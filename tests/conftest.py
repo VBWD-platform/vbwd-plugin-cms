@@ -67,6 +67,11 @@ def db(app):
 
     with app.app_context():
         db.create_all()
+        # Seed admin user so integration tests can log in
+        os.environ["TEST_DATA_SEED"] = "true"
+        from vbwd.testing.test_data_seeder import TestDataSeeder
+
+        TestDataSeeder(db.session).seed()
         yield db
         db.session.remove()
         db.drop_all()

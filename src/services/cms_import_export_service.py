@@ -60,6 +60,7 @@ class CmsImportExportService:
         image_repo,
         lw_repo,
         file_storage,
+        pw_repo=None,
     ) -> None:
         self._cat = category_repo
         self._style = style_repo
@@ -69,6 +70,7 @@ class CmsImportExportService:
         self._routing = routing_repo
         self._image = image_repo
         self._lw = lw_repo
+        self._pw = pw_repo
         self._fs = file_storage
 
     # ── PUBLIC API ─────────────────────────────────────────────────────────────
@@ -118,6 +120,7 @@ class CmsImportExportService:
                     d["category_slug"] = self._slug_of(self._cat, p.category_id)
                     d["layout_slug"] = self._slug_of(self._layout, p.layout_id)
                     d["style_slug"] = self._slug_of(self._style, p.style_id)
+                    d["page_widget_assignments"] = self._page_widget_assignments(p)
                     pages.append(d)
                 zf.writestr("pages.json", _json(pages))
 
@@ -235,6 +238,22 @@ class CmsImportExportService:
         obj = repo.find_by_id(str(obj_id))
         return obj.slug if obj else None
 
+    def _page_widget_assignments(self, page) -> list:
+        if not self._pw:
+            return []
+        result = []
+        for a in self._pw.find_by_page(str(page.id)):
+            w = self._widget.find_by_id(str(a.widget_id))
+            result.append(
+                {
+                    "widget_slug": w.slug if w else None,
+                    "area_name": a.area_name,
+                    "sort_order": a.sort_order,
+                    "required_access_level_ids": a.required_access_level_ids or [],
+                }
+            )
+        return result
+
     def _layout_assignments(self, layout) -> list:
         result = []
         for a in self._lw.find_by_layout(str(layout.id)):
@@ -349,7 +368,24 @@ class CmsImportExportService:
                 slug = self._free_slug(rec["slug"], self._page, strategy)
                 if not slug:
                     continue
-                self._page.save(self._make_page(rec, slug))
+                saved = self._page.save(self._make_page(rec, slug))
+                # Import page widget assignments
+                if self._pw and rec.get("page_widget_assignments"):
+                    assignments = [
+                        {
+                            "widget_id": str(w.id),
+                            "area_name": a["area_name"],
+                            "sort_order": a.get("sort_order", 0),
+                            "required_access_level_ids": a.get(
+                                "required_access_level_ids", []
+                            ),
+                        }
+                        for a in rec["page_widget_assignments"]
+                        if a.get("widget_slug")
+                        and (w := self._widget.find_by_slug(a["widget_slug"]))
+                    ]
+                    if assignments:
+                        self._pw.replace_for_page(str(saved.id), assignments)
                 count += 1
             except Exception as ex:
                 errors.append(f"{rec.get('slug', '?')}: {ex}")

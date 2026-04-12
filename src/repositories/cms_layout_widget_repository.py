@@ -36,6 +36,9 @@ class CmsLayoutWidgetRepository:
             layout_widget.widget_id = a["widget_id"]
             layout_widget.area_name = a["area_name"]
             layout_widget.sort_order = a.get("sort_order", 0)
+            layout_widget.required_access_level_ids = a.get(
+                "required_access_level_ids", []
+            )
             self.session.add(layout_widget)
             created.append(layout_widget)
         self.session.flush()
