@@ -1402,11 +1402,7 @@ def _set_page_widgets(
     """Assign page-level widgets. Idempotent — skips if already assigned."""
     from plugins.cms.src.models.cms_page_widget import CmsPageWidget
 
-    existing = (
-        db.session.query(CmsPageWidget)
-        .filter_by(page_id=page.id)
-        .count()
-    )
+    existing = db.session.query(CmsPageWidget).filter_by(page_id=page.id).count()
     if existing > 0:
         return
     for order, (area_name, widget_slug) in enumerate(assignments):
@@ -1422,9 +1418,7 @@ def _set_page_widgets(
         )
         db.session.add(pw)
     db.session.flush()
-    print(
-        f"    + {len(assignments)} page widget(s) for '{page.slug}'"
-    )
+    print(f"    + {len(assignments)} page widget(s) for '{page.slug}'")
 
 
 def populate_cms() -> None:

@@ -141,11 +141,7 @@ def _get_new_level_ids() -> list[str]:
     try:
         from vbwd.models.user_access_level import UserAccessLevel
 
-        level = (
-            db.session.query(UserAccessLevel)
-            .filter_by(slug="new")
-            .first()
-        )
+        level = db.session.query(UserAccessLevel).filter_by(slug="new").first()
         return [str(level.id)] if level else []
     except Exception:
         return []
@@ -195,6 +191,7 @@ def _page_widget_repo():
     from plugins.cms.src.repositories.cms_page_widget_repository import (
         CmsPageWidgetRepository,
     )
+
     return CmsPageWidgetRepository(db.session)
 
 
@@ -370,10 +367,15 @@ def get_published_page(slug: str):
         if required:
             user_level_ids = _get_current_user_access_level_ids()
             if not any(level_id in required for level_id in user_level_ids):
-                return jsonify({
-                    "error": "Access denied",
-                    "required_access_levels": required,
-                }), 403
+                return (
+                    jsonify(
+                        {
+                            "error": "Access denied",
+                            "required_access_levels": required,
+                        }
+                    ),
+                    403,
+                )
 
         # Include page-level widget assignments (filtered by access level)
         page_id = page.get("id")
@@ -385,9 +387,7 @@ def get_published_page(slug: str):
             )
             pw_repo = _page_widget_repo()
             page_widgets = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
-            page_widgets = _filter_assignments_by_access(
-                page_widgets, user_level_ids
-            )
+            page_widgets = _filter_assignments_by_access(page_widgets, user_level_ids)
             # Enrich with full widget data
             if page_widgets:
                 widget_svc = _widget_service()
@@ -553,9 +553,7 @@ def admin_get_page(page_id: str):
     result = page_obj.to_dict()
     # Include page widget assignments
     pw_repo = _page_widget_repo()
-    result["page_assignments"] = [
-        pw.to_dict() for pw in pw_repo.find_by_page(page_id)
-    ]
+    result["page_assignments"] = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
     return jsonify(result), 200
 
 
@@ -595,9 +593,7 @@ def admin_delete_page(page_id: str):
 # ════════════════════════════════════════════════════════════════════════════
 
 
-@cms_bp.route(
-    "/api/v1/admin/cms/pages/<page_id>/widgets", methods=["GET"]
-)
+@cms_bp.route("/api/v1/admin/cms/pages/<page_id>/widgets", methods=["GET"])
 @require_auth
 @require_admin
 @require_permission("cms.pages.view")
@@ -618,9 +614,7 @@ def admin_get_page_widgets(page_id: str):
     return jsonify(assignments), 200
 
 
-@cms_bp.route(
-    "/api/v1/admin/cms/pages/<page_id>/widgets", methods=["PUT"]
-)
+@cms_bp.route("/api/v1/admin/cms/pages/<page_id>/widgets", methods=["PUT"])
 @require_auth
 @require_admin
 @require_permission("cms.pages.manage")

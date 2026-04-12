@@ -26,9 +26,7 @@ class CmsPageWidget(BaseModel):
     )
     area_name = db.Column(db.String(64), nullable=False)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
-    required_access_level_ids = db.Column(
-        db.JSON, nullable=False, default=list
-    )
+    required_access_level_ids = db.Column(db.JSON, nullable=False, default=list)
 
     def to_dict(self) -> dict:
         return {
@@ -38,13 +36,8 @@ class CmsPageWidget(BaseModel):
             "area_name": self.area_name,
             "sort_order": self.sort_order,
             "required_access_level_ids": self.required_access_level_ids or [],
-            "created_at": (
-                self.created_at.isoformat() if self.created_at else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
         }
 
     def __repr__(self) -> str:
-        return (
-            f"<CmsPageWidget(page='{self.page_id}', "
-            f"area='{self.area_name}')>"
-        )
+        return f"<CmsPageWidget(page='{self.page_id}', " f"area='{self.area_name}')>"

@@ -193,10 +193,14 @@ class CmsPageService:
 
         # Handle multi-content blocks: { "content_blocks": { "area-name": { content_json, content_html, source_css } } }
         if "content_blocks" in data and isinstance(data["content_blocks"], dict):
-            from plugins.cms.src.models.cms_page_content_block import CmsPageContentBlock
+            from plugins.cms.src.models.cms_page_content_block import (
+                CmsPageContentBlock,
+            )
             from vbwd.extensions import db
 
-            existing_blocks = {block.area_name: block for block in (page.content_blocks or [])}
+            existing_blocks = {
+                block.area_name: block for block in (page.content_blocks or [])
+            }
 
             for area_name, block_data in data["content_blocks"].items():
                 if area_name in existing_blocks:

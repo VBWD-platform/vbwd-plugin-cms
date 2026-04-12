@@ -57,6 +57,7 @@ def app():
 
     with app.app_context():
         from vbwd.extensions import db as _db
+
         _db.engine.dispose()
 
 

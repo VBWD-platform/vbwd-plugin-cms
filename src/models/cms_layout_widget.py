@@ -22,9 +22,7 @@ class CmsLayoutWidget(BaseModel):
     )
     area_name = db.Column(db.String(64), nullable=False)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
-    required_access_level_ids = db.Column(
-        db.JSON, nullable=False, default=list
-    )
+    required_access_level_ids = db.Column(db.JSON, nullable=False, default=list)
 
     def to_dict(self) -> dict:
         return {

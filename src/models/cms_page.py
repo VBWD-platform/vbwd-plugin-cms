@@ -48,9 +48,7 @@ class CmsPage(BaseModel):
     )
     use_theme_switcher_styles = db.Column(db.Boolean, nullable=False, default=True)
     preview_token = db.Column(db.String(64), nullable=True, index=True)
-    required_access_level_ids = db.Column(
-        db.JSON, nullable=False, default=list
-    )
+    required_access_level_ids = db.Column(db.JSON, nullable=False, default=list)
 
     category = db.relationship(
         "CmsCategory",

@@ -73,11 +73,15 @@ class CmsPlugin(BasePlugin):
 
         try:
             from flask import current_app
-            from plugins.cms.src.middleware.routing_middleware import CmsRoutingMiddleware
+            from plugins.cms.src.middleware.routing_middleware import (
+                CmsRoutingMiddleware,
+            )
             from plugins.cms.src.repositories.routing_rule_repository import (
                 CmsRoutingRuleRepository,
             )
-            from plugins.cms.src.services.routing.routing_service import CmsRoutingService
+            from plugins.cms.src.services.routing.routing_service import (
+                CmsRoutingService,
+            )
             from plugins.cms.src.services.routing.nginx_conf_generator import (
                 NginxConfGenerator,
             )
