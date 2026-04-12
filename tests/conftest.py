@@ -55,6 +55,10 @@ def app():
     limiter.reset()
     yield app
 
+    with app.app_context():
+        from vbwd.extensions import db as _db
+        _db.engine.dispose()
+
 
 @pytest.fixture
 def client(app):
@@ -66,6 +70,9 @@ def db(app):
     from vbwd.extensions import db
 
     with app.app_context():
+        # Import all CMS models so create_all() creates their tables
+        import plugins.cms.src.models.cms_page_widget  # noqa: F401
+
         db.create_all()
         # Seed admin user so integration tests can log in
         os.environ["TEST_DATA_SEED"] = "true"
