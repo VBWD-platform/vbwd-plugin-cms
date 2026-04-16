@@ -199,7 +199,7 @@ class CmsPageService:
             from vbwd.extensions import db
 
             existing_blocks = {
-                block.area_name: block for block in (page.content_blocks or [])
+                block.area_name: block for block in list(page.content_blocks or [])
             }
 
             for area_name, block_data in data["content_blocks"].items():

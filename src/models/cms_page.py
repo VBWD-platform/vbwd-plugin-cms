@@ -93,7 +93,7 @@ class CmsPage(BaseModel):
             "required_access_level_ids": self.required_access_level_ids or [],
             "content_blocks": {
                 block.area_name: block.to_dict()
-                for block in (self.content_blocks or [])
+                for block in list(self.content_blocks or [])
             },
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
