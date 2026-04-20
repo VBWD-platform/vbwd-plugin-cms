@@ -171,7 +171,10 @@ def _filter_assignments_by_access(
 def _page_service() -> CmsPageService:
     page_repo = CmsPageRepository(db.session)
     cat_repo = CmsCategoryRepository(db.session)
-    return CmsPageService(page_repo, cat_repo)
+    # style_repo wires the default-style resolver: pages without an explicit
+    # style_id fall back to the admin-designated default (sprint 26).
+    style_repo = CmsStyleRepository(db.session)
+    return CmsPageService(page_repo, cat_repo, style_repo=style_repo)
 
 
 def _category_service() -> CmsCategoryService:
