@@ -13,6 +13,12 @@ class CmsStyleRepository:
     def find_by_id(self, style_id: str) -> Optional[CmsStyle]:
         return self.session.query(CmsStyle).filter(CmsStyle.id == style_id).first()
 
+    def find_default(self) -> Optional[CmsStyle]:
+        """Return the single style with is_default=True, or None."""
+        return (
+            self.session.query(CmsStyle).filter(CmsStyle.is_default.is_(True)).first()
+        )
+
     def find_all(
         self,
         page: int = 1,

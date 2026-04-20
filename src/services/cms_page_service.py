@@ -31,9 +31,41 @@ class CmsPageService:
         self,
         repo: CmsPageRepository,
         category_repo: CmsCategoryRepository,
+        style_repo: Optional[Any] = None,
     ) -> None:
         self._repo = repo
         self._category_repo = category_repo
+        # Optional — when provided, get_page / list_pages add
+        # resolved_style_id + resolved_style_source to each dict.
+        self._style_repo = style_repo
+
+    def _with_resolved_style(self, dto: Dict[str, Any]) -> Dict[str, Any]:
+        """Augment a page dict with resolved_style_id / resolved_style_source.
+
+        Rules:
+          - Explicit style_id on the page wins (source='explicit').
+          - Otherwise, if a default style exists AND is_active, use it
+            (source='default').
+          - Otherwise, both fields are None.
+
+        Missing style_repo is tolerated — the fields still appear with
+        None so fe-user can rely on their presence.
+        """
+        style_id = dto.get("style_id")
+        if style_id:
+            dto["resolved_style_id"] = str(style_id)
+            dto["resolved_style_source"] = "explicit"
+            return dto
+        default = None
+        if self._style_repo is not None:
+            default = self._style_repo.find_default()
+        if default is not None and getattr(default, "is_active", True):
+            dto["resolved_style_id"] = str(default.id)
+            dto["resolved_style_source"] = "default"
+        else:
+            dto["resolved_style_id"] = None
+            dto["resolved_style_source"] = None
+        return dto
 
     def get_page(self, slug: str, published_only: bool = True) -> Dict[str, Any]:
         """Get a page by slug. Raises CmsPageNotFoundError if not found."""
@@ -42,7 +74,7 @@ class CmsPageService:
             raise CmsPageNotFoundError(f"Page '{slug}' not found")
         if published_only and not page.is_published:
             raise CmsPageNotFoundError(f"Page '{slug}' is not published")
-        return page.to_dict()
+        return self._with_resolved_style(page.to_dict())
 
     def list_pages(
         self,

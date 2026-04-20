@@ -914,6 +914,27 @@ def get_style_css_public(style_id: str):
         return jsonify({"error": str(e)}), 404
 
 
+@cms_bp.route("/api/v1/cms/styles/default", methods=["GET"])
+def get_default_style_public():
+    """GET /api/v1/cms/styles/default — current default style or 404."""
+    result = _style_service().get_default_style()
+    if result is None:
+        return jsonify({"error": "No default style configured"}), 404
+    return jsonify(result), 200
+
+
+@cms_bp.route("/api/v1/cms/styles/default/css", methods=["GET"])
+def get_default_style_css_public():
+    """GET /api/v1/cms/styles/default/css — CSS of the (active) default.
+
+    404s when no default is set or the default is inactive.
+    """
+    css = _style_service().get_default_style_css()
+    if css is None:
+        return jsonify({"error": "No active default style"}), 404
+    return Response(css, mimetype="text/css")
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # ADMIN — Layouts
 # ════════════════════════════════════════════════════════════════════════════
@@ -1349,6 +1370,36 @@ def admin_delete_style(style_id: str):
     try:
         _style_service().delete_style(style_id)
         return jsonify({"deleted": style_id}), 200
+    except CmsStyleNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+# ── Default-style management (sprint 26) ─────────────────────────────────────
+
+@cms_bp.route("/api/v1/admin/cms/styles/default", methods=["DELETE"])
+@require_auth
+@require_admin
+@require_permission("cms.styles.manage")
+def admin_clear_default_style():
+    """DELETE /api/v1/admin/cms/styles/default — clear the default flag.
+
+    Idempotent: returns 200 whether or not a default was set.
+    """
+    _style_service().clear_default()
+    return jsonify({"cleared": True}), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/styles/<style_id>/default", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.styles.manage")
+def admin_set_default_style(style_id: str):
+    """POST /api/v1/admin/cms/styles/<id>/default — promote to default.
+
+    Demotes any existing default atomically.
+    """
+    try:
+        return jsonify(_style_service().set_default(style_id)), 200
     except CmsStyleNotFoundError as e:
         return jsonify({"error": str(e)}), 404
 

@@ -73,11 +73,54 @@ class CmsStyleService:
                 raise CmsStyleSlugConflictError(
                     f"Slug '{data['slug']}' is already in use"
                 )
+        # Promotions to default must go through set_default to demote any
+        # previous default atomically; explicit demotions flow through here.
+        if data.get("is_default") is True and not obj.is_default:
+            self.set_default(style_id)
+            # re-fetch for the remaining field updates below
+            obj = self._repo.find_by_id(style_id)
         for field in ("name", "slug", "source_css", "sort_order", "is_active"):
             if field in data:
                 setattr(obj, field, data[field])
+        if data.get("is_default") is False:
+            obj.is_default = False
         self._repo.save(obj)
         return obj.to_dict()
+
+    # ── default-style management ─────────────────────────────────────────────
+
+    def set_default(self, style_id: str) -> Dict[str, Any]:
+        """Promote a style to default. Demotes any previous default in the
+        same transaction so the single-default invariant holds."""
+        target = self._repo.find_by_id(style_id)
+        if not target:
+            raise CmsStyleNotFoundError(f"Style {style_id} not found")
+        previous = self._repo.find_default()
+        if previous is not None and str(previous.id) != str(target.id):
+            previous.is_default = False
+            self._repo.save(previous)
+        target.is_default = True
+        self._repo.save(target)
+        return target.to_dict()
+
+    def clear_default(self) -> None:
+        """Unset whichever style is currently default. Idempotent."""
+        previous = self._repo.find_default()
+        if previous is not None:
+            previous.is_default = False
+            self._repo.save(previous)
+
+    def get_default_style(self) -> Optional[Dict[str, Any]]:
+        """Return the current default style dict, or None if none set."""
+        obj = self._repo.find_default()
+        return obj.to_dict() if obj else None
+
+    def get_default_style_css(self) -> Optional[str]:
+        """Return CSS of the default style if one exists AND is active."""
+        obj = self._repo.find_default()
+        if obj is None or not obj.is_active:
+            return None
+        return obj.source_css or ""
 
     def delete_style(self, style_id: str) -> None:
         if not self._repo.delete(style_id):
@@ -121,4 +164,5 @@ class CmsStyleService:
         obj.source_css = data.get("source_css", "")
         obj.sort_order = data.get("sort_order", 0)
         obj.is_active = data.get("is_active", True)
+        obj.is_default = False
         return obj

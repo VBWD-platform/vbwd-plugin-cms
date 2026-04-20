@@ -13,6 +13,9 @@ class CmsStyle(BaseModel):
     source_css = db.Column(db.Text, nullable=False, default="")
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # At most one row has is_default=True, enforced by a partial unique
+    # index created in migration 20260420_cms_style_is_default.
+    is_default = db.Column(db.Boolean, nullable=False, default=False)
 
     def to_dict(self) -> dict:
         return {
@@ -22,6 +25,7 @@ class CmsStyle(BaseModel):
             "source_css": self.source_css,
             "sort_order": self.sort_order,
             "is_active": self.is_active,
+            "is_default": bool(self.is_default),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -164,3 +164,86 @@ class TestExport:
         data = json.loads(decoded)
 
         assert data[0]["slug"] == "b64-page"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sprint 26 — resolved_style_id on pages
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _make_service_with_style_repo(pages=None, categories=None, default_style=None):
+    """Build a CmsPageService with mock repos + optional style_repo stub
+    whose find_default() returns the provided default style object."""
+    svc, page_repo, cat_repo = _make_service(pages=pages, categories=categories)
+    style_repo = MagicMock()
+    style_repo.find_default.return_value = default_style
+    svc._style_repo = style_repo  # attribute injected by green-step implementation
+    return svc, page_repo, cat_repo, style_repo
+
+
+def _style(slug="default", is_default=True, is_active=True):
+    from uuid import uuid4
+    from plugins.cms.src.models.cms_style import CmsStyle
+    import datetime
+
+    s = CmsStyle()
+    s.id = uuid4()
+    s.slug = slug
+    s.name = slug.title()
+    s.source_css = "/* css */"
+    s.sort_order = 0
+    s.is_active = is_active
+    s.is_default = is_default
+    s.created_at = s.updated_at = datetime.datetime.utcnow()
+    return s
+
+
+class TestResolvedStyle:
+    def test_explicit_page_style_is_preserved(self):
+        page = _page("p")
+        from uuid import uuid4
+        explicit_id = uuid4()
+        page.style_id = explicit_id
+        default = _style()
+        svc, *_ = _make_service_with_style_repo(
+            pages=[page], default_style=default
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_style_id"] == str(explicit_id)
+        assert result["resolved_style_source"] == "explicit"
+
+    def test_default_fills_in_when_page_style_is_null(self):
+        page = _page("p")
+        page.style_id = None
+        default = _style(slug="defaultlook", is_default=True, is_active=True)
+        svc, *_ = _make_service_with_style_repo(
+            pages=[page], default_style=default
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_style_id"] == str(default.id)
+        assert result["resolved_style_source"] == "default"
+
+    def test_no_default_and_no_page_style_yields_null(self):
+        page = _page("p")
+        page.style_id = None
+        svc, *_ = _make_service_with_style_repo(
+            pages=[page], default_style=None
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_style_id"] is None
+        assert result["resolved_style_source"] is None
+
+    def test_inactive_default_is_ignored_at_resolve_time(self):
+        page = _page("p")
+        page.style_id = None
+        default = _style(slug="inactive", is_default=True, is_active=False)
+        svc, *_ = _make_service_with_style_repo(
+            pages=[page], default_style=default
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_style_id"] is None
+        assert result["resolved_style_source"] is None

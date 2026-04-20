@@ -113,3 +113,93 @@ class TestBulkDelete:
         result = svc.bulk_delete(["id1", "id2", "id3"])
         assert result["deleted"] == 3
         repo.bulk_delete.assert_called_once_with(["id1", "id2", "id3"])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sprint 26 — default-style feature
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _make_service_with_default(styles=None):
+    """Extends _make_service with find_default + save that honours the
+    single-default invariant. Tests drive the real service behaviour;
+    this mock repo stays simple (no DB constraint)."""
+    svc, repo = _make_service(styles)
+
+    def _find_default():
+        for s in (styles or []):
+            if getattr(s, "is_default", False):
+                return s
+        return None
+
+    repo.find_default.side_effect = _find_default
+    return svc, repo
+
+
+class TestDefaultFlagBasics:
+    def test_new_style_is_not_default_by_default(self):
+        svc, _ = _make_service()
+        result = svc.create_style({"name": "A", "source_css": "a{}"})
+        assert result["is_default"] is False
+
+    def test_set_default_promotes_style(self):
+        a = _style(slug="a")
+        a.is_default = False
+        svc, _ = _make_service_with_default([a])
+        result = svc.set_default(str(a.id))
+        assert result["is_default"] is True
+        assert a.is_default is True
+
+    def test_set_default_demotes_previous_default(self):
+        a = _style(slug="a")
+        a.is_default = True
+        b = _style(slug="b")
+        b.is_default = False
+        svc, _ = _make_service_with_default([a, b])
+        svc.set_default(str(b.id))
+        assert a.is_default is False
+        assert b.is_default is True
+
+    def test_set_default_on_missing_style_raises_not_found(self):
+        svc, _ = _make_service_with_default([])
+        with pytest.raises(CmsStyleNotFoundError):
+            svc.set_default("00000000-0000-0000-0000-000000000000")
+
+    def test_clear_default_unsets_flag(self):
+        a = _style(slug="a")
+        a.is_default = True
+        svc, _ = _make_service_with_default([a])
+        svc.clear_default()
+        assert a.is_default is False
+        assert svc.get_default_style() is None
+
+    def test_get_default_style_returns_none_when_unset(self):
+        svc, _ = _make_service_with_default([_style(slug="a")])
+        assert svc.get_default_style() is None
+
+    def test_get_default_style_returns_style_when_set(self):
+        a = _style(slug="a")
+        a.is_default = True
+        svc, _ = _make_service_with_default([a])
+        result = svc.get_default_style()
+        assert result is not None
+        assert result["id"] == str(a.id)
+
+    def test_update_style_is_default_true_demotes_previous(self):
+        a = _style(slug="a")
+        a.is_default = True
+        b = _style(slug="b")
+        b.is_default = False
+        svc, _ = _make_service_with_default([a, b])
+        svc.update_style(str(b.id), {"is_default": True})
+        assert a.is_default is False
+        assert b.is_default is True
+
+    def test_inactive_default_is_still_returned_by_get_default(self):
+        a = _style(slug="a")
+        a.is_default = True
+        a.is_active = False
+        svc, _ = _make_service_with_default([a])
+        result = svc.get_default_style()
+        assert result is not None
+        assert result["is_active"] is False
