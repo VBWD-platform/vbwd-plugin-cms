@@ -1,0 +1,19 @@
+{
+  "slug": "references",
+  "name": "References",
+  "language": "en",
+  "layout_slug": "content-page",
+  "style_slug": "enterprise-slate-narrow",
+  "category_slug": null,
+  "content_json": {"type": "doc", "content": []},
+  "content_html": "<section class=\"container\">\n<h1>References</h1>\n<p class=\"hero__subtitle\">Every VBWD sub-domain is itself a reference implementation. They run on the same images, with different plugin sets and CMS content. Click through to see each one live.</p>\n</section>\n\n<section class=\"container\">\n\n<article class=\"card\" style=\"margin-bottom:1.5rem\">\n  <h2>Lucky Shop — multi-vendor e-commerce</h2>\n  <p><strong>Industry:</strong> Retail / sporting goods · <strong>Stack:</strong> Shop + Discount + Stripe + CMS</p>\n  <p>A multi-brand storefront running on the same codebase as the hotel engine. Products, cart, checkout, coupon codes — every primitive the shop plugin provides, wired to the CMS page system.</p>\n  <p><a href=\"https://shop.vbwd.cc\" class=\"btn btn--accent\">Visit shop.vbwd.cc</a></p>\n</article>\n\n<article class=\"card\" style=\"margin-bottom:1.5rem\">\n  <h2>Alpine Hotel — resort booking</h2>\n  <p><strong>Industry:</strong> Hospitality · <strong>Stack:</strong> Booking + Stripe + Email</p>\n  <p>Room-inventory calendar, overlapping date-range availability checks, instant e-mail confirmation. Canonical use of the booking plugin.</p>\n  <p><a href=\"https://hotel.vbwd.cc\" class=\"btn btn--accent\">Visit hotel.vbwd.cc</a></p>\n</article>\n\n<article class=\"card\" style=\"margin-bottom:1.5rem\">\n  <h2>Dr. Ríos Clinic — medical intake</h2>\n  <p><strong>Industry:</strong> Healthcare · <strong>Stack:</strong> Booking + Subscription + Email</p>\n  <p>Same booking primitive, re-themed and re-labelled as a clinic appointment intake. Demonstrates how one plugin serves two industries without code changes.</p>\n  <p><a href=\"https://doctor.vbwd.cc\" class=\"btn btn--accent\">Visit doctor.vbwd.cc</a></p>\n</article>\n\n<article class=\"card\" style=\"margin-bottom:1.5rem\">\n  <h2>GHRM Software Catalogue</h2>\n  <p><strong>Industry:</strong> Developer tools · <strong>Stack:</strong> GHRM + Subscription + Stripe</p>\n  <p>GitHub-backed product catalogue where each SKU is a private repo. Buying a subscription grants read access; the plugin manages GitHub team membership automatically.</p>\n  <p><a href=\"https://ghrm.vbwd.cc\" class=\"btn btn--accent\">Visit ghrm.vbwd.cc</a></p>\n</article>\n\n<article class=\"card\" style=\"margin-bottom:1.5rem\">\n  <h2>VBWD SaaS — every plugin but shop &amp; booking</h2>\n  <p><strong>Industry:</strong> Internal dog-food · <strong>Stack:</strong> 13 plugins active</p>\n  <p>The kitchen-sink demo: Stripe + PayPal + YooKassa payments, LLM chat, tarot-reading, analytics, GHRM, CMS, email, mailchimp, subscription. Useful for finding bugs before customers do.</p>\n  <p><a href=\"https://saas.vbwd.cc\" class=\"btn btn--accent\">Visit saas.vbwd.cc</a></p>\n</article>\n\n</section>\n\n<section class=\"cta-band\">\n<h2>Your reference here?</h2>\n<p>Ship with VBWD and we'll feature your public launch on this page.</p>\n<a class=\"btn btn--contrast\" href=\"/contact\">Talk to us</a>\n</section>\n",
+  "is_published": true,
+  "sort_order": 7,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "References — VBWD demo verticals and launched customers",
+  "meta_description": "Five live reference implementations of VBWD: shop, hotel, clinic, software store, kitchen-sink SaaS.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

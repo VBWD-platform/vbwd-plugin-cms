@@ -351,6 +351,23 @@ COLORS = {
                "color-gradient": "linear-gradient(135deg, #a855f7 0%, #ec4899 100%)"}
         ),
     },
+    # OXID eSales-inspired: near-black accent on warm white. Enterprise tone,
+    # minimal gradient, generous whitespace. Pairs with dense typography.
+    "enterprise-slate": {
+        "name": "Enterprise — Slate",
+        "tokens": dict(
+            **{"color-accent": "#111827", "color-accent-soft": "#e5e7eb",
+               "color-accent-dark": "#030712", "color-accent-fg": "#ffffff",
+               "color-contrast-bg": "#f97316", "color-contrast-fg": "#ffffff",
+               "color-contrast-hover-bg": "#ea580c",
+               "color-link": "#111827", "color-link-hover": "#030712",
+               "color-bg": "#fafafa", "color-surface": "#ffffff",
+               "color-surface-soft": "#f3f4f6", "color-border": "#d1d5db",
+               "color-text": "#1f2937", "color-text-muted": "#4b5563",
+               "color-heading": "#030712",
+               "color-gradient": "linear-gradient(135deg, #111827 0%, #374151 100%)"}
+        ),
+    },
 }
 
 
