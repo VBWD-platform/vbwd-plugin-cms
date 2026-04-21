@@ -65,269 +65,37 @@ def _split_widget_content(html: str) -> tuple:
 
 # ─── Styles ───────────────────────────────────────────────────────────────────
 
-LIGHT_BASE = """
-*, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; font-family: var(--font-sans, 'Inter', system-ui, sans-serif); font-size: 16px; line-height: 1.6; }
-h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 0 0 0.75em; font-weight: 700; }
-p { margin: 0 0 1em; }
-a { color: var(--color-link); text-decoration: none; }
-a:hover { text-decoration: underline; }
-img { max-width: 100%; height: auto; display: block; }
-.container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
-.btn { display: inline-flex; align-items: center; padding: 0.65rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }  # noqa: E501
-.btn-primary { background: var(--color-primary); color: #fff; }
-.btn-primary:hover { filter: brightness(1.1); }
-.btn-outline { background: transparent; border-color: var(--color-primary); color: var(--color-primary); }
-section { padding: 4rem 0; }
-"""
+import json as _json
+from pathlib import Path as _Path
 
-DARK_BASE = LIGHT_BASE
+# Themes are authored as data in docs/imports/theme-styles.json.
+# Re-regenerate via docs/imports/_build_theme_styles.py.
+_THEMES_PATH = _Path(__file__).resolve().parents[2] / "docs" / "imports" / "theme-styles.json"
 
-STYLES = [
-    # ── Light themes ──────────────────────────────────────────────────────────
-    {
-        "slug": "light-clean",
-        "name": "Light — Clean",
-        "sort_order": 10,
-        "source_css": LIGHT_BASE
-        + """
-:root {
-  --color-primary: #2563eb;
-  --color-link: #2563eb;
-  --color-bg: #ffffff;
-  --color-surface: #f8fafc;
-  --color-border: #e2e8f0;
-  --color-text: #1e293b;
-  --color-muted: #64748b;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #fff; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: var(--color-primary); text-decoration: none; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    {
-        "slug": "light-warm",
-        "name": "Light — Warm",
-        "sort_order": 11,
-        "source_css": LIGHT_BASE
-        + """
-:root {
-  --color-primary: #d97706;
-  --color-link: #b45309;
-  --color-bg: #fffbf5;
-  --color-surface: #fef3c7;
-  --color-border: #fde68a;
-  --color-text: #292524;
-  --color-muted: #78716c;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #fff8ed; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: var(--color-primary); text-decoration: none; }
-h1, h2 { color: #92400e; }
-footer { background: #fef3c7; border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    {
-        "slug": "light-cool",
-        "name": "Light — Cool",
-        "sort_order": 12,
-        "source_css": LIGHT_BASE
-        + """
-:root {
-  --color-primary: #0284c7;
-  --color-link: #0369a1;
-  --color-bg: #f0f9ff;
-  --color-surface: #e0f2fe;
-  --color-border: #bae6fd;
-  --color-text: #0c4a6e;
-  --color-muted: #0369a1;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #ffffff; border-bottom: 2px solid var(--color-primary); padding: 0.75rem 0; }
-nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: var(--color-primary); text-decoration: none; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    {
-        "slug": "light-soft",
-        "name": "Light — Soft Pastel",
-        "sort_order": 13,
-        "source_css": LIGHT_BASE
-        + """
-:root {
-  --color-primary: #8b5cf6;
-  --color-link: #7c3aed;
-  --color-bg: #fdfcff;
-  --color-surface: #f5f3ff;
-  --color-border: #ddd6fe;
-  --color-text: #2e1065;
-  --color-muted: #7c3aed;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #fff; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: var(--color-primary); text-decoration: none; }
-h1, h2 { background: linear-gradient(135deg, #7c3aed, #2563eb); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }  # noqa: E501
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    {
-        "slug": "light-paper",
-        "name": "Light — Paper",
-        "sort_order": 14,
-        "source_css": LIGHT_BASE
-        + """
-:root {
-  --color-primary: #1a1a1a;
-  --color-link: #374151;
-  --color-bg: #faf7f2;
-  --color-surface: #f0ebe0;
-  --color-border: #d6c9b0;
-  --color-text: #1c1917;
-  --color-muted: #6b7280;
-}
-body { background: var(--color-bg); color: var(--color-text); font-family: 'Georgia', 'Times New Roman', serif; }
-h1, h2, h3 { font-family: 'Georgia', serif; }
-header { background: var(--color-surface); border-bottom: 2px solid var(--color-text); padding: 0.75rem 0; }
-nav a { color: var(--color-text); font-weight: 600; padding: 0 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.85rem; }  # noqa: E501
-nav a:hover { color: #555; text-decoration: none; border-bottom: 2px solid currentColor; }
-.btn-primary { background: var(--color-text); color: #faf7f2; border-radius: 0; }
-footer { background: var(--color-surface); border-top: 2px solid var(--color-text); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    # ── Dark themes ───────────────────────────────────────────────────────────
-    {
-        "slug": "dark-midnight",
-        "name": "Dark — Midnight",
-        "sort_order": 20,
-        "source_css": DARK_BASE
-        + """
-:root {
-  --color-primary: #60a5fa;
-  --color-link: #93c5fd;
-  --color-bg: #0f172a;
-  --color-surface: #1e293b;
-  --color-border: #334155;
-  --color-text: #e2e8f0;
-  --color-muted: #94a3b8;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #0f172a; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: var(--color-primary); text-decoration: none; }
-a { color: var(--color-link); }
-h1, h2 { color: #f1f5f9; }
-.btn-primary { background: var(--color-primary); color: #0f172a; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-section { border-bottom: 1px solid var(--color-border); }
-""",
-    },
-    {
-        "slug": "dark-charcoal",
-        "name": "Dark — Charcoal",
-        "sort_order": 21,
-        "source_css": DARK_BASE
-        + """
-:root {
-  --color-primary: #f97316;
-  --color-link: #fb923c;
-  --color-bg: #18181b;
-  --color-surface: #27272a;
-  --color-border: #3f3f46;
-  --color-text: #fafafa;
-  --color-muted: #a1a1aa;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #111113; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-muted); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: var(--color-primary); text-decoration: none; }
-a { color: var(--color-link); }
-h1, h2 { color: #fafafa; }
-.btn-primary { background: var(--color-primary); color: #18181b; font-weight: 700; }
-footer { background: #111113; border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    {
-        "slug": "dark-forest",
-        "name": "Dark — Forest",
-        "sort_order": 22,
-        "source_css": DARK_BASE
-        + """
-:root {
-  --color-primary: #4ade80;
-  --color-link: #86efac;
-  --color-bg: #0a1a0f;
-  --color-surface: #132218;
-  --color-border: #1a3a22;
-  --color-text: #d1fae5;
-  --color-muted: #6ee7b7;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #0a150e; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-muted); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: var(--color-primary); text-decoration: none; }
-a { color: var(--color-link); }
-h1, h2 { color: #f0fdf4; text-shadow: 0 0 20px rgba(74, 222, 128, 0.2); }
-.btn-primary { background: var(--color-primary); color: #052e16; font-weight: 700; }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    {
-        "slug": "dark-purple",
-        "name": "Dark — Purple",
-        "sort_order": 23,
-        "source_css": DARK_BASE
-        + """
-:root {
-  --color-primary: #a78bfa;
-  --color-link: #c4b5fd;
-  --color-bg: #0d0a1e;
-  --color-surface: #1a1433;
-  --color-border: #2d2358;
-  --color-text: #e9d5ff;
-  --color-muted: #a78bfa;
-}
-body { background: var(--color-bg); color: var(--color-text); }
-header { background: #0d0a1e; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-muted); font-weight: 500; padding: 0 0.875rem; }
-nav a:hover { color: #fff; text-decoration: none; }
-a { color: var(--color-link); }
-h1, h2 { color: #f5f3ff; }
-.btn-primary { background: linear-gradient(135deg, #7c3aed, #2563eb); color: #fff; border: none; }
-.btn-primary:hover { filter: brightness(1.15); }
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.875rem; }  # noqa: E501
-""",
-    },
-    {
-        "slug": "dark-carbon",
-        "name": "Dark — Carbon",
-        "sort_order": 24,
-        "source_css": DARK_BASE
-        + """
-:root {
-  --color-primary: #e4e4e7;
-  --color-link: #a1a1aa;
-  --color-bg: #09090b;
-  --color-surface: #141416;
-  --color-border: #252528;
-  --color-text: #fafafa;
-  --color-muted: #71717a;
-}
-body { background: var(--color-bg); color: var(--color-text); font-family: 'JetBrains Mono', 'Fira Code', monospace; }
-header { background: #09090b; border-bottom: 1px solid var(--color-border); padding: 0.75rem 0; }
-nav a { color: var(--color-muted); font-weight: 500; padding: 0 0.875rem; letter-spacing: 0.05em; text-transform: uppercase; font-size: 0.8rem; }  # noqa: E501
-nav a:hover { color: #fff; text-decoration: none; }
-a { color: var(--color-link); }
-h1, h2 { color: #fff; letter-spacing: -0.02em; }
-.btn-primary { background: #fafafa; color: #09090b; border-radius: 0; font-family: inherit; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; }  # noqa: E501
-footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 2.5rem 0; color: var(--color-muted); font-size: 0.75rem; font-family: inherit; }  # noqa: E501
-""",
-    },
+
+def _load_theme_styles() -> tuple[list[dict], str | None]:
+    if not _THEMES_PATH.exists():
+        print(f"  WARN: theme-styles.json missing at {_THEMES_PATH} — no styles imported")
+        return [], None
+    doc = _json.loads(_THEMES_PATH.read_text())
+    return doc.get("themes", []), doc.get("default_slug")
+
+
+STYLES, DEFAULT_STYLE_SLUG = _load_theme_styles()
+
+LEGACY_STYLE_SLUGS = [
+    "light-clean",
+    "light-warm",
+    "light-cool",
+    "light-soft",
+    "light-paper",
+    "dark-midnight",
+    "dark-charcoal",
+    "dark-forest",
+    "dark-purple",
+    "dark-carbon",
 ]
+
 
 
 # ─── Widget content ────────────────────────────────────────────────────────────
@@ -1190,11 +958,13 @@ LAYOUTS = [
 
 
 def _get_or_create_style(slug: str, data: dict) -> "CmsStyle":
+    is_active = bool(data.get("is_active", True))
     existing = db.session.query(CmsStyle).filter_by(slug=slug).first()
     if existing:
         existing.name = data["name"]
         existing.source_css = data["source_css"]
         existing.sort_order = data.get("sort_order", 0)
+        existing.is_active = is_active
         db.session.flush()
         print(f"  ~ style '{slug}' (updated)")
         return existing
@@ -1203,12 +973,53 @@ def _get_or_create_style(slug: str, data: dict) -> "CmsStyle":
         name=data["name"],
         source_css=data["source_css"],
         sort_order=data.get("sort_order", 0),
-        is_active=True,
+        is_active=is_active,
     )
     db.session.add(obj)
     db.session.flush()
     print(f"  + style '{slug}'")
     return obj
+
+
+def _deactivate_legacy_styles(slugs: list[str], keep: set[str]) -> int:
+    """Mark legacy style slugs inactive so they drop out of admin pickers.
+
+    Skips any slug that's in `keep` (i.e. still part of the imported set).
+    Idempotent: returns the number of rows flipped.
+    """
+    flipped = 0
+    for slug in slugs:
+        if slug in keep:
+            continue
+        obj = db.session.query(CmsStyle).filter_by(slug=slug).first()
+        if obj is not None and obj.is_active:
+            obj.is_active = False
+            flipped += 1
+            print(f"  ~ legacy style '{slug}' marked is_active=false")
+    if flipped:
+        db.session.flush()
+    return flipped
+
+
+def _apply_default_style(default_slug: Optional[str]) -> None:
+    """Flip is_default on the configured default; zero on everything else.
+
+    Keeps the partial-unique-index invariant.
+    """
+    if not default_slug:
+        return
+    target = db.session.query(CmsStyle).filter_by(slug=default_slug).first()
+    if target is None:
+        print(f"  WARN: default slug '{default_slug}' not found — skipping")
+        return
+    # Demote any current default(s)
+    current = db.session.query(CmsStyle).filter_by(is_default=True).all()
+    for c in current:
+        if str(c.id) != str(target.id):
+            c.is_default = False
+    target.is_default = True
+    db.session.flush()
+    print(f"  ★ default style set to '{default_slug}'")
 
 
 def _get_or_create_widget(
@@ -1427,8 +1238,11 @@ def populate_cms() -> None:
     for s in STYLES:
         style_slug = cast(str, s["slug"])
         style_map[style_slug] = _get_or_create_style(style_slug, s)
+    imported_slugs = set(style_map.keys())
+    _deactivate_legacy_styles(LEGACY_STYLE_SLUGS, keep=imported_slugs)
+    _apply_default_style(DEFAULT_STYLE_SLUG)
     db.session.commit()
-    print(f"  Styles: {len(style_map)} total")
+    print(f"  Styles: {len(style_map)} imported; default='{DEFAULT_STYLE_SLUG}'")
 
     print("\n── Widgets ─────────────────────────────────────────────────────")
     widget_map: dict[str, "CmsWidget"] = {}
