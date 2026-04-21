@@ -1,0 +1,43 @@
+{
+  "slug": "content-page",
+  "name": "Content Page (Header + Content + Footer)",
+  "description": "Standard article/blog/about page with a content area in the middle.",
+  "sort_order": 13,
+  "is_active": true,
+  "areas": [
+    {
+      "name": "header",
+      "type": "header",
+      "label": "Header"
+    },
+    {
+      "name": "breadcrumbs",
+      "type": "vue",
+      "label": ""
+    },
+    {
+      "name": "main",
+      "type": "content",
+      "label": "Main Content"
+    },
+    {
+      "name": "footer",
+      "type": "footer",
+      "label": "Footer"
+    }
+  ],
+  "widget_assignments": [
+    [
+      "header",
+      "header-nav"
+    ],
+    [
+      "breadcrumbs",
+      "breadcrumbs"
+    ],
+    [
+      "footer",
+      "footer-nav"
+    ]
+  ]
+}

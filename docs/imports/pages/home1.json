@@ -1,0 +1,22 @@
+{
+  "slug": "home1",
+  "name": "Home — Version 1",
+  "language": "en",
+  "layout_slug": "home-v1",
+  "style_slug": null,
+  "category_slug": null,
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 10,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Home — Version 1",
+  "meta_description": "Welcome to our platform. Build something amazing today.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

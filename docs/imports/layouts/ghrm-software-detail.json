@@ -1,0 +1,47 @@
+{
+  "slug": "ghrm-software-detail",
+  "name": "GHRM Software Detail",
+  "description": "GHRM plugin: individual software package detail page.",
+  "sort_order": 11,
+  "is_active": true,
+  "areas": [
+    {
+      "name": "header",
+      "type": "header",
+      "label": "Header"
+    },
+    {
+      "name": "breadcrumbs",
+      "type": "vue",
+      "label": ""
+    },
+    {
+      "name": "ghrm-software-detail",
+      "type": "vue",
+      "label": "Software Detail"
+    },
+    {
+      "name": "footer",
+      "type": "footer",
+      "label": "Footer"
+    }
+  ],
+  "widget_assignments": [
+    [
+      "header",
+      "header-nav"
+    ],
+    [
+      "breadcrumbs",
+      "breadcrumbs"
+    ],
+    [
+      "ghrm-software-detail",
+      "ghrm-software-detail"
+    ],
+    [
+      "footer",
+      "footer-nav"
+    ]
+  ]
+}

@@ -1,0 +1,195 @@
+{
+  "slug": "about",
+  "name": "About Us",
+  "language": "en",
+  "layout_slug": "content-page",
+  "style_slug": null,
+  "category_slug": "about",
+  "content_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 1
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "About VBWD"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "What We Build"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system."
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Subscription billing — Stripe, PayPal, and YooKassa ship out of the box"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "User management — registration, login, roles, profiles, invoices"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "CMS — pages, layouts, widgets, styles — all manageable from the admin panel"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Plugin system — add features without touching core code"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Our Philosophy"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Community & Support"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Contact"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Questions? Reach us at hello@vbwd.dev or open an issue on GitHub."
+          }
+        ]
+      }
+    ]
+  },
+  "content_html": "\n<h1>About VBWD</h1>\n<p>VBWD is an open-source SaaS platform that gives developers and agencies a production-ready foundation for subscription businesses — without the months of boilerplate. Install it, extend it with plugins, and ship your product.</p>  # noqa: E501\n\n<h2>What We Build</h2>\n<p>VBWD is a full-stack SDK: a Python/Flask backend, a Vue 3 admin panel, and a Vue 3 user-facing frontend. Everything communicates through a clean REST API and is designed to be extended through a plugin system.</p>  # noqa: E501\n<ul>\n  <li><strong>Subscription billing</strong> — Stripe, PayPal, and YooKassa ship out of the box</li>\n  <li><strong>User management</strong> — registration, login, roles, profiles, invoices</li>\n  <li><strong>CMS</strong> — pages, layouts, widgets, styles — all manageable from the admin panel</li>\n  <li><strong>Plugin system</strong> — add features without touching core code</li>\n</ul>\n\n<h2>Our Philosophy</h2>\n<p>We believe the foundation of a SaaS product should be open, auditable, and yours to own. No vendor lock-in, no black boxes. VBWD is released under CC0 — do whatever you want with it.</p>  # noqa: E501\n\n<h2>Community &amp; Support</h2>\n<p>VBWD is built in the open. Contributions, bug reports, and feature requests are welcome on GitHub. For commercial support, managed hosting, and custom plugin development, check our plans below.</p>  # noqa: E501\n\n<h2>Contact</h2>\n<p>Questions? Reach us at <a href=\"mailto:hello@vbwd.dev\">hello@vbwd.dev</a> or open an issue on GitHub.</p>\n",
+  "is_published": true,
+  "sort_order": 20,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "About Us",
+  "meta_description": "Learn about our team, our story, and our values.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": [
+    {
+      "area_name": "footer",
+      "widget_slug": "testimonials",
+      "sort_order": 0
+    }
+  ]
+}

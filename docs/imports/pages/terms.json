@@ -1,0 +1,22 @@
+{
+  "slug": "terms",
+  "name": "Terms of Service",
+  "language": "en",
+  "layout_slug": "content-page",
+  "style_slug": null,
+  "category_slug": "about",
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": "<h1>Terms of Service</h1><p>Your terms of service content goes here.</p>",
+  "is_published": true,
+  "sort_order": 31,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Terms of Service",
+  "meta_description": "Read our terms of service.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

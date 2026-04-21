@@ -1,0 +1,22 @@
+{
+  "slug": "we-are-launching-soon",
+  "name": "We are launching soon!",
+  "language": "en",
+  "layout_slug": "content-page",
+  "style_slug": null,
+  "category_slug": "static-pages",
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": "<h1>We are launching soon!</h1><p>Stay tuned for our upcoming launch. Sign up to be notified.</p>",
+  "is_published": true,
+  "sort_order": 50,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "We are launching soon!",
+  "meta_description": "We are launching soon. Stay tuned.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

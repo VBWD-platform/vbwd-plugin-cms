@@ -1,0 +1,43 @@
+{
+  "slug": "contact-form",
+  "name": "Contact Form",
+  "description": "Page layout with header, content area, contact form widget, and footer.",
+  "sort_order": 0,
+  "is_active": true,
+  "areas": [
+    {
+      "name": "header",
+      "type": "header",
+      "label": ""
+    },
+    {
+      "name": "content",
+      "type": "content",
+      "label": ""
+    },
+    {
+      "name": "contact form",
+      "type": "vue",
+      "label": ""
+    },
+    {
+      "name": "footer",
+      "type": "footer",
+      "label": ""
+    }
+  ],
+  "widget_assignments": [
+    [
+      "header",
+      "header-nav"
+    ],
+    [
+      "contact form",
+      "contact-form"
+    ],
+    [
+      "footer",
+      "footer-nav"
+    ]
+  ]
+}

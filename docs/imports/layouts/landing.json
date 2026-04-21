@@ -1,0 +1,65 @@
+{
+  "slug": "landing",
+  "name": "Landing Page (Hero + Features + CTA + Testimonials)",
+  "description": "Conversion-focused landing layout without content area.",
+  "sort_order": 12,
+  "is_active": true,
+  "areas": [
+    {
+      "name": "header",
+      "type": "header",
+      "label": "Header"
+    },
+    {
+      "name": "hero",
+      "type": "hero",
+      "label": "Hero"
+    },
+    {
+      "name": "features",
+      "type": "three-column",
+      "label": "Features"
+    },
+    {
+      "name": "cta",
+      "type": "cta-bar",
+      "label": "CTA"
+    },
+    {
+      "name": "social-proof",
+      "type": "three-column",
+      "label": "Testimonials"
+    },
+    {
+      "name": "footer",
+      "type": "footer",
+      "label": "Footer"
+    }
+  ],
+  "widget_assignments": [
+    [
+      "header",
+      "header-nav"
+    ],
+    [
+      "hero",
+      "hero-home1"
+    ],
+    [
+      "features",
+      "features-3col"
+    ],
+    [
+      "cta",
+      "cta-primary"
+    ],
+    [
+      "social-proof",
+      "testimonials"
+    ],
+    [
+      "footer",
+      "footer-nav"
+    ]
+  ]
+}

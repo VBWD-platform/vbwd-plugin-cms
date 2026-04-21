@@ -1,0 +1,22 @@
+{
+  "slug": "landing2",
+  "name": "Landing Page — Version 2",
+  "language": "en",
+  "layout_slug": "landing",
+  "style_slug": null,
+  "category_slug": null,
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 12,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Landing Page — Version 2",
+  "meta_description": "Discover why 10,000+ teams choose our platform.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

@@ -1,0 +1,44 @@
+{
+  "slug": "contact",
+  "name": "Contact",
+  "language": "en",
+  "layout_slug": "contact-form",
+  "style_slug": null,
+  "category_slug": "about",
+  "content_json": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 1
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Contact Us"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Get in touch with our team. We will answer you shortly"
+          }
+        ]
+      }
+    ]
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 32,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Contact",
+  "meta_description": "Contact our team.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

@@ -1,0 +1,22 @@
+{
+  "slug": "landing3",
+  "name": "Landing Page — Version 3",
+  "language": "en",
+  "layout_slug": "landing",
+  "style_slug": null,
+  "category_slug": null,
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 13,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Landing Page — Version 3",
+  "meta_description": "The developer platform built for speed and scale.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

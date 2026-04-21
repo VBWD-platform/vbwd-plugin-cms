@@ -1,0 +1,22 @@
+{
+  "slug": "home2",
+  "name": "Home — Version 2",
+  "language": "en",
+  "layout_slug": "home-v2",
+  "style_slug": null,
+  "category_slug": null,
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 11,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Home — Version 2",
+  "meta_description": "Smarter workflows, faster results. Try it free.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

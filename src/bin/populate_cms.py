@@ -802,156 +802,33 @@ STANDARD_CONTENT_JSON = {
 
 # ─── Layouts ───────────────────────────────────────────────────────────────────
 
-LAYOUTS = [
-    {
-        "slug": "contact-form",
-        "name": "Contact Form",
-        "description": "Page layout with header, content area, contact form widget, and footer.",
-        "sort_order": 0,
-        "areas": [
-            {"name": "header", "type": "header", "label": ""},
-            {"name": "content", "type": "content", "label": ""},
-            {"name": "contact form", "type": "vue", "label": ""},
-            {"name": "footer", "type": "footer", "label": ""},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("contact form", "contact-form"),
-            ("footer", "footer-nav"),
-        ],
-    },
-    {
-        "slug": "ghrm-software-catalogue",
-        "name": "GHRM Software Catalogue",
-        "description": "GHRM plugin: software catalogue listing with breadcrumbs and category browser.",
-        "sort_order": 10,
-        "areas": [
-            {"name": "header", "type": "header", "label": "Header"},
-            {"name": "breadcrumbs", "type": "vue", "label": ""},
-            {"name": "ghrm-categories", "type": "vue", "label": "Categories"},
-            {"name": "footer", "type": "footer", "label": "Footer"},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("breadcrumbs", "breadcrumbs"),
-            ("ghrm-categories", "ghrm-categories"),
-            ("footer", "footer-nav"),
-        ],
-    },
-    {
-        "slug": "ghrm-software-detail",
-        "name": "GHRM Software Detail",
-        "description": "GHRM plugin: individual software package detail page.",
-        "sort_order": 11,
-        "areas": [
-            {"name": "header", "type": "header", "label": "Header"},
-            {"name": "breadcrumbs", "type": "vue", "label": ""},
-            {"name": "ghrm-software-detail", "type": "vue", "label": "Software Detail"},
-            {"name": "footer", "type": "footer", "label": "Footer"},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("breadcrumbs", "breadcrumbs"),
-            ("ghrm-software-detail", "ghrm-software-detail"),
-            ("footer", "footer-nav"),
-        ],
-    },
-    {
-        "slug": "home-v1",
-        "name": "Home v1 (Hero + Features + CTA)",
-        "description": "Standard homepage with hero, 3-column features, CTA bar, and footer.",
-        "sort_order": 10,
-        "areas": [
-            {"name": "header", "type": "header", "label": "Header Navigation"},
-            {"name": "hero", "type": "hero", "label": "Hero Banner"},
-            {"name": "features", "type": "three-column", "label": "Feature Highlights"},
-            {"name": "cta", "type": "cta-bar", "label": "Call to Action"},
-            {"name": "footer", "type": "footer", "label": "Footer"},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("hero", "hero-home1"),
-            ("features", "features-3col"),
-            ("cta", "cta-primary"),
-            ("footer", "footer-nav"),
-        ],
-    },
-    {
-        "slug": "home-v2",
-        "name": "Home v2 (Split Hero + Pricing + Testimonials)",
-        "description": "Modern homepage with split hero, two-column pricing, and testimonials.",
-        "sort_order": 11,
-        "areas": [
-            {"name": "header", "type": "header", "label": "Header Navigation"},
-            {"name": "hero", "type": "hero", "label": "Split Hero"},
-            {"name": "pricing", "type": "two-column", "label": "Pricing Plans"},
-            {"name": "testimonials", "type": "three-column", "label": "Testimonials"},
-            {"name": "footer", "type": "footer", "label": "Footer"},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("hero", "hero-home2"),
-            ("pricing", "pricing-2col"),
-            ("testimonials", "testimonials"),
-            ("footer", "footer-nav"),
-        ],
-    },
-    {
-        "slug": "landing",
-        "name": "Landing Page (Hero + Features + CTA + Testimonials)",
-        "description": "Conversion-focused landing layout without content area.",
-        "sort_order": 12,
-        "areas": [
-            {"name": "header", "type": "header", "label": "Header"},
-            {"name": "hero", "type": "hero", "label": "Hero"},
-            {"name": "features", "type": "three-column", "label": "Features"},
-            {"name": "cta", "type": "cta-bar", "label": "CTA"},
-            {"name": "social-proof", "type": "three-column", "label": "Testimonials"},
-            {"name": "footer", "type": "footer", "label": "Footer"},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("hero", "hero-home1"),
-            ("features", "features-3col"),
-            ("cta", "cta-primary"),
-            ("social-proof", "testimonials"),
-            ("footer", "footer-nav"),
-        ],
-    },
-    {
-        "slug": "content-page",
-        "name": "Content Page (Header + Content + Footer)",
-        "description": "Standard article/blog/about page with a content area in the middle.",
-        "sort_order": 13,
-        "areas": [
-            {"name": "header", "type": "header", "label": "Header"},
-            {"name": "breadcrumbs", "type": "vue", "label": ""},
-            {"name": "main", "type": "content", "label": "Main Content"},
-            {"name": "footer", "type": "footer", "label": "Footer"},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("breadcrumbs", "breadcrumbs"),
-            ("footer", "footer-nav"),
-        ],
-    },
-    {
-        "slug": "native-pricing-page",
-        "name": "Native Pricing Page (Header + Vue Component + Footer)",
-        "description": "Page layout that renders a configurable Vue pricing component in the main area.",
-        "sort_order": 14,
-        "areas": [
-            {"name": "header", "type": "header", "label": "Header"},
-            {"name": "main", "type": "vue-component", "label": "Pricing Component"},
-            {"name": "footer", "type": "footer", "label": "Footer"},
-        ],
-        "widget_assignments": [
-            ("header", "header-nav"),
-            ("main", "pricing-native-plans"),
-            ("footer", "footer-nav"),
-        ],
-    },
-]
+# Layouts are authored as JSON in docs/imports/layouts/ — re-imported on each
+# populator run. Edit those files, not this script.
+_LAYOUTS_DIR = _THEMES_PATH.parent / "layouts"
+_PAGES_DIR   = _THEMES_PATH.parent / "pages"
+
+
+def _load_layouts() -> list[dict]:
+    if not _LAYOUTS_DIR.exists():
+        print(f"  WARN: layouts dir missing at {_LAYOUTS_DIR} — no layouts imported")
+        return []
+    items: list[dict] = []
+    for p in sorted(_LAYOUTS_DIR.glob("*.json")):
+        items.append(_json.loads(p.read_text()))
+    return items
+
+
+def _load_pages() -> list[dict]:
+    if not _PAGES_DIR.exists():
+        print(f"  WARN: pages dir missing at {_PAGES_DIR} — no pages imported")
+        return []
+    items: list[dict] = []
+    for p in sorted(_PAGES_DIR.glob("*.json")):
+        items.append(_json.loads(p.read_text()))
+    return items
+
+
+LAYOUTS = _load_layouts()
 
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
@@ -1424,224 +1301,42 @@ def populate_cms() -> None:
     db.session.commit()
 
     print("\n── Pages ───────────────────────────────────────────────────────")
-    default_light = style_map.get("light-clean")
-    default_dark = style_map.get("dark-midnight")
-    home_v1 = layout_map.get("home-v1")
-    home_v2 = layout_map.get("home-v2")
-    landing = layout_map.get("landing")
-    content_page = layout_map.get("content-page")
-    contact_form_layout = layout_map.get("contact-form")
-    ghrm_catalogue_layout = layout_map.get("ghrm-software-catalogue")
-    ghrm_detail_layout = layout_map.get("ghrm-software-detail")
-
-    _get_or_create_page(
-        "home1",
-        "Home — Version 1",
-        home_v1,
-        default_light,
-        meta_description="Welcome to our platform. Build something amazing today.",
-        sort_order=10,
-    )
-    _get_or_create_page(
-        "home2",
-        "Home — Version 2",
-        home_v2,
-        default_dark,
-        meta_description="Smarter workflows, faster results. Try it free.",
-        sort_order=11,
-    )
-    _get_or_create_page(
-        "landing2",
-        "Landing Page — Version 2",
-        landing,
-        style_map.get("light-cool"),
-        meta_description="Discover why 10,000+ teams choose our platform.",
-        sort_order=12,
-    )
-    _get_or_create_page(
-        "landing3",
-        "Landing Page — Version 3",
-        landing,
-        style_map.get("dark-purple"),
-        meta_description="The developer platform built for speed and scale.",
-        sort_order=13,
-    )
-    about_page = _get_or_create_page(
-        "about",
-        "About Us",
-        content_page,
-        default_light,
-        content_json=STANDARD_CONTENT_JSON,
-        content_html=STANDARD_CONTENT_HTML,
-        meta_description="Learn about our team, our story, and our values.",
-        sort_order=20,
-        category_id=cat_about.id,
-    )
-    _get_or_create_page(
-        "privacy",
-        "Privacy Policy",
-        content_page,
-        default_light,
-        content_html="<h1>Privacy Policy</h1><p>Your privacy policy content goes here.</p>",
-        meta_description="Read our privacy policy.",
-        sort_order=30,
-        category_id=cat_about.id,
-    )
-    _get_or_create_page(
-        "terms",
-        "Terms of Service",
-        content_page,
-        default_light,
-        content_html="<h1>Terms of Service</h1><p>Your terms of service content goes here.</p>",
-        meta_description="Read our terms of service.",
-        sort_order=31,
-        category_id=cat_about.id,
-    )
-    _get_or_create_page(
-        "contact",
-        "Contact",
-        contact_form_layout,
-        default_light,
-        content_json={
-            "type": "doc",
-            "content": [
-                {
-                    "type": "heading",
-                    "attrs": {"level": 1},
-                    "content": [{"type": "text", "text": "Contact Us"}],
-                },
-                {
-                    "type": "paragraph",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Get in touch with our team. We will answer you shortly",
-                        }
-                    ],
-                },
-            ],
-        },
-        meta_description="Contact our team.",
-        sort_order=32,
-        category_id=cat_about.id,
-    )
-
-    native_pricing_layout = layout_map.get("native-pricing-page")
-    _get_or_create_page(
-        "features",
-        "Features",
-        content_page,
-        default_light,
-        content_html=FEATURES_SLIDESHOW_HTML,
-        meta_description="Explore the key features of the VBWD platform: billing, user management, plugins, CMS, and more.",  # noqa: E501
-        sort_order=40,
-        category_id=cat_about.id,
-    )
-    _get_or_create_page(
-        "pricing-embedded",
-        "Embedded Pricing Guide",
-        content_page,
-        default_light,
-        content_html=PRICING_EMBED_GUIDE_HTML,
-        meta_description="Learn how to embed the VBWD pricing widget in any website with a single script tag.",
-        sort_order=41,
-        category_id=cat_blog.id,
-    )
-    _get_or_create_page(
-        "pricing-native",
-        "Native CMS Pricing",
-        native_pricing_layout,
-        default_light,
-        meta_description="View our subscription plans rendered natively within the VBWD CMS.",
-        sort_order=42,
-    )
-    _get_or_create_page(
-        "we-are-launching-soon",
-        "We are launching soon!",
-        content_page,
-        default_light,
-        content_html="<h1>We are launching soon!</h1><p>Stay tuned for our upcoming launch. Sign up to be notified.</p>",  # noqa: E501
-        meta_description="We are launching soon. Stay tuned.",
-        sort_order=50,
-        category_id=cat_static.id,
-    )
-
-    # ── GHRM pages (Software Catalogue plugin) ──────────────────────────────
-    # Template pages (not published) — used as bases by the GHRM plugin
-    _get_or_create_page(
-        "ghrm-software-catalogue",
-        "GHRM Catalogue Template",
-        ghrm_catalogue_layout,
-        None,
-        meta_description="Browse our software catalogue.",
-        sort_order=0,
-        category_id=cat_ghrm.id,
-        robots="noindex,nofollow",
-        is_published=False,
-    )
-    _get_or_create_page(
-        "ghrm-software-detail",
-        "GHRM Detail Template",
-        ghrm_detail_layout,
-        None,
-        meta_description="Software package details.",
-        sort_order=1,
-        category_id=cat_ghrm.id,
-    )
-    # Published catalogue pages
-    _get_or_create_page(
-        "software",
-        "Software",
-        ghrm_catalogue_layout,
-        default_dark,
-        meta_description="Browse all software packages.",
-        sort_order=0,
-        category_id=cat_ghrm.id,
-    )
-    _get_or_create_page(
-        "category",
-        "Software Catalogue",
-        ghrm_catalogue_layout,
-        default_light,
-        meta_description="Browse software packages by category.",
-        sort_order=0,
-        category_id=cat_ghrm.id,
-    )
-    _get_or_create_page(
-        "category/backend",
-        "Backend Packages",
-        ghrm_catalogue_layout,
-        default_light,
-        meta_description="Backend software packages.",
-        sort_order=1,
-        category_id=cat_ghrm.id,
-    )
-    _get_or_create_page(
-        "category/fe-user",
-        "Fe User Packages",
-        ghrm_catalogue_layout,
-        default_light,
-        meta_description="Frontend user packages.",
-        sort_order=2,
-        category_id=cat_ghrm.id,
-    )
-    _get_or_create_page(
-        "category/fe-admin",
-        "Fe Admin Packages",
-        ghrm_catalogue_layout,
-        default_light,
-        meta_description="Frontend admin packages.",
-        sort_order=3,
-        category_id=cat_ghrm.id,
-    )
-
+    pages_data = _load_pages()
+    category_by_slug = {
+        "about": cat_about, "blog": cat_blog, "static-pages": cat_static, "ghrm": cat_ghrm,
+    }
+    page_map: dict[str, "CmsPage"] = {}
+    for pd in pages_data:
+        layout_obj = layout_map.get(pd.get("layout_slug")) if pd.get("layout_slug") else None
+        style_obj = style_map.get(pd.get("style_slug")) if pd.get("style_slug") else None
+        cat_obj = category_by_slug.get(pd.get("category_slug")) if pd.get("category_slug") else None
+        page = _get_or_create_page(
+            pd["slug"],
+            pd["name"],
+            layout_obj,
+            style_obj,
+            content_json=pd.get("content_json"),
+            content_html=pd.get("content_html"),
+            meta_description=pd.get("meta_description"),
+            sort_order=pd.get("sort_order", 0),
+            category_id=(cat_obj.id if cat_obj else None),
+            robots=pd.get("robots", "index,follow"),
+            is_published=pd.get("is_published", True),
+        )
+        page_map[pd["slug"]] = page
     db.session.commit()
 
     print("\n── Page Widgets ────────────────────────────────────────────────")
-    # Demo: "About Us" page gets a page-specific testimonials widget
-    # that overrides the layout's footer area
-    _set_page_widgets(about_page, [("footer", "testimonials")], widget_map)
+    for pd in pages_data:
+        assignments = [
+            (a["area_name"], a["widget_slug"]) for a in pd.get("page_widget_assignments", [])
+        ]
+        if assignments:
+            page = page_map.get(pd["slug"])
+            if page:
+                _set_page_widgets(page, assignments, widget_map)
     db.session.commit()
+
 
     print("\n── Routing Rules ───────────────────────────────────────────────")
     rule = (

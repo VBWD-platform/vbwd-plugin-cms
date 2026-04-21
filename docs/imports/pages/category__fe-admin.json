@@ -1,0 +1,22 @@
+{
+  "slug": "category/fe-admin",
+  "name": "Fe Admin Packages",
+  "language": "en",
+  "layout_slug": "ghrm-software-catalogue",
+  "style_slug": null,
+  "category_slug": "ghrm",
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 3,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Fe Admin Packages",
+  "meta_description": "Frontend admin packages.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

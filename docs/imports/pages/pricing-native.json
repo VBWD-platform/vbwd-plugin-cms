@@ -1,0 +1,22 @@
+{
+  "slug": "pricing-native",
+  "name": "Native CMS Pricing",
+  "language": "en",
+  "layout_slug": "native-pricing-page",
+  "style_slug": null,
+  "category_slug": null,
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 42,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Native CMS Pricing",
+  "meta_description": "View our subscription plans rendered natively within the VBWD CMS.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

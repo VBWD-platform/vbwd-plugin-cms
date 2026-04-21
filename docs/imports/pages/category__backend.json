@@ -1,0 +1,22 @@
+{
+  "slug": "category/backend",
+  "name": "Backend Packages",
+  "language": "en",
+  "layout_slug": "ghrm-software-catalogue",
+  "style_slug": null,
+  "category_slug": "ghrm",
+  "content_json": {
+    "type": "doc",
+    "content": []
+  },
+  "content_html": null,
+  "is_published": true,
+  "sort_order": 1,
+  "robots": "index,follow",
+  "use_theme_switcher_styles": false,
+  "meta_title": "Backend Packages",
+  "meta_description": "Backend software packages.",
+  "meta_keywords": null,
+  "og_title": null,
+  "page_widget_assignments": []
+}

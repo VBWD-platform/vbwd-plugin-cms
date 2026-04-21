@@ -1,0 +1,38 @@
+{
+  "slug": "native-pricing-page",
+  "name": "Native Pricing Page (Header + Vue Component + Footer)",
+  "description": "Page layout that renders a configurable Vue pricing component in the main area.",
+  "sort_order": 14,
+  "is_active": true,
+  "areas": [
+    {
+      "name": "header",
+      "type": "header",
+      "label": "Header"
+    },
+    {
+      "name": "main",
+      "type": "vue-component",
+      "label": "Pricing Component"
+    },
+    {
+      "name": "footer",
+      "type": "footer",
+      "label": "Footer"
+    }
+  ],
+  "widget_assignments": [
+    [
+      "header",
+      "header-nav"
+    ],
+    [
+      "main",
+      "pricing-native-plans"
+    ],
+    [
+      "footer",
+      "footer-nav"
+    ]
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "slug": "home-v2",
+  "name": "Home v2 (Split Hero + Pricing + Testimonials)",
+  "description": "Modern homepage with split hero, two-column pricing, and testimonials.",
+  "sort_order": 11,
+  "is_active": true,
+  "areas": [
+    {
+      "name": "header",
+      "type": "header",
+      "label": "Header Navigation"
+    },
+    {
+      "name": "hero",
+      "type": "hero",
+      "label": "Split Hero"
+    },
+    {
+      "name": "pricing",
+      "type": "two-column",
+      "label": "Pricing Plans"
+    },
+    {
+      "name": "testimonials",
+      "type": "three-column",
+      "label": "Testimonials"
+    },
+    {
+      "name": "footer",
+      "type": "footer",
+      "label": "Footer"
+    }
+  ],
+  "widget_assignments": [
+    [
+      "header",
+      "header-nav"
+    ],
+    [
+      "hero",
+      "hero-home2"
+    ],
+    [
+      "pricing",
+      "pricing-2col"
+    ],
+    [
+      "testimonials",
+      "testimonials"
+    ],
+    [
+      "footer",
+      "footer-nav"
+    ]
+  ]
+}
