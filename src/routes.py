@@ -553,7 +553,10 @@ def admin_get_page(page_id: str):
     page_obj = svc._repo.find_by_id(page_id)
     if not page_obj:
         return jsonify({"error": "Page not found"}), 404
-    result = page_obj.to_dict()
+    # Route through the service's default-style resolver so the admin UI
+    # sees resolved_style_id / resolved_style_source — same as the public
+    # /cms/pages/<slug> endpoint.
+    result = svc._with_resolved_style(page_obj.to_dict())
     # Include page widget assignments
     pw_repo = _page_widget_repo()
     result["page_assignments"] = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
