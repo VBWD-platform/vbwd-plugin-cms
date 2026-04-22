@@ -889,13 +889,18 @@ def _apply_default_style(default_slug: Optional[str]) -> None:
     if target is None:
         print(f"  WARN: default slug '{default_slug}' not found — skipping")
         return
-    # Demote any current default(s)
+    # Demote any current default(s) FIRST, flush, THEN promote the target
+    # — the partial unique index on is_default would otherwise raise on
+    # the batched executemany (both rows temporarily have is_default=t).
     current = db.session.query(CmsStyle).filter_by(is_default=True).all()
-    for c in current:
-        if str(c.id) != str(target.id):
+    need_demote = [c for c in current if str(c.id) != str(target.id)]
+    if need_demote:
+        for c in need_demote:
             c.is_default = False
-    target.is_default = True
-    db.session.flush()
+        db.session.flush()
+    if not target.is_default:
+        target.is_default = True
+        db.session.flush()
     print(f"  ★ default style set to '{default_slug}'")
 
 

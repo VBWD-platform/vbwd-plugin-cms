@@ -178,21 +178,87 @@ class CmsPageService:
         return payload
 
     def import_pages(self, raw: bytes) -> Dict[str, Any]:
-        """Import pages from JSON export. Skips duplicates."""
-        records = json.loads(raw)
+        """Import pages from JSON.
+
+        Accepts three shapes so the admin upload handles anything we
+        ship as an import artefact:
+          * a list of page objects (existing export format)
+          * a single page object (one-file-per-page populator layout)
+          * {"pages": [...]} wrapper
+        Page records may reference layout/style/category by either
+        explicit UUID (layout_id, style_id, category_id) or by slug
+        (layout_slug, style_slug, category_slug); slugs are resolved
+        before the record is applied.
+        """
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            if "pages" in parsed and isinstance(parsed["pages"], list):
+                records = parsed["pages"]
+            else:
+                records = [parsed]
+        elif isinstance(parsed, list):
+            records = parsed
+        else:
+            raise ValueError("Import body must be a list, a dict, or {\"pages\": [...]}")
+
         created = 0
         skipped = 0
         for rec in records:
+            if not isinstance(rec, dict):
+                skipped += 1
+                continue
             slug = rec.get("slug")
             if not slug or self._repo.find_by_slug(slug):
                 skipped += 1
                 continue
+            self._resolve_slug_refs(rec)
             page = CmsPage()
             self._apply_data(page, rec)
             page.slug = slug
             self._repo.save(page)
             created += 1
         return {"created": created, "skipped": skipped}
+
+    def _resolve_slug_refs(self, rec: Dict[str, Any]) -> None:
+        """Translate layout_slug / style_slug / category_slug → _id.
+
+        If the referenced slug doesn't exist the field is dropped
+        silently; the page ends up without that reference and the
+        default-style resolver fills in at render time.
+        """
+        from plugins.cms.src.models.cms_layout import CmsLayout
+        from plugins.cms.src.models.cms_style import CmsStyle
+        from plugins.cms.src.models.cms_category import CmsCategory
+
+        layout_slug = rec.pop("layout_slug", None)
+        if layout_slug and "layout_id" not in rec:
+            obj = (
+                self._repo.session.query(CmsLayout)
+                .filter_by(slug=layout_slug)
+                .first()
+                if hasattr(self._repo, "session")
+                else None
+            )
+            # fall back to a raw session lookup
+            if obj is None:
+                from vbwd.extensions import db
+                obj = db.session.query(CmsLayout).filter_by(slug=layout_slug).first()
+            if obj is not None:
+                rec["layout_id"] = str(obj.id)
+
+        style_slug = rec.pop("style_slug", None)
+        if style_slug and "style_id" not in rec:
+            from vbwd.extensions import db
+            obj = db.session.query(CmsStyle).filter_by(slug=style_slug).first()
+            if obj is not None:
+                rec["style_id"] = str(obj.id)
+
+        category_slug = rec.pop("category_slug", None)
+        if category_slug and "category_id" not in rec:
+            from vbwd.extensions import db
+            obj = db.session.query(CmsCategory).filter_by(slug=category_slug).first()
+            if obj is not None:
+                rec["category_id"] = str(obj.id)
 
     # ── private ──────────────────────────────────────────────────────────────
 

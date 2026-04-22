@@ -94,6 +94,97 @@ BASE_CSS = dedent("""\
     }
     nav a { color: var(--color-text); font-weight: 500; padding: 0 0.875rem; }
     nav a:hover { color: var(--color-accent); text-decoration: none; }
+
+    /* Edge-inset system.
+     *
+     * --edge-inset is the horizontal breathing-room between every top-level
+     * page element (hero, cta-band, nav, breadcrumb, plugin widget) and the
+     * viewport border. Narrow / 1200 themes set it to 0 — the natural
+     * (viewport - container-max) / 2 margin already provides inset. Fullwidth
+     * themes set it to 1.5rem (otherwise widgets would kiss the edge).
+     * At narrow viewports we bump it to 1rem so nothing ever hits the phone
+     * viewport border.
+     *
+     * Every top-level widget wrapper (header-nav, footer-nav, breadcrumb,
+     * generic .cms-widget--vue, .cms-widget--html) and layout areas get the
+     * same max-width + margin:auto + padding:0 var(--edge-inset) geometry,
+     * so the outer-left edge of every widget sits on one vertical line. */
+    :root { --edge-inset: 0rem; }
+
+    .cms-area--hero,
+    .cms-area--cta,
+    .cms-widget--header-nav,
+    .cms-widget--footer-nav,
+    .cms-widget--vue,
+    .cms-breadcrumb {
+      max-width: var(--container-max) !important;
+      width: 100% !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+      padding-left: var(--edge-inset) !important;
+      padding-right: var(--edge-inset) !important;
+      box-sizing: border-box !important;
+    }
+
+    /* Zero out nested ul + link/crumb left padding so the first link / crumb
+     * sits flush with the wrapper's inner-left edge — which lines up with
+     * the hero's / cta-band's outer-left edge. */
+    .cms-widget--header-nav .cms-menu,
+    .cms-widget--footer-nav .cms-menu {
+      padding-left: 0 !important;
+      margin-left: 0 !important;
+    }
+    .cms-widget--header-nav .cms-menu__item:first-child > .cms-menu__link,
+    .cms-widget--footer-nav .cms-menu__item:first-child > .cms-menu__link {
+      padding-left: 0 !important;
+    }
+    .cms-widget--header-nav .cms-burger {
+      margin-left: -6px;   /* neutralise the button's own 6px inner padding */
+    }
+    /* Breadcrumb layout: zero flex gap and use explicit symmetric margins on
+     * the separator so "X / Y" always has identical spacing on both sides of
+     * the "/" glyph. First visible link sits flush with the wrapper's
+     * content-left edge — same vertical line as the burger icon. */
+    .cms-breadcrumb { gap: 0 !important; }
+    .cms-breadcrumb a,
+    .cms-breadcrumb__link,
+    .cms-breadcrumb__current {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .cms-breadcrumb__separator {
+      margin: 0 0.5rem !important;
+      padding: 0 !important;
+      display: inline-block;
+      text-align: center;
+    }
+    .cms-breadcrumb > a:first-of-type,
+    .cms-breadcrumb > .cms-breadcrumb__link:first-of-type {
+      margin-left: 0 !important;
+      padding-left: 0 !important;
+    }
+
+    /* Plugin-widget inner layout reset: some Vue widgets (e.g. GHRM) add
+     * horizontal padding to inner grid / header / card blocks that shifts
+     * titles right of the menu + breadcrumb outer edge. Zero those out so
+     * the whole page sits on one vertical line. */
+    .cms-widget--vue .ghrm-grid,
+    .cms-widget--vue .ghrm-list-header,
+    .cms-widget--vue .ghrm-category-index,
+    .cms-widget--vue .ghrm-category-index__title,
+    .cms-widget--vue .ghrm-detail > * { padding-left: 0 !important; padding-right: 0 !important; }
+
+    /* Breadcrumb text colors: the breadcrumb widget's config.css hard-codes
+     * mid-gray text which disappears on dark themes. Override with theme
+     * tokens so breadcrumb stays legible across every palette. */
+    .cms-breadcrumb { color: var(--color-text-muted) !important; }
+    .cms-breadcrumb a,
+    .cms-breadcrumb__link { color: var(--color-link, var(--color-accent)) !important; }
+    .cms-breadcrumb a:hover,
+    .cms-breadcrumb__link:hover { color: var(--color-link-hover, var(--color-accent-dark)) !important; }
+    .cms-breadcrumb__current { color: var(--color-heading) !important; font-weight: 500; }
+    .cms-breadcrumb__separator { color: var(--color-text-muted) !important; opacity: 0.5; }
+
     footer {
       background: var(--color-surface-soft);
       border-top: 1px solid var(--color-border);
@@ -139,6 +230,28 @@ BASE_CSS = dedent("""\
       cursor: not-allowed;
       pointer-events: none;
     }
+    /* Buttons inside dark sections (.hero / .cta-band) — re-assert the
+     * standard button contrast. Otherwise `.hero a { color: inherit }`
+     * bleeds into plain `.btn` turning white text on white background. */
+    .hero .btn, .cta-band .btn {
+      background: var(--color-surface);
+      color: var(--color-text);
+      border-color: var(--color-surface);
+    }
+    .hero .btn:hover, .cta-band .btn:hover {
+      background: var(--color-surface-soft);
+      color: var(--color-text);
+    }
+    .hero .btn--accent, .cta-band .btn--accent {
+      background: var(--color-accent);
+      color: var(--color-accent-fg);
+      border-color: var(--color-accent);
+    }
+    .hero .btn--contrast, .cta-band .btn--contrast {
+      background: var(--color-contrast-bg);
+      color: var(--color-contrast-fg);
+      border-color: var(--color-contrast-bg);
+    }
 
     /* Cards + feature grid */
     .card {
@@ -166,7 +279,8 @@ BASE_CSS = dedent("""\
       position: relative;
       overflow: hidden;
     }
-    .hero h1, .hero h2 { color: inherit; }
+    .hero h1, .hero h2, .hero h3, .hero p, .hero a, .hero li { color: inherit; }
+    .hero code { color: inherit; background: rgba(255,255,255,0.15); }
     .hero__eyebrow {
       display: inline-block;
       padding: 0.35rem 0.9rem;
@@ -197,7 +311,8 @@ BASE_CSS = dedent("""\
       margin: 3rem auto;
       max-width: var(--container-max);
     }
-    .cta-band h2, .cta-band p { color: inherit; }
+    .cta-band h1, .cta-band h2, .cta-band h3, .cta-band p, .cta-band a, .cta-band li { color: inherit; }
+    .cta-band code { color: inherit; background: rgba(255,255,255,0.15); }
 
     /* Columns (2 / 3) */
     .cols-2, .cols-3 { display: grid; gap: 1.5rem; }
@@ -239,13 +354,16 @@ BASE_CSS = dedent("""\
     .plan li { padding: 0.4rem 0; border-bottom: 1px solid var(--color-border); }
     .plan li:last-child { border-bottom: 0; }
 
-    /* Responsive tweaks */
+    /* Responsive tweaks — at narrow viewports bump --edge-inset to 1rem so
+     * nothing kisses the viewport border. Because hero / cta / nav /
+     * breadcrumb all read from --edge-inset, they stay perfectly aligned. */
     @media (max-width: 640px) {
+      :root { --edge-inset: 1rem; }
       h1 { font-size: 2rem; }
       h2 { font-size: 1.4rem; }
       .container { padding: 0 1rem; }
-      .hero { margin-left: 0.5rem; margin-right: 0.5rem; border-radius: 14px; }
-      .cta-band { border-radius: 12px; margin-left: 0.5rem; margin-right: 0.5rem; }
+      .hero { margin-left: 0; margin-right: 0; border-radius: 14px; }
+      .cta-band { margin-left: 0; margin-right: 0; border-radius: 12px; }
     }
 """)
 
@@ -273,14 +391,14 @@ COLORS = {
                "color-surface-soft": "#f8fafc", "color-border": "#e2e8f0",
                "color-text": "#0f172a", "color-text-muted": "#475569",
                "color-heading": "#0b1220",
-               "color-gradient": "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)"}
+               "color-gradient": "linear-gradient(135deg, #1d4ed8 0%, #5b21b6 100%)"}
         ),
     },
     "light-warm": {
         "name": "Light — Warm",
         "tokens": dict(
-            **{"color-accent": "#d97706", "color-accent-soft": "#fef3c7",
-               "color-accent-dark": "#b45309", "color-accent-fg": "#ffffff",
+            **{"color-accent": "#b45309", "color-accent-soft": "#fef3c7",
+               "color-accent-dark": "#78350f", "color-accent-fg": "#ffffff",
                "color-contrast-bg": "#1c1917", "color-contrast-fg": "#fafaf9",
                "color-contrast-hover-bg": "#292524",
                "color-link": "#b45309", "color-link-hover": "#92400e",
@@ -288,14 +406,14 @@ COLORS = {
                "color-surface-soft": "#fef8ef", "color-border": "#f1e9db",
                "color-text": "#1c1917", "color-text-muted": "#78716c",
                "color-heading": "#1c1210",
-               "color-gradient": "linear-gradient(135deg, #d97706 0%, #dc2626 100%)"}
+               "color-gradient": "linear-gradient(135deg, #b45309 0%, #991b1b 100%)"}
         ),
     },
     "light-cool": {
         "name": "Light — Cool",
         "tokens": dict(
-            **{"color-accent": "#0891b2", "color-accent-soft": "#cffafe",
-               "color-accent-dark": "#0e7490", "color-accent-fg": "#ffffff",
+            **{"color-accent": "#155e75", "color-accent-soft": "#cffafe",
+               "color-accent-dark": "#0c4a6e", "color-accent-fg": "#ffffff",
                "color-contrast-bg": "#0c4a6e", "color-contrast-fg": "#f0f9ff",
                "color-contrast-hover-bg": "#075985",
                "color-link": "#0e7490", "color-link-hover": "#155e75",
@@ -303,7 +421,7 @@ COLORS = {
                "color-surface-soft": "#f1f5f9", "color-border": "#dbe4ec",
                "color-text": "#0f172a", "color-text-muted": "#475569",
                "color-heading": "#0c1929",
-               "color-gradient": "linear-gradient(135deg, #0891b2 0%, #2563eb 100%)"}
+               "color-gradient": "linear-gradient(135deg, #0e7490 0%, #1d4ed8 100%)"}
         ),
     },
     "dark-ocean": {
@@ -358,8 +476,8 @@ COLORS = {
         "tokens": dict(
             **{"color-accent": "#111827", "color-accent-soft": "#e5e7eb",
                "color-accent-dark": "#030712", "color-accent-fg": "#ffffff",
-               "color-contrast-bg": "#f97316", "color-contrast-fg": "#ffffff",
-               "color-contrast-hover-bg": "#ea580c",
+               "color-contrast-bg": "#c2410c", "color-contrast-fg": "#ffffff",
+               "color-contrast-hover-bg": "#9a3412",
                "color-link": "#111827", "color-link-hover": "#030712",
                "color-bg": "#fafafa", "color-surface": "#ffffff",
                "color-surface-soft": "#f3f4f6", "color-border": "#d1d5db",
@@ -375,17 +493,105 @@ COLORS = {
 
 WIDTHS = {
     "narrow":    {"label": "Narrow",     "max": "1100px", "sort_offset": 0},
-    "fullwidth": {"label": "Full-width", "max": "100%",   "sort_offset": 1},
+    "1200":      {"label": "1200",       "max": "1200px", "sort_offset": 1},
+    "fullwidth": {"label": "Full-width", "max": "100%",   "sort_offset": 2},
 }
+
+
+# ── Menu (header-nav) behaviour per width ───────────────────────────────────
+# fullwidth → header nav is ALWAYS a burger drawer, regardless of viewport.
+# narrow / 1200 → header nav is ALWAYS horizontal (no burger).
+# Footer nav is controlled by its own widget CSS and stays horizontal everywhere.
+
+_MENU_RULES_FULLWIDTH = """\
+/* header-nav: force burger drawer at every viewport */
+.cms-widget--header-nav .cms-burger { display: flex !important; }
+.cms-widget--header-nav .cms-menu {
+  display: flex !important; flex-direction: column !important; align-items: stretch !important;
+  position: fixed !important; top: 0; right: -100%;
+  width: min(340px, 88vw); height: 100dvh;
+  background: var(--color-bg, #fff);
+  padding: 4rem 0 2rem; overflow-y: auto; z-index: 300;
+  transition: right 0.28s ease;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+}
+.cms-widget--header-nav .cms-menu--open { right: 0 !important; }
+.cms-widget--header-nav .cms-menu__item { position: static !important; border-bottom: 1px solid var(--color-border, #e5e7eb); }
+.cms-widget--header-nav .cms-menu__link { padding: 0.9rem 1.5rem !important; font-size: 1rem !important; justify-content: space-between !important; }
+.cms-widget--header-nav .cms-menu__sub { position: static !important; box-shadow: none !important; border: none !important; border-radius: 0 !important; max-height: 0; overflow: hidden; display: block !important; transition: max-height 0.25s ease; }
+.cms-widget--header-nav .cms-menu__sub--open { max-height: 600px; }
+.cms-widget--header-nav .cms-menu__sub .cms-menu__link { padding-left: 2.5rem !important; font-size: 0.9rem !important; opacity: 0.85; }
+"""
+
+_MENU_RULES_HORIZONTAL = """\
+/* header-nav — boxed themes (narrow / 1200):
+ *   ≥ 751 px  → horizontal row, no burger
+ *   ≤ 750 px  → burger drawer (standard mobile behaviour)
+ * Footer-nav stays horizontal at every viewport (its widget CSS forces that).
+ */
+@media (min-width: 751px) {
+  .cms-widget--header-nav .cms-burger { display: none !important; }
+  .cms-widget--header-nav .cms-menu-overlay { display: none !important; }
+  .cms-widget--header-nav .cms-menu {
+    display: flex !important; flex-direction: row !important; flex-wrap: wrap;
+    align-items: center;
+    position: static !important; width: auto; height: auto;
+    background: transparent; padding: 0; box-shadow: none;
+    overflow: visible;
+  }
+  .cms-widget--header-nav .cms-menu__item { position: relative; border-bottom: none; }
+  .cms-widget--header-nav .cms-menu__sub {
+    position: absolute; top: 100%; left: 0;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 8px; min-width: 200px; z-index: 300;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    max-height: none; display: none;
+    padding: 0.35rem 0;
+  }
+  .cms-widget--header-nav .cms-menu__item:hover > .cms-menu__sub,
+  .cms-widget--header-nav .cms-menu__sub--open { display: block !important; }
+}
+@media (max-width: 750px) {
+  .cms-widget--header-nav .cms-burger { display: flex !important; }
+  .cms-widget--header-nav .cms-menu {
+    display: flex !important; flex-direction: column !important; align-items: stretch !important;
+    position: fixed !important; top: 0; right: -100%;
+    width: min(320px, 88vw); height: 100dvh;
+    background: var(--color-bg, #fff);
+    padding: 4rem 0 2rem; overflow-y: auto; z-index: 300;
+    transition: right 0.28s ease;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+  }
+  .cms-widget--header-nav .cms-menu--open { right: 0 !important; }
+  .cms-widget--header-nav .cms-menu__item { position: static !important; border-bottom: 1px solid var(--color-border, #e5e7eb); }
+  .cms-widget--header-nav .cms-menu__link { padding: 0.9rem 1.5rem !important; font-size: 1rem !important; justify-content: space-between !important; }
+  .cms-widget--header-nav .cms-menu__sub { position: static !important; box-shadow: none !important; border: none !important; border-radius: 0 !important; max-height: 0; overflow: hidden; display: block !important; transition: max-height 0.25s ease; }
+  .cms-widget--header-nav .cms-menu__sub--open { max-height: 600px; }
+  .cms-widget--header-nav .cms-menu__sub .cms-menu__link { padding-left: 2.5rem !important; font-size: 0.9rem !important; opacity: 0.85; }
+}
+"""
+
+
+def _menu_rules_for(width_slug: str) -> str:
+    return _MENU_RULES_FULLWIDTH if width_slug == "fullwidth" else _MENU_RULES_HORIZONTAL
 
 
 # ── Emit ─────────────────────────────────────────────────────────────────────
 
 def build_one(color_slug: str, color: dict, width_slug: str, width: dict, sort_order: int) -> dict:
     slug = f"{color_slug}-{width_slug}"
+    # Fullwidth themes have --container-max: 100%, so the natural
+    # (viewport - container-max) / 2 margin is zero — widgets would kiss
+    # the viewport border. Force --edge-inset: 1.5rem so burger, breadcrumb,
+    # hero, cta, nav all sit on the same inset line.
+    # Narrow / 1200 themes let the centering margin provide the inset and
+    # keep --edge-inset: 0.
+    edge_inset = "1.5rem" if width_slug == "fullwidth" else "0rem"
     width_tokens = (
         "/* width */\n:root {\n"
         f"  --container-max: {width['max']};\n"
+        f"  --edge-inset: {edge_inset};\n"
         "}\n"
     )
     source_css = (
@@ -394,6 +600,8 @@ def build_one(color_slug: str, color: dict, width_slug: str, width: dict, sort_o
         + tokens(**color["tokens"])
         + "\n"
         + width_tokens
+        + "\n"
+        + _menu_rules_for(width_slug)
     )
     return {
         "slug": slug,
