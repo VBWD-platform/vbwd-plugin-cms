@@ -16,6 +16,11 @@ def _slugify(text: str) -> str:
     return slug
 
 
+def _base_segment(full_slug: str) -> str:
+    """Last path segment of a stored slug (e.g. 'features/cms-module' → 'cms-module')."""
+    return full_slug.strip("/").split("/")[-1]
+
+
 class CmsPageNotFoundError(Exception):
     """Raised when a page is not found or not published."""
 
@@ -101,16 +106,40 @@ class CmsPageService:
         result["items"] = [p.to_dict() for p in result["items"]]
         return result
 
+    def _compose_slug(
+        self, slug_input: str, category_id: Optional[Any]
+    ) -> str:
+        """Compose the stored slug (full URL path).
+
+        Rules:
+          - If slug_input contains '/', use it as-is (strip leading/trailing
+            slashes). Admin wins — they picked the exact path.
+          - Else if category_id resolves to an existing category, prefix
+            '<cat.slug>/'.
+          - Else use slug_input as-is (flat page, no category).
+        """
+        stripped = slug_input.strip("/")
+        if "/" in stripped:
+            return stripped
+        if category_id:
+            category = self._category_repo.find_by_id(category_id)
+            if category is not None:
+                return f"{category.slug}/{stripped}"
+        return stripped
+
     def create_page(self, data: Dict[str, Any]) -> Dict[str, Any]:
         name = data.get("name", "").strip()
         if not name:
             raise ValueError("name is required")
 
-        slug = data.get("slug") or _slugify(name)
+        slug_input = data.get("slug") or _slugify(name)
+        composed_slug = self._compose_slug(slug_input, data.get("category_id"))
 
-        existing = self._repo.find_by_slug(slug)
+        existing = self._repo.find_by_slug(composed_slug)
         if existing:
-            raise CmsPageSlugConflictError(f"Slug '{slug}' is already in use")
+            raise CmsPageSlugConflictError(
+                f"Slug '{composed_slug}' is already in use"
+            )
 
         import uuid as _uuid
 
@@ -119,7 +148,7 @@ class CmsPageService:
         # Extract content_blocks before applying — need page.id first
         content_blocks = data.pop("content_blocks", None)
         self._apply_data(page, data)
-        page.slug = slug
+        page.slug = composed_slug
         self._repo.save(page)
 
         # Now apply content blocks (page has ID after save)
@@ -134,14 +163,24 @@ class CmsPageService:
         if not page:
             raise CmsPageNotFoundError(f"Page {page_id} not found")
 
-        if "slug" in data and data["slug"] != page.slug:
-            existing = self._repo.find_by_slug(data["slug"])
-            if existing:
-                raise CmsPageSlugConflictError(
-                    f"Slug '{data['slug']}' is already in use"
-                )
+        slug_changed = "slug" in data
+        category_changed = "category_id" in data
+
+        new_slug: Optional[str] = None
+        if slug_changed or category_changed:
+            slug_input = data["slug"] if slug_changed else _base_segment(page.slug)
+            category_id = data["category_id"] if category_changed else page.category_id
+            new_slug = self._compose_slug(slug_input, category_id)
+            if new_slug != page.slug:
+                existing = self._repo.find_by_slug(new_slug)
+                if existing is not None and existing.id != page.id:
+                    raise CmsPageSlugConflictError(
+                        f"Slug '{new_slug}' is already in use"
+                    )
 
         self._apply_data(page, data)
+        if new_slug is not None:
+            page.slug = new_slug
         self._repo.save(page)
         return page.to_dict()
 

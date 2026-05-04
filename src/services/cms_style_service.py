@@ -146,11 +146,98 @@ class CmsStyleService:
                 )
         return buf.getvalue()
 
-    def import_style(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        slug = unique_slug(
-            data.get("slug") or _slugify(data.get("name", "imported")),
-            lambda s: self._repo.find_by_slug(s) is not None,
-        )
+    def import_styles_zip(
+        self, raw: bytes, mode: str = "copy"
+    ) -> Dict[str, Any]:
+        """Import every .json entry inside a zip archive.
+
+        Accepts either flat (`<slug>.json`) or nested (`styles/<slug>.json`)
+        layout — the export zip uses the nested form, loose uploads tend
+        to be flat.
+
+        Returns { imported, skipped, failed, items, errors }:
+          * imported — number of styles successfully created or replaced
+          * skipped  — non-JSON entries (README, etc.)
+          * failed   — JSON entries that could not be imported
+          * items    — list of imported style dicts
+          * errors   — list of {file, error} for each failure
+        """
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(raw))
+        except zipfile.BadZipFile as e:
+            raise ValueError(f"Not a valid zip archive: {e}") from e
+
+        imported: List[Dict[str, Any]] = []
+        errors: List[Dict[str, str]] = []
+        skipped = 0
+
+        for name in archive.namelist():
+            # zip directories end with "/"; ignore those.
+            if name.endswith("/"):
+                continue
+            # macOS `zip` injects AppleDouble resource-fork sidecars under
+            # __MACOSX/._*. They carry the original .json extension but
+            # contain binary metadata — drop them silently, they're not
+            # user-visible entries the admin meant to upload.
+            basename = name.rsplit("/", 1)[-1]
+            if name.startswith("__MACOSX/") or basename.startswith("._"):
+                continue
+            if not name.lower().endswith(".json"):
+                skipped += 1
+                continue
+            try:
+                data = json.loads(archive.read(name))
+                if isinstance(data, dict) and "data" in data and isinstance(data["data"], dict):
+                    data = data["data"]
+                if not isinstance(data, dict):
+                    raise ValueError("entry is not a JSON object")
+                imported.append(self.import_style(data, mode=mode))
+            except Exception as e:
+                errors.append({"file": name, "error": str(e)})
+
+        return {
+            "imported": len(imported),
+            "skipped": skipped,
+            "failed": len(errors),
+            "items": imported,
+            "errors": errors,
+        }
+
+    def import_style(
+        self, data: Dict[str, Any], mode: str = "copy"
+    ) -> Dict[str, Any]:
+        """Import one style from a JSON payload.
+
+        mode:
+          * "copy"    — if a style with that slug exists, save as a new
+                        row with "-2" / "-3" suffix. Never mutates existing
+                        rows. (default, preserves legacy behaviour)
+          * "replace" — if a style with that slug exists, overwrite its
+                        name / source_css / sort_order / is_active in place.
+                        is_default is intentionally preserved — re-importing
+                        the default theme must not demote it.
+        """
+        if mode not in ("copy", "replace"):
+            raise ValueError(f"Unknown import mode: {mode!r}")
+
+        requested_slug = data.get("slug") or _slugify(data.get("name", "imported"))
+
+        if mode == "replace":
+            existing = self._repo.find_by_slug(requested_slug)
+            if existing is not None:
+                existing.name = data.get("name", existing.name).strip()
+                existing.source_css = data.get("source_css", existing.source_css)
+                existing.sort_order = data.get("sort_order", existing.sort_order)
+                existing.is_active = data.get("is_active", existing.is_active)
+                self._repo.save(existing)
+                return existing.to_dict()
+            slug = requested_slug
+        else:
+            slug = unique_slug(
+                requested_slug,
+                lambda s: self._repo.find_by_slug(s) is not None,
+            )
+
         obj = self._build(data, slug)
         self._repo.save(obj)
         return obj.to_dict()

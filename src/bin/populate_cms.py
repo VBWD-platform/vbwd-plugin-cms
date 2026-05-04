@@ -3,7 +3,7 @@
 Populate the CMS database with demo data.
 
 Creates:
-  - 5 light themes + 5 dark themes (CmsStyle)
+  - All themes from docs/imports/theme-styles.json (CmsStyle)
   - Navigation widgets: header-nav (menu with Pricing submenu), footer-nav (menu)
   - Content widgets: hero-home1, hero-home2, cta-primary, features-3col, features-slideshow,
                      pricing-embed-demo, pricing-native-plans, contact-form (vue-component) (html)
@@ -1368,7 +1368,7 @@ def populate_cms() -> None:
 
     print("\n" + "=" * 55)
     print("✓ CMS demo data population complete")
-    print(f"  Styles      : {len(STYLES)} (5 light + 5 dark)")
+    print(f"  Styles      : {len(STYLES)}")
     print(
         f"  Widgets     : {len(widget_map)} (incl. breadcrumbs, contact-form, ghrm-* vue-components)"
     )

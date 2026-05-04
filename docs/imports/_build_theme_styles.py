@@ -134,10 +134,11 @@ BASE_CSS = dedent("""\
       padding-left: 0 !important;
       margin-left: 0 !important;
     }
-    .cms-widget--header-nav .cms-menu__item:first-child > .cms-menu__link,
-    .cms-widget--footer-nav .cms-menu__item:first-child > .cms-menu__link {
-      padding-left: 0 !important;
-    }
+    /* All menu items share the default .cms-menu__link padding so the
+     * first one lines up visually with its siblings. Previously the first
+     * link was pinned to padding-left:0 to make it flush with the hero /
+     * cta-band outer edge, but that made item #1 stick out to the left of
+     * items #2..N. Visual consistency inside the menu wins. */
     .cms-widget--header-nav .cms-burger {
       margin-left: -6px;   /* neutralise the button's own 6px inner padding */
     }
@@ -505,17 +506,17 @@ WIDTHS = {
 
 _MENU_RULES_FULLWIDTH = """\
 /* header-nav: force burger drawer at every viewport */
-.cms-widget--header-nav .cms-burger { display: flex !important; }
+.cms-widget--header-nav .cms-burger { display: flex !important; position: relative !important; z-index: 400 !important; }
 .cms-widget--header-nav .cms-menu {
   display: flex !important; flex-direction: column !important; align-items: stretch !important;
-  position: fixed !important; top: 0; right: -100%;
+  position: fixed !important; top: 0; left: -100%;
   width: min(340px, 88vw); height: 100dvh;
   background: var(--color-bg, #fff);
   padding: 4rem 0 2rem; overflow-y: auto; z-index: 300;
-  transition: right 0.28s ease;
-  box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+  transition: left 0.28s ease;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.15);
 }
-.cms-widget--header-nav .cms-menu--open { right: 0 !important; }
+.cms-widget--header-nav .cms-menu--open { left: 0 !important; }
 .cms-widget--header-nav .cms-menu__item { position: static !important; border-bottom: 1px solid var(--color-border, #e5e7eb); }
 .cms-widget--header-nav .cms-menu__link { padding: 0.9rem 1.5rem !important; font-size: 1rem !important; justify-content: space-between !important; }
 .cms-widget--header-nav .cms-menu__sub { position: static !important; box-shadow: none !important; border: none !important; border-radius: 0 !important; max-height: 0; overflow: hidden; display: block !important; transition: max-height 0.25s ease; }
@@ -553,17 +554,17 @@ _MENU_RULES_HORIZONTAL = """\
   .cms-widget--header-nav .cms-menu__sub--open { display: block !important; }
 }
 @media (max-width: 750px) {
-  .cms-widget--header-nav .cms-burger { display: flex !important; }
+  .cms-widget--header-nav .cms-burger { display: flex !important; position: relative !important; z-index: 400 !important; }
   .cms-widget--header-nav .cms-menu {
     display: flex !important; flex-direction: column !important; align-items: stretch !important;
-    position: fixed !important; top: 0; right: -100%;
+    position: fixed !important; top: 0; left: -100%;
     width: min(320px, 88vw); height: 100dvh;
     background: var(--color-bg, #fff);
     padding: 4rem 0 2rem; overflow-y: auto; z-index: 300;
-    transition: right 0.28s ease;
-    box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+    transition: left 0.28s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
   }
-  .cms-widget--header-nav .cms-menu--open { right: 0 !important; }
+  .cms-widget--header-nav .cms-menu--open { left: 0 !important; }
   .cms-widget--header-nav .cms-menu__item { position: static !important; border-bottom: 1px solid var(--color-border, #e5e7eb); }
   .cms-widget--header-nav .cms-menu__link { padding: 0.9rem 1.5rem !important; font-size: 1rem !important; justify-content: space-between !important; }
   .cms-widget--header-nav .cms-menu__sub { position: static !important; box-shadow: none !important; border: none !important; border-radius: 0 !important; max-height: 0; overflow: hidden; display: block !important; transition: max-height 0.25s ease; }
@@ -613,6 +614,35 @@ def build_one(color_slug: str, color: dict, width_slug: str, width: dict, sort_o
     }
 
 
+EXTRAS_DIR = Path(__file__).parent / "styles" / "styles"
+BUNDLED_KEYS = ("slug", "name", "source_css", "sort_order", "is_active", "is_default")
+
+
+def _load_extras(start_order: int, generated_slugs: set[str]) -> list[dict]:
+    """Hand-authored themes that live outside the palette × width matrix.
+
+    Scans docs/imports/styles/styles/ for standalone CmsStyle exports.
+    Any JSON whose slug matches the generated matrix is skipped — the
+    generated row is the canonical source. Everything else (e.g.
+    aurora-nebula-narrow, neon-boulevard-fullwidth) is merged in, with
+    sort_order rewritten so extras slot in after the generated set.
+    """
+    if not EXTRAS_DIR.is_dir():
+        return []
+    out = []
+    for path in sorted(EXTRAS_DIR.glob("*.json")):
+        src = json.loads(path.read_text())
+        slug = src.get("slug")
+        if not slug or slug in generated_slugs:
+            continue
+        entry = {k: src.get(k) for k in BUNDLED_KEYS}
+        entry["is_default"] = False  # never let an extra claim the default slot
+        start_order += 1
+        entry["sort_order"] = start_order
+        out.append(entry)
+    return out
+
+
 def main() -> None:
     themes: list[dict] = []
     order = 0
@@ -621,14 +651,18 @@ def main() -> None:
             order += 1
             themes.append(build_one(color_slug, color, width_slug, width, sort_order=order))
 
+    generated_slugs = {t["slug"] for t in themes}
+    extras = _load_extras(order, generated_slugs)
+    themes.extend(extras)
+
     obj = {
         "version": 1,
-        "description": "CMS style import — 6 colours × 2 widths (sprint 27 theme matrix).",
+        "description": "CMS style import — generated matrix + styles/styles/.",
         "default_slug": "light-clean-narrow",
         "themes": themes,
     }
     OUT.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
-    print(f"Wrote {len(themes)} themes → {OUT}")
+    print(f"Wrote {len(themes)} themes → {OUT} ({len(extras)} from styles/styles/)")
 
 
 if __name__ == "__main__":

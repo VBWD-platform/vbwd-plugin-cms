@@ -1332,11 +1332,30 @@ def admin_import_styles():
     raw = request.get_data()
     if not raw:
         return jsonify({"error": "Request body required"}), 400
+    # Mode: "replace" (upsert by slug) or "copy" (default; bump slug to -2 on
+    # conflict). Accepted as ?mode= query param, or "mode" key in JSON body.
+    mode = (request.args.get("mode") or "").strip() or "copy"
+
+    # ZIP archives start with the "PK\x03\x04" local-file-header magic.
+    # A zip payload triggers bulk multi-file import.
+    if raw[:4] == b"PK\x03\x04":
+        try:
+            result = _style_service().import_styles_zip(raw, mode=mode)
+            return jsonify(result), 200
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": f"Import failed: {e}"}), 400
+
     try:
         payload = _json.loads(raw)
-        data = payload.get("data", payload)
-        result = _style_service().import_style(data)
+        if isinstance(payload, dict) and "mode" in payload and not request.args.get("mode"):
+            mode = payload["mode"]
+        data = payload.get("data", payload) if isinstance(payload, dict) else payload
+        result = _style_service().import_style(data, mode=mode)
         return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Import failed: {e}"}), 400
 
