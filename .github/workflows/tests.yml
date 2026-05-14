@@ -44,14 +44,16 @@ jobs:
         run: |
           black --check --diff \
             vbwd-backend/plugins/cms/ \
-            --exclude='/(\.git|\.github|__pycache__|\.pytest_cache)/'
+            --exclude='/(\.git|\.github|__pycache__|\.pytest_cache|docs)/'
 
       - name: Style check — Flake8
+        # docs/imports/_build_theme_styles.py is a CSS-string code generator —
+        # the long lines are inline CSS literals, not source code to lint.
         run: |
           flake8 vbwd-backend/plugins/cms/ \
             --max-line-length=120 \
             --extend-ignore=E203,W503 \
-            --exclude=.git,.github,__pycache__,.pytest_cache
+            --exclude=.git,.github,__pycache__,.pytest_cache,docs
 
       - name: Style check — Mypy
         run: |

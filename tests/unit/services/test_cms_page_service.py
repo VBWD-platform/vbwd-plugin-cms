@@ -202,12 +202,11 @@ class TestResolvedStyle:
     def test_explicit_page_style_is_preserved(self):
         page = _page("p")
         from uuid import uuid4
+
         explicit_id = uuid4()
         page.style_id = explicit_id
         default = _style()
-        svc, *_ = _make_service_with_style_repo(
-            pages=[page], default_style=default
-        )
+        svc, *_ = _make_service_with_style_repo(pages=[page], default_style=default)
 
         result = svc.get_page("p")
         assert result["resolved_style_id"] == str(explicit_id)
@@ -217,9 +216,7 @@ class TestResolvedStyle:
         page = _page("p")
         page.style_id = None
         default = _style(slug="defaultlook", is_default=True, is_active=True)
-        svc, *_ = _make_service_with_style_repo(
-            pages=[page], default_style=default
-        )
+        svc, *_ = _make_service_with_style_repo(pages=[page], default_style=default)
 
         result = svc.get_page("p")
         assert result["resolved_style_id"] == str(default.id)
@@ -228,9 +225,7 @@ class TestResolvedStyle:
     def test_no_default_and_no_page_style_yields_null(self):
         page = _page("p")
         page.style_id = None
-        svc, *_ = _make_service_with_style_repo(
-            pages=[page], default_style=None
-        )
+        svc, *_ = _make_service_with_style_repo(pages=[page], default_style=None)
 
         result = svc.get_page("p")
         assert result["resolved_style_id"] is None
@@ -240,9 +235,7 @@ class TestResolvedStyle:
         page = _page("p")
         page.style_id = None
         default = _style(slug="inactive", is_default=True, is_active=False)
-        svc, *_ = _make_service_with_style_repo(
-            pages=[page], default_style=default
-        )
+        svc, *_ = _make_service_with_style_repo(pages=[page], default_style=default)
 
         result = svc.get_page("p")
         assert result["resolved_style_id"] is None

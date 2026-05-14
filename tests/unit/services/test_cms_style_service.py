@@ -127,7 +127,7 @@ def _make_service_with_default(styles=None):
     svc, repo = _make_service(styles)
 
     def _find_default():
-        for s in (styles or []):
+        for s in styles or []:
             if getattr(s, "is_default", False):
                 return s
         return None

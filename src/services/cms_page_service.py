@@ -106,9 +106,7 @@ class CmsPageService:
         result["items"] = [p.to_dict() for p in result["items"]]
         return result
 
-    def _compose_slug(
-        self, slug_input: str, category_id: Optional[Any]
-    ) -> str:
+    def _compose_slug(self, slug_input: str, category_id: Optional[Any]) -> str:
         """Compose the stored slug (full URL path).
 
         Rules:
@@ -137,9 +135,7 @@ class CmsPageService:
 
         existing = self._repo.find_by_slug(composed_slug)
         if existing:
-            raise CmsPageSlugConflictError(
-                f"Slug '{composed_slug}' is already in use"
-            )
+            raise CmsPageSlugConflictError(f"Slug '{composed_slug}' is already in use")
 
         import uuid as _uuid
 
@@ -238,7 +234,7 @@ class CmsPageService:
         elif isinstance(parsed, list):
             records = parsed
         else:
-            raise ValueError("Import body must be a list, a dict, or {\"pages\": [...]}")
+            raise ValueError('Import body must be a list, a dict, or {"pages": [...]}')
 
         created = 0
         skipped = 0
@@ -272,15 +268,14 @@ class CmsPageService:
         layout_slug = rec.pop("layout_slug", None)
         if layout_slug and "layout_id" not in rec:
             obj = (
-                self._repo.session.query(CmsLayout)
-                .filter_by(slug=layout_slug)
-                .first()
+                self._repo.session.query(CmsLayout).filter_by(slug=layout_slug).first()
                 if hasattr(self._repo, "session")
                 else None
             )
             # fall back to a raw session lookup
             if obj is None:
                 from vbwd.extensions import db
+
                 obj = db.session.query(CmsLayout).filter_by(slug=layout_slug).first()
             if obj is not None:
                 rec["layout_id"] = str(obj.id)
@@ -288,6 +283,7 @@ class CmsPageService:
         style_slug = rec.pop("style_slug", None)
         if style_slug and "style_id" not in rec:
             from vbwd.extensions import db
+
             obj = db.session.query(CmsStyle).filter_by(slug=style_slug).first()
             if obj is not None:
                 rec["style_id"] = str(obj.id)
@@ -295,6 +291,7 @@ class CmsPageService:
         category_slug = rec.pop("category_slug", None)
         if category_slug and "category_id" not in rec:
             from vbwd.extensions import db
+
             obj = db.session.query(CmsCategory).filter_by(slug=category_slug).first()
             if obj is not None:
                 rec["category_id"] = str(obj.id)

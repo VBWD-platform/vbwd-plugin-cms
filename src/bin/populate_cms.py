@@ -24,7 +24,9 @@ Usage:
 import sys
 import re
 import base64
+import json as _json
 from pathlib import Path
+from pathlib import Path as _Path
 from typing import Optional, cast
 
 project_root = Path(__file__).parent.parent.parent.parent.parent
@@ -65,17 +67,18 @@ def _split_widget_content(html: str) -> tuple:
 
 # ─── Styles ───────────────────────────────────────────────────────────────────
 
-import json as _json
-from pathlib import Path as _Path
-
 # Themes are authored as data in docs/imports/theme-styles.json.
 # Re-regenerate via docs/imports/_build_theme_styles.py.
-_THEMES_PATH = _Path(__file__).resolve().parents[2] / "docs" / "imports" / "theme-styles.json"
+_THEMES_PATH = (
+    _Path(__file__).resolve().parents[2] / "docs" / "imports" / "theme-styles.json"
+)
 
 
 def _load_theme_styles() -> tuple[list[dict], str | None]:
     if not _THEMES_PATH.exists():
-        print(f"  WARN: theme-styles.json missing at {_THEMES_PATH} — no styles imported")
+        print(
+            f"  WARN: theme-styles.json missing at {_THEMES_PATH} — no styles imported"
+        )
         return [], None
     doc = _json.loads(_THEMES_PATH.read_text())
     return doc.get("themes", []), doc.get("default_slug")
@@ -95,7 +98,6 @@ LEGACY_STYLE_SLUGS = [
     "dark-purple",
     "dark-carbon",
 ]
-
 
 
 # ─── Widget content ────────────────────────────────────────────────────────────
@@ -805,7 +807,7 @@ STANDARD_CONTENT_JSON = {
 # Layouts are authored as JSON in docs/imports/layouts/ — re-imported on each
 # populator run. Edit those files, not this script.
 _LAYOUTS_DIR = _THEMES_PATH.parent / "layouts"
-_PAGES_DIR   = _THEMES_PATH.parent / "pages"
+_PAGES_DIR = _THEMES_PATH.parent / "pages"
 
 
 def _load_layouts() -> list[dict]:
@@ -1308,13 +1310,21 @@ def populate_cms() -> None:
     print("\n── Pages ───────────────────────────────────────────────────────")
     pages_data = _load_pages()
     category_by_slug = {
-        "about": cat_about, "blog": cat_blog, "static-pages": cat_static, "ghrm": cat_ghrm,
+        "about": cat_about,
+        "blog": cat_blog,
+        "static-pages": cat_static,
+        "ghrm": cat_ghrm,
     }
     page_map: dict[str, "CmsPage"] = {}
     for pd in pages_data:
-        layout_obj = layout_map.get(pd.get("layout_slug")) if pd.get("layout_slug") else None
-        style_obj = style_map.get(pd.get("style_slug")) if pd.get("style_slug") else None
-        cat_obj = category_by_slug.get(pd.get("category_slug")) if pd.get("category_slug") else None
+        page_layout_slug = cast(Optional[str], pd.get("layout_slug"))
+        layout_obj = layout_map.get(page_layout_slug) if page_layout_slug else None
+        page_style_slug = cast(Optional[str], pd.get("style_slug"))
+        style_obj = style_map.get(page_style_slug) if page_style_slug else None
+        page_category_slug = cast(Optional[str], pd.get("category_slug"))
+        cat_obj = (
+            category_by_slug.get(page_category_slug) if page_category_slug else None
+        )
         page = _get_or_create_page(
             pd["slug"],
             pd["name"],
@@ -1334,14 +1344,14 @@ def populate_cms() -> None:
     print("\n── Page Widgets ────────────────────────────────────────────────")
     for pd in pages_data:
         assignments = [
-            (a["area_name"], a["widget_slug"]) for a in pd.get("page_widget_assignments", [])
+            (a["area_name"], a["widget_slug"])
+            for a in pd.get("page_widget_assignments", [])
         ]
         if assignments:
-            page = page_map.get(pd["slug"])
-            if page:
-                _set_page_widgets(page, assignments, widget_map)
+            page_for_assign = page_map.get(pd["slug"])
+            if page_for_assign:
+                _set_page_widgets(page_for_assign, assignments, widget_map)
     db.session.commit()
-
 
     print("\n── Routing Rules ───────────────────────────────────────────────")
     rule = (

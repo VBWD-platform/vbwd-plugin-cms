@@ -78,7 +78,12 @@ class CmsStyleService:
         if data.get("is_default") is True and not obj.is_default:
             self.set_default(style_id)
             # re-fetch for the remaining field updates below
-            obj = self._repo.find_by_id(style_id)
+            refetched = self._repo.find_by_id(style_id)
+            if refetched is None:
+                raise CmsStyleNotFoundError(
+                    f"Style {style_id} disappeared after set_default"
+                )
+            obj = refetched
         for field in ("name", "slug", "source_css", "sort_order", "is_active"):
             if field in data:
                 setattr(obj, field, data[field])
@@ -146,9 +151,7 @@ class CmsStyleService:
                 )
         return buf.getvalue()
 
-    def import_styles_zip(
-        self, raw: bytes, mode: str = "copy"
-    ) -> Dict[str, Any]:
+    def import_styles_zip(self, raw: bytes, mode: str = "copy") -> Dict[str, Any]:
         """Import every .json entry inside a zip archive.
 
         Accepts either flat (`<slug>.json`) or nested (`styles/<slug>.json`)
@@ -187,7 +190,11 @@ class CmsStyleService:
                 continue
             try:
                 data = json.loads(archive.read(name))
-                if isinstance(data, dict) and "data" in data and isinstance(data["data"], dict):
+                if (
+                    isinstance(data, dict)
+                    and "data" in data
+                    and isinstance(data["data"], dict)
+                ):
                     data = data["data"]
                 if not isinstance(data, dict):
                     raise ValueError("entry is not a JSON object")
@@ -203,9 +210,7 @@ class CmsStyleService:
             "errors": errors,
         }
 
-    def import_style(
-        self, data: Dict[str, Any], mode: str = "copy"
-    ) -> Dict[str, Any]:
+    def import_style(self, data: Dict[str, Any], mode: str = "copy") -> Dict[str, Any]:
         """Import one style from a JSON payload.
 
         mode:

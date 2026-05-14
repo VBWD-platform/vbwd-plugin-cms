@@ -114,12 +114,15 @@ class CmsImageService:
         try:
             from PIL import Image as PILImage
 
-            full_path = os.path.join(
-                self._storage.base_path if hasattr(self._storage, "base_path") else "",
-                image.file_path,
+            # Pillow 10+ moved LANCZOS under Resampling; older Pillow exposes it on
+            # the module. Resolve once so the call site is version-independent.
+            lanczos = getattr(
+                getattr(PILImage, "Resampling", PILImage), "LANCZOS", None
             )
-            with PILImage.open(full_path) as pil_img:
-                resized = pil_img.resize((width, height), PILImage.LANCZOS)
+            with PILImage.open(
+                io.BytesIO(self._storage.read(image.file_path))
+            ) as pil_img:
+                resized = pil_img.resize((width, height), lanczos)
                 buf = io.BytesIO()
                 fmt = pil_img.format or "JPEG"
                 resized.save(buf, format=fmt)

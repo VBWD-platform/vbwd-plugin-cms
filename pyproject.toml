@@ -1,0 +1,8 @@
+[tool.black]
+# docs/imports/_build_theme_styles.py is a CSS-string code generator —
+# the long lines are inline CSS literals, not Python source to reformat.
+extend-exclude = '''
+(
+    /docs/
+)
+'''

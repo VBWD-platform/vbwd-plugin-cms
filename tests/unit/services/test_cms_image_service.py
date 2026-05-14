@@ -94,25 +94,26 @@ class TestUploadImage:
 
 class TestResizeImage:
     def test_resize_updates_dimensions(self):
+        try:
+            from PIL import Image as PILImage
+        except ImportError:
+            pytest.skip("Pillow not available")
+
         img = _image("resize-me")
         svc, repo, storage = _make_service(images=[img])
 
-        # Pre-populate storage with a minimal valid PNG
-        png_data = (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00"
-            b"\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18"
-            b"\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
-        storage.save(png_data, img.file_path)
+        # Generate a real, decodable PNG (the previous hand-crafted minimal
+        # PNG was a 1×1 stream Pillow could not actually resize — broken
+        # data stream). Use Pillow to produce one so the storage round-trip
+        # exercises real resize behaviour.
+        seed = PILImage.new("RGB", (200, 150), color="red")
+        seed_buf = io.BytesIO()
+        seed.save(seed_buf, format="PNG")
+        storage.save(seed_buf.getvalue(), img.file_path)
 
-        try:
-            result = svc.resize_image(str(img.id), 400, 300)
-            assert result["width_px"] == 400
-            assert result["height_px"] == 300
-        except RuntimeError:
-            # Pillow not installed in test env — that's acceptable
-            pytest.skip("Pillow not available")
+        result = svc.resize_image(str(img.id), 400, 300)
+        assert result["width_px"] == 400
+        assert result["height_px"] == 300
 
     def test_resize_nonexistent_raises(self):
         svc, _, _ = _make_service()

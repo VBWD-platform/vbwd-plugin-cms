@@ -51,11 +51,13 @@ def _existing(slug: str):
 
 class TestImportStylesZip:
     def test_zip_with_three_new_styles_imports_all(self, service, repo):
-        raw = _zip_of({
-            "a.json": {"slug": "theme-a", "name": "A", "source_css": ""},
-            "b.json": {"slug": "theme-b", "name": "B", "source_css": ""},
-            "c.json": {"slug": "theme-c", "name": "C", "source_css": ""},
-        })
+        raw = _zip_of(
+            {
+                "a.json": {"slug": "theme-a", "name": "A", "source_css": ""},
+                "b.json": {"slug": "theme-b", "name": "B", "source_css": ""},
+                "c.json": {"slug": "theme-c", "name": "C", "source_css": ""},
+            }
+        )
 
         result = service.import_styles_zip(raw, mode="replace")
 
@@ -65,10 +67,20 @@ class TestImportStylesZip:
 
     def test_zip_tolerates_nested_paths(self, service, repo):
         """Export format places files under styles/<slug>.json."""
-        raw = _zip_of({
-            "styles/theme-a.json": {"slug": "theme-a", "name": "A", "source_css": ""},
-            "styles/theme-b.json": {"slug": "theme-b", "name": "B", "source_css": ""},
-        })
+        raw = _zip_of(
+            {
+                "styles/theme-a.json": {
+                    "slug": "theme-a",
+                    "name": "A",
+                    "source_css": "",
+                },
+                "styles/theme-b.json": {
+                    "slug": "theme-b",
+                    "name": "B",
+                    "source_css": "",
+                },
+            }
+        )
 
         result = service.import_styles_zip(raw, mode="copy")
         assert result["imported"] == 2
@@ -77,10 +89,12 @@ class TestImportStylesZip:
         existing_map = {"theme-a": _existing("theme-a")}
         repo.find_by_slug.side_effect = lambda s: existing_map.get(s)
 
-        raw = _zip_of({
-            "a.json": {"slug": "theme-a", "name": "New A", "source_css": "a{}"},
-            "b.json": {"slug": "theme-b", "name": "B", "source_css": ""},
-        })
+        raw = _zip_of(
+            {
+                "a.json": {"slug": "theme-a", "name": "New A", "source_css": "a{}"},
+                "b.json": {"slug": "theme-b", "name": "B", "source_css": ""},
+            }
+        )
 
         result = service.import_styles_zip(raw, mode="replace")
 

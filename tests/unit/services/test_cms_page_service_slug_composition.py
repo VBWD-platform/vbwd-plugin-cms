@@ -20,11 +20,13 @@ import pytest
 @pytest.fixture
 def category_factory():
     """Build a mock category with an id + slug."""
+
     def _make(slug):
         category = MagicMock()
         category.id = uuid4()
         category.slug = slug
         return category
+
     return _make
 
 
@@ -54,39 +56,47 @@ class TestCreatePageSlugComposition:
         category = category_factory("features")
         service._category_repo_mock.find_by_id.return_value = category
 
-        page = service.create_page({
-            "name": "CMS Module",
-            "slug": "cms-module",
-            "category_id": str(category.id),
-        })
+        page = service.create_page(
+            {
+                "name": "CMS Module",
+                "slug": "cms-module",
+                "category_id": str(category.id),
+            }
+        )
         assert page["slug"] == "features/cms-module"
 
     def test_slug_with_slash_overrides_category_prefix(self, service, category_factory):
         category = category_factory("features")
         service._category_repo_mock.find_by_id.return_value = category
 
-        page = service.create_page({
-            "name": "Override",
-            "slug": "marketing/override",
-            "category_id": str(category.id),
-        })
+        page = service.create_page(
+            {
+                "name": "Override",
+                "slug": "marketing/override",
+                "category_id": str(category.id),
+            }
+        )
         assert page["slug"] == "marketing/override"
 
     def test_leading_and_trailing_slashes_get_stripped(self, service, category_factory):
-        page = service.create_page({
-            "name": "x",
-            "slug": "/foo/bar/",
-        })
+        page = service.create_page(
+            {
+                "name": "x",
+                "slug": "/foo/bar/",
+            }
+        )
         assert page["slug"] == "foo/bar"
 
     def test_missing_category_row_falls_back_to_flat_slug(self, service):
         service._category_repo_mock.find_by_id.return_value = None
 
-        page = service.create_page({
-            "name": "Orphan",
-            "slug": "orphan",
-            "category_id": str(uuid4()),
-        })
+        page = service.create_page(
+            {
+                "name": "Orphan",
+                "slug": "orphan",
+                "category_id": str(uuid4()),
+            }
+        )
         assert page["slug"] == "orphan"
 
 
@@ -101,7 +111,9 @@ class TestUpdatePageSlugRecomposition:
         page.category_id = category_id
         return page
 
-    def test_changing_only_slug_recomposes_with_existing_category(self, service, category_factory):
+    def test_changing_only_slug_recomposes_with_existing_category(
+        self, service, category_factory
+    ):
         category = category_factory("features")
         existing = self._existing_page("features/old-slug", category.id)
         service._page_repo_mock.find_by_id.return_value = existing
@@ -110,7 +122,9 @@ class TestUpdatePageSlugRecomposition:
         updated = service.update_page(str(existing.id), {"slug": "new-slug"})
         assert updated["slug"] == "features/new-slug"
 
-    def test_changing_only_category_recomposes_with_new_category(self, service, category_factory):
+    def test_changing_only_category_recomposes_with_new_category(
+        self, service, category_factory
+    ):
         old_cat = category_factory("features")
         new_cat = category_factory("products")
         existing = self._existing_page("features/cms-module", old_cat.id)
@@ -135,7 +149,9 @@ class TestUpdatePageSlugRecomposition:
         assert updated["slug"] == "cms-module"
 
     def test_explicit_multi_segment_slug_during_update_overrides_category(
-        self, service, category_factory,
+        self,
+        service,
+        category_factory,
     ):
         category = category_factory("features")
         existing = self._existing_page("features/old", category.id)
@@ -150,7 +166,9 @@ class TestUpdatePageSlugRecomposition:
 
 
 class TestLookupByFullPath:
-    def test_get_page_by_full_path_uses_slug_column_directly(self, service, category_factory):
+    def test_get_page_by_full_path_uses_slug_column_directly(
+        self, service, category_factory
+    ):
         from plugins.cms.src.models.cms_page import CmsPage
 
         page = CmsPage()
@@ -161,5 +179,7 @@ class TestLookupByFullPath:
         service._page_repo_mock.find_by_slug.return_value = page
 
         result = service.get_page("features/cms-module", published_only=True)
-        service._page_repo_mock.find_by_slug.assert_called_once_with("features/cms-module")
+        service._page_repo_mock.find_by_slug.assert_called_once_with(
+            "features/cms-module"
+        )
         assert result["slug"] == "features/cms-module"

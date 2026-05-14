@@ -120,6 +120,4 @@ class TestImportReplaceMode:
 class TestImportInvalidMode:
     def test_unknown_mode_raises(self, service):
         with pytest.raises(ValueError, match="mode"):
-            service.import_style(
-                {"slug": "x", "name": "X"}, mode="merge-and-pray"
-            )
+            service.import_style({"slug": "x", "name": "X"}, mode="merge-and-pray")

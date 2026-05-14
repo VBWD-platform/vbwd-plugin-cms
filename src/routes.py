@@ -1349,7 +1349,11 @@ def admin_import_styles():
 
     try:
         payload = _json.loads(raw)
-        if isinstance(payload, dict) and "mode" in payload and not request.args.get("mode"):
+        if (
+            isinstance(payload, dict)
+            and "mode" in payload
+            and not request.args.get("mode")
+        ):
             mode = payload["mode"]
         data = payload.get("data", payload) if isinstance(payload, dict) else payload
         result = _style_service().import_style(data, mode=mode)
@@ -1400,6 +1404,7 @@ def admin_delete_style(style_id: str):
 
 
 # ── Default-style management (sprint 26) ─────────────────────────────────────
+
 
 @cms_bp.route("/api/v1/admin/cms/styles/default", methods=["DELETE"])
 @require_auth

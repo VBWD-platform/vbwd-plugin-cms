@@ -52,12 +52,8 @@ class TestStyleDefaultEndpoints:
     def test_post_default_demotes_previous(self, client, db, auth_headers):
         a = _make_style(client, auth_headers, "a")
         b = _make_style(client, auth_headers, "b")
-        client.post(
-            f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers
-        )
-        client.post(
-            f"/api/v1/admin/cms/styles/{b['id']}/default", headers=auth_headers
-        )
+        client.post(f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers)
+        client.post(f"/api/v1/admin/cms/styles/{b['id']}/default", headers=auth_headers)
         a_after = client.get(
             f"/api/v1/admin/cms/styles/{a['id']}", headers=auth_headers
         ).get_json()
@@ -69,12 +65,8 @@ class TestStyleDefaultEndpoints:
 
     def test_delete_default_clears_flag(self, client, db, auth_headers):
         a = _make_style(client, auth_headers, "a")
-        client.post(
-            f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers
-        )
-        resp = client.delete(
-            "/api/v1/admin/cms/styles/default", headers=auth_headers
-        )
+        client.post(f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers)
+        resp = client.delete("/api/v1/admin/cms/styles/default", headers=auth_headers)
         assert resp.status_code == 200, resp.get_json()
 
         a_after = client.get(
@@ -84,9 +76,7 @@ class TestStyleDefaultEndpoints:
 
     def test_public_default_css_serves_css(self, client, db, auth_headers):
         a = _make_style(client, auth_headers, "public")
-        client.post(
-            f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers
-        )
+        client.post(f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers)
         resp = client.get("/api/v1/cms/styles/default/css")
         assert resp.status_code == 200
         assert "text/css" in resp.headers["Content-Type"]
@@ -100,12 +90,8 @@ class TestStyleDefaultEndpoints:
 
     def test_list_exposes_is_default_flag(self, client, db, auth_headers):
         a = _make_style(client, auth_headers, "listed")
-        client.post(
-            f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers
-        )
-        resp = client.get(
-            "/api/v1/admin/cms/styles?per_page=100", headers=auth_headers
-        )
+        client.post(f"/api/v1/admin/cms/styles/{a['id']}/default", headers=auth_headers)
+        resp = client.get("/api/v1/admin/cms/styles?per_page=100", headers=auth_headers)
         items = resp.get_json()["items"]
         defaults = [s for s in items if s["is_default"]]
         assert len(defaults) == 1
