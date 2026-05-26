@@ -28,6 +28,14 @@ def upgrade():
     if not _table_exists(conn, "cms_page") or not _table_exists(conn, "cms_category"):
         return
 
+    # NOT EXISTS guard: on prod, some pages were already prefixed via the
+    # service layer (e.g. `ghrm/ghrm-software-catalogue`) while their
+    # legacy unprefixed sibling (`ghrm-software-catalogue`) still exists.
+    # Prefixing the legacy row would collide with the canonical row's
+    # slug (UNIQUE), so leave conflicting legacy rows alone — they're
+    # orphan duplicates that need an admin cleanup, not a migration
+    # blocker. Without this guard the api container crash-loops at
+    # startup with psycopg2.errors.UniqueViolation on ix_cms_page_slug.
     conn.execute(
         sa.text(
             """
@@ -36,6 +44,12 @@ def upgrade():
               FROM cms_category AS category
              WHERE page.category_id = category.id
                AND position('/' in page.slug) = 0
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM cms_page AS existing
+                    WHERE existing.slug = category.slug || '/' || page.slug
+                      AND existing.id <> page.id
+               )
             """
         )
     )
