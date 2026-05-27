@@ -71,6 +71,19 @@ class CmsPlugin(BasePlugin):
         import logging
         import os
 
+        # Register the access-level content provider (S01). This lets core's
+        # /admin/access/user-levels/<id>/content route discover CMS-restricted
+        # pages and widgets through the IAccessLevelContentProvider port
+        # instead of importing CMS models directly.
+        from vbwd.services.access_level_content_provider import (
+            register_access_level_content_provider,
+        )
+        from plugins.cms.src.services.access_content_provider import (
+            CmsAccessContentProvider,
+        )
+
+        register_access_level_content_provider(CmsAccessContentProvider())
+
         try:
             from flask import current_app
             from plugins.cms.src.middleware.routing_middleware import (
@@ -114,4 +127,13 @@ class CmsPlugin(BasePlugin):
             )
 
     def on_disable(self) -> None:
-        pass
+        from vbwd.services.access_level_content_provider import (
+            clear_access_level_content_providers,
+        )
+
+        # Clear all providers — until a per-provider unregister hook exists,
+        # the clear is acceptable because CMS is the only registered provider
+        # today. When a second content-owning plugin lands, switch to a
+        # per-provider unregister (tracked in [[s10]]: registries→container
+        # Singletons, which makes per-plugin scoping automatic).
+        clear_access_level_content_providers()
