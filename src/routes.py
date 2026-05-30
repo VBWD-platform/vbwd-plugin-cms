@@ -32,6 +32,7 @@ Admin endpoints (require_admin):
         GET    /api/v1/admin/cms/images/export
 """
 import logging
+import mimetypes
 from flask import (
     Blueprint,
     jsonify,
@@ -40,6 +41,17 @@ from flask import (
     send_from_directory,
     Response,
 )
+
+# Some base images ship a mimetypes registry that does not know modern image
+# formats (e.g. `.webp` → None → served as application/octet-stream, which an
+# <img> cannot render). Register them explicitly so served uploads carry the
+# correct Content-Type.
+for _ext, _type in (
+    (".webp", "image/webp"),
+    (".avif", "image/avif"),
+    (".svg", "image/svg+xml"),
+):
+    mimetypes.add_type(_type, _ext)
 from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
 
@@ -334,7 +346,8 @@ def serve_upload(filename: str):
     """
     config = _cms_config()
     uploads_dir = config.get("uploads_base_path", "/app/uploads")
-    return send_from_directory(uploads_dir, filename)
+    mime, _ = mimetypes.guess_type(filename)
+    return send_from_directory(uploads_dir, filename, mimetype=mime or None)
 
 
 # ════════════════════════════════════════════════════════════════════════════
