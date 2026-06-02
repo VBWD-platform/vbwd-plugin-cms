@@ -42,16 +42,6 @@ from flask import (
     Response,
 )
 
-# Some base images ship a mimetypes registry that does not know modern image
-# formats (e.g. `.webp` → None → served as application/octet-stream, which an
-# <img> cannot render). Register them explicitly so served uploads carry the
-# correct Content-Type.
-for _ext, _type in (
-    (".webp", "image/webp"),
-    (".avif", "image/avif"),
-    (".svg", "image/svg+xml"),
-):
-    mimetypes.add_type(_type, _ext)
 from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
 
@@ -102,6 +92,17 @@ from plugins.cms.src.services.contact_form_service import (
     ValidationError,
 )
 from plugins.cms.src.services.cms_import_export_service import CmsImportExportService
+
+# Some base images ship a mimetypes registry that does not know modern image
+# formats (e.g. `.webp` → None → served as application/octet-stream, which an
+# <img> cannot render). Register them explicitly so served uploads carry the
+# correct Content-Type.
+for _ext, _type in (
+    (".webp", "image/webp"),
+    (".avif", "image/avif"),
+    (".svg", "image/svg+xml"),
+):
+    mimetypes.add_type(_type, _ext)
 
 logger = logging.getLogger(__name__)
 
