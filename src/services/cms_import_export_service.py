@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 
 _VERSION = "1.0"
 
+# S47.0: the unified typed export bumps the format version and emits typed
+# ``posts.json`` + ``terms.json``. The legacy ``_VERSION`` archives (per-section
+# cms_page ZIP) still import unchanged via ``import_zip`` / the legacy adapter.
+UNIFIED_FORMAT_VERSION = "2.0"
+
 VALID_SECTIONS = frozenset(
     (
         "categories",
@@ -44,6 +49,10 @@ VALID_SECTIONS = frozenset(
         "images",
     )
 )
+
+# Unified typed sections (S47.0). Separate from VALID_SECTIONS so the legacy
+# per-section export keeps its exact behaviour.
+UNIFIED_SECTIONS = frozenset(("posts", "terms"))
 
 
 class CmsImportExportService:
@@ -61,6 +70,8 @@ class CmsImportExportService:
         lw_repo,
         file_storage,
         pw_repo=None,
+        post_repo=None,
+        term_repo=None,
     ) -> None:
         self._cat = category_repo
         self._style = style_repo
@@ -72,20 +83,35 @@ class CmsImportExportService:
         self._lw = lw_repo
         self._pw = pw_repo
         self._fs = file_storage
+        # S47.0 unified repos — optional so the legacy per-section export keeps
+        # its existing constructor signature.
+        self._post = post_repo
+        self._term = term_repo
 
     # ── PUBLIC API ─────────────────────────────────────────────────────────────
 
     def export(self, sections: List[str]) -> bytes:
-        """Return a ZIP file as bytes containing the requested sections."""
-        effective = (
-            set(VALID_SECTIONS)
-            if ("all" in sections or "everything" in sections)
-            else set(sections) & VALID_SECTIONS
-        )
+        """Return a ZIP file as bytes containing the requested sections.
+
+        Legacy per-section names (pages/categories/…) export the cms_page
+        model unchanged. The S47.0 unified names (``posts``/``terms``) export
+        the typed cms_post / cms_term model; the manifest carries the bumped
+        ``format_version`` whenever a unified section is present.
+        """
+        wants_all = "all" in sections or "everything" in sections
+        effective = set(VALID_SECTIONS) if wants_all else set(sections) & VALID_SECTIONS
+        # Unified typed sections are opt-in by name only — ``all``/``everything``
+        # keep their legacy (cms_page) meaning so existing exports are byte-stable.
+        unified = set(sections) & UNIFIED_SECTIONS
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("manifest.json", self._manifest(sorted(effective)))
+            zf.writestr("manifest.json", self._manifest(sorted(effective | unified)))
+
+            if "posts" in unified:
+                zf.writestr("posts.json", _json(self._export_posts()))
+            if "terms" in unified:
+                zf.writestr("terms.json", _json(self._export_terms()))
 
             if "categories" in effective:
                 zf.writestr(
@@ -217,17 +243,237 @@ class CmsImportExportService:
 
         return {"imported": counters, "errors": errors}
 
+    # ── UNIFIED IMPORT (S47.0) ──────────────────────────────────────────────────
+
+    def import_unified(self, zip_data: bytes, conflict_strategy: str) -> dict:
+        """Import a typed unified archive (``posts.json`` + ``terms.json``).
+
+        Mirrors ``import_zip``'s return shape. Terms import before posts so a
+        post's term references can resolve (term assignment is owned by the
+        admin CRUD, not this bulk importer). Slug uniqueness is enforced by the
+        unified ``(type, slug)`` / ``(term_type, slug)`` namespace.
+        """
+        counters: Dict[str, int] = {}
+        errors: List[str] = []
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            names = set(zf.namelist())
+            if "terms.json" in names:
+                count, errs = self._import_unified_terms(
+                    json.loads(zf.read("terms.json")), conflict_strategy
+                )
+                counters["terms"] = count
+                errors.extend(errs)
+            if "posts.json" in names:
+                count, errs = self._import_unified_posts(
+                    json.loads(zf.read("posts.json")), conflict_strategy
+                )
+                counters["posts"] = count
+                errors.extend(errs)
+        return {"imported": counters, "errors": errors}
+
+    def import_legacy_as_unified(self, zip_data: bytes, conflict_strategy: str) -> dict:
+        """Ingest a LEGACY archive into the unified model — the back-compat
+        linchpin (S47.0).
+
+        Old ``pages.json`` rows (cms_page shape) become ``cms_post(type=page)``
+        and old ``categories.json`` rows become ``cms_term(term_type=category)``,
+        so existing instance exports and the whole ``docs/imports/*.json`` seed
+        tree keep loading with zero hand-editing. ``is_published`` maps to
+        ``status`` (published/draft); SEO columns copy 1:1.
+        """
+        counters: Dict[str, int] = {}
+        errors: List[str] = []
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            names = set(zf.namelist())
+            if "categories.json" in names:
+                count, errs = self._import_legacy_categories(
+                    json.loads(zf.read("categories.json")), conflict_strategy
+                )
+                counters["terms"] = count
+                errors.extend(errs)
+            if "pages.json" in names:
+                count, errs = self._import_legacy_pages(
+                    json.loads(zf.read("pages.json")), conflict_strategy
+                )
+                counters["posts"] = count
+                errors.extend(errs)
+        return {"imported": counters, "errors": errors}
+
+    def _import_unified_posts(
+        self, records: list, strategy: str
+    ) -> Tuple[int, List[str]]:
+        count, errors = 0, []
+        for rec in records:
+            try:
+                post_type = rec.get("type", "page")
+                slug = rec.get("slug", "")
+                if strategy == "add" and self._post.find_by_type_and_slug(
+                    post_type, slug
+                ):
+                    continue
+                self._post.save(self._make_post(rec))
+                count += 1
+            except Exception as ex:
+                errors.append(f"{rec.get('slug', '?')}: {ex}")
+        return count, errors
+
+    def _import_unified_terms(
+        self, records: list, strategy: str
+    ) -> Tuple[int, List[str]]:
+        count, errors = 0, []
+        for rec in records:
+            try:
+                term_type = rec.get("term_type", "category")
+                slug = rec.get("slug", "")
+                if strategy == "add" and self._term.find_by_type_and_slug(
+                    term_type, slug
+                ):
+                    continue
+                self._term.save(self._make_term(rec))
+                count += 1
+            except Exception as ex:
+                errors.append(f"{rec.get('slug', '?')}: {ex}")
+        return count, errors
+
+    def _import_legacy_pages(
+        self, records: list, strategy: str
+    ) -> Tuple[int, List[str]]:
+        count, errors = 0, []
+        for rec in records:
+            try:
+                slug = rec.get("slug", "")
+                if strategy == "add" and self._post.find_by_type_and_slug("page", slug):
+                    continue
+                self._post.save(self._legacy_page_to_post(rec))
+                count += 1
+            except Exception as ex:
+                errors.append(f"{rec.get('slug', '?')}: {ex}")
+        return count, errors
+
+    def _import_legacy_categories(
+        self, records: list, strategy: str
+    ) -> Tuple[int, List[str]]:
+        count, errors = 0, []
+        for rec in records:
+            try:
+                slug = rec.get("slug", "")
+                if strategy == "add" and self._term.find_by_type_and_slug(
+                    "category", slug
+                ):
+                    continue
+                self._term.save(self._legacy_category_to_term(rec))
+                count += 1
+            except Exception as ex:
+                errors.append(f"{rec.get('slug', '?')}: {ex}")
+        return count, errors
+
+    def _make_post(self, rec: dict):
+        from plugins.cms.src.models.cms_post import CmsPost
+
+        post = CmsPost()
+        post.type = rec.get("type", "page")
+        post.slug = rec.get("slug", "")
+        post.title = rec.get("title") or rec.get("name") or rec.get("slug", "")
+        post.excerpt = rec.get("excerpt")
+        post.content_json = rec.get("content_json") or {}
+        post.content_html = rec.get("content_html")
+        post.type_data = rec.get("type_data")
+        post.status = rec.get("status", "draft")
+        post.language = rec.get("language", "en")
+        post.sort_order = rec.get("sort_order", 0)
+        self._copy_seo(rec, post)
+        return post
+
+    def _make_term(self, rec: dict):
+        from plugins.cms.src.models.cms_term import CmsTerm
+
+        term = CmsTerm()
+        term.term_type = rec.get("term_type", "category")
+        term.slug = rec.get("slug", "")
+        term.name = rec.get("name", rec.get("slug", ""))
+        term.description = rec.get("description")
+        term.seo_excluded = rec.get("seo_excluded", False)
+        term.sort_order = rec.get("sort_order", 0)
+        return term
+
+    def _legacy_page_to_post(self, rec: dict):
+        from plugins.cms.src.models.cms_post import CmsPost
+
+        post = CmsPost()
+        post.type = "page"
+        post.slug = rec.get("slug", "")
+        post.title = rec.get("name") or rec.get("title") or rec.get("slug", "")
+        post.content_json = rec.get("content_json") or {}
+        post.content_html = rec.get("content_html")
+        post.status = "published" if rec.get("is_published") else "draft"
+        post.language = rec.get("language", "en")
+        post.sort_order = rec.get("sort_order", 0)
+        self._copy_seo(rec, post)
+        return post
+
+    def _legacy_category_to_term(self, rec: dict):
+        from plugins.cms.src.models.cms_term import CmsTerm
+
+        term = CmsTerm()
+        term.term_type = "category"
+        term.slug = rec.get("slug", "")
+        term.name = rec.get("name", rec.get("slug", ""))
+        term.sort_order = rec.get("sort_order", 0)
+        return term
+
+    def _copy_seo(self, rec: dict, post) -> None:
+        post.meta_title = rec.get("meta_title")
+        post.meta_description = rec.get("meta_description")
+        post.meta_keywords = rec.get("meta_keywords")
+        post.og_title = rec.get("og_title")
+        post.og_description = rec.get("og_description")
+        post.og_image_url = rec.get("og_image_url")
+        post.canonical_url = rec.get("canonical_url")
+        post.robots = rec.get("robots", "index,follow")
+        post.schema_json = rec.get("schema_json")
+        post.seo_excluded = rec.get("seo_excluded", False)
+
     # ── EXPORT HELPERS ─────────────────────────────────────────────────────────
 
     def _manifest(self, sections: List[str]) -> str:
         return json.dumps(
             {
                 "version": _VERSION,
+                "format_version": UNIFIED_FORMAT_VERSION,
                 "exported_at": datetime.now(timezone.utc).isoformat(),
                 "sections": sections,
             },
             indent=2,
         )
+
+    def _export_posts(self) -> list:
+        if self._post is None:
+            return []
+        result = self._post.find_paginated(per_page=100000)
+        return [post.to_dict() for post in result.get("items", [])]
+
+    def _export_terms(self) -> list:
+        if self._term is None:
+            return []
+        from plugins.cms.src.services import term_type_registry
+
+        # The built-ins are always exported; registered custom term-types add
+        # to the set, so the registry need not be primed for a basic export.
+        term_type_keys = {"category", "tag"}
+        term_type_keys.update(
+            registered.key for registered in term_type_registry.list_term_types()
+        )
+
+        terms: list = []
+        seen: set = set()
+        for term_type_key in sorted(term_type_keys):
+            for term in self._term.find_by_type(term_type_key):
+                term_id = str(getattr(term, "id", id(term)))
+                if term_id in seen:
+                    continue
+                seen.add(term_id)
+                terms.append(term.to_dict())
+        return terms
 
     def _paginated(self, repo) -> list:
         return repo.find_all(page=1, per_page=100000)["items"]

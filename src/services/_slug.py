@@ -1,5 +1,15 @@
 """Shared slug utility for import collision handling."""
+import re
 from typing import Callable
+
+
+def slugify(text: str) -> str:
+    """Convert arbitrary text to a URL-safe slug."""
+    slug = text.lower().strip()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug
 
 
 def unique_slug(slug: str, exists_fn: Callable[[str], bool]) -> str:

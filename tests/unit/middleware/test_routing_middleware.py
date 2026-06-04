@@ -30,6 +30,14 @@ def test_is_passthrough_regular_path():
     assert _is_passthrough("/my-page") is False
 
 
+def test_is_passthrough_core_seo_endpoints():
+    """S47.1: core robots/sitemap must bypass cms rewrites (else they 404)."""
+    assert _is_passthrough("/robots.txt") is True
+    assert _is_passthrough("/sitemap.xml") is True
+    assert _is_passthrough("/sitemap-1.xml") is True
+    assert _is_passthrough("/sitemap-42.xml") is True
+
+
 # ── CmsRoutingMiddleware.before_request ───────────────────────────────────────
 
 

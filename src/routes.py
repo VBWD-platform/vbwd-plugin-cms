@@ -31,6 +31,7 @@ Admin endpoints (require_admin):
         POST   /api/v1/admin/cms/images/bulk
         GET    /api/v1/admin/cms/images/export
 """
+import json
 import logging
 import mimetypes
 from flask import (
@@ -92,6 +93,37 @@ from plugins.cms.src.services.contact_form_service import (
     ValidationError,
 )
 from plugins.cms.src.services.cms_import_export_service import CmsImportExportService
+from plugins.cms.src.repositories.post_repository import PostRepository
+from plugins.cms.src.repositories.term_repository import TermRepository
+from plugins.cms.src.repositories.post_term_repository import PostTermRepository
+from plugins.cms.src.repositories.search_repository import SearchRepository
+from plugins.cms.src.services.search_service import SearchService
+from plugins.cms.src.services.post_service import (
+    PostService,
+    PostNotFoundError,
+    PostSlugConflictError,
+    UnknownPostTypeError,
+    InvalidStatusTransitionError,
+    PostHierarchyError,
+    InvalidLayoutOrStyleError,
+)
+from plugins.cms.src.services.post_import_export_service import (
+    PostImportExportService,
+    PostImportError,
+)
+from plugins.cms.src.services.term_service import (
+    TermService,
+    TermNotFoundError,
+    TermSlugConflictError,
+    UnknownTermTypeError,
+)
+from plugins.cms.src.services.term_import_export_service import (
+    TermImportExportService,
+    TermImportError,
+)
+from plugins.cms.src.services.rss_feed_service import RssFeedService
+from plugins.cms.src.services import post_type_registry, term_type_registry
+from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED, POST_STATUS_PRIVATE
 
 # Some base images ship a mimetypes registry that does not know modern image
 # formats (e.g. `.webp` → None → served as application/octet-stream, which an
@@ -194,6 +226,86 @@ def _category_service() -> CmsCategoryService:
     return CmsCategoryService(CmsCategoryRepository(db.session))
 
 
+def _post_service() -> PostService:
+    # content.changed is published onto the core EventBus (the plugin pub/sub
+    # seam the 47.1 prerender writer subscribes to). ContentEventPublisher
+    # exposes the ``.dispatch(Event)`` method PostService expects and forwards
+    # to ``event_bus.publish``.
+    from plugins.cms.src.services.content_event_publisher import (
+        ContentEventPublisher,
+    )
+
+    return PostService(
+        repo=PostRepository(db.session),
+        term_repo=TermRepository(db.session),
+        post_term_repo=PostTermRepository(db.session),
+        event_dispatcher=ContentEventPublisher(),
+        layout_repo=CmsLayoutRepository(db.session),
+        style_repo=CmsStyleRepository(db.session),
+    )
+
+
+def _term_service() -> TermService:
+    return TermService(TermRepository(db.session))
+
+
+def _term_import_export_service() -> TermImportExportService:
+    return TermImportExportService(TermRepository(db.session))
+
+
+def _post_import_export_service() -> PostImportExportService:
+    return PostImportExportService(
+        post_repo=PostRepository(db.session),
+        layout_repo=CmsLayoutRepository(db.session),
+        style_repo=CmsStyleRepository(db.session),
+        term_repo=TermRepository(db.session),
+        post_term_repo=PostTermRepository(db.session),
+    )
+
+
+def _search_service() -> SearchService:
+    return SearchService(repo=SearchRepository(db.session))
+
+
+def _rss_feed_service() -> RssFeedService:
+    # Reuses the same PostService published-post query as the public lists; the
+    # public_base_url / rss_item_limit come from the shared cms config.
+    config = _cms_config()
+    return RssFeedService(
+        post_service=_post_service(),
+        public_base_url=config.get("public_base_url", ""),
+        item_limit=config.get("rss_item_limit", 20),
+    )
+
+
+def _post_is_publicly_visible(post: dict) -> bool:
+    """Public reads expose published posts to anyone; private requires auth."""
+    status = post.get("status")
+    if status == POST_STATUS_PUBLISHED:
+        return True
+    if status == POST_STATUS_PRIVATE:
+        return _is_authenticated_request()
+    return False
+
+
+def _is_authenticated_request() -> bool:
+    """True when the request carries a valid bearer token."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return False
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return False
+    try:
+        from vbwd.services.auth_service import AuthService
+        from vbwd.repositories.user_repository import UserRepository
+
+        auth_service = AuthService(user_repository=UserRepository(db.session))
+        return bool(auth_service.verify_token(parts[1]))
+    except Exception:
+        return False
+
+
 def _image_service() -> CmsImageService:
     config = _cms_config()
     storage = LocalFileStorage(
@@ -266,6 +378,8 @@ def _cms_config() -> dict:
     return {
         "uploads_base_path": "/app/uploads",
         "uploads_base_url": "/uploads",
+        "public_base_url": "",
+        "rss_item_limit": 20,
     }
 
 
@@ -1194,10 +1308,31 @@ def admin_import_widgets():
     raw = request.get_data()
     if not raw:
         return jsonify({"error": "Request body required"}), 400
+    # Mode: "replace" (upsert by slug) or "copy" (default; bump slug to -2 on
+    # conflict). Accepted as ?mode= query param, or "mode" key in JSON body.
+    mode = (request.args.get("mode") or "").strip() or "copy"
+
+    # ZIP archives start with the "PK\x03\x04" local-file-header magic.
+    # A zip payload triggers bulk multi-file import.
+    if raw[:4] == b"PK\x03\x04":
+        try:
+            result = _widget_service().import_widgets_zip(raw, mode=mode)
+            return jsonify(result), 200
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": f"Import failed: {e}"}), 400
+
     try:
         payload = _json.loads(raw)
-        data = payload.get("data", payload)
-        result = _widget_service().import_widget(data)
+        if (
+            isinstance(payload, dict)
+            and "mode" in payload
+            and not request.args.get("mode")
+        ):
+            mode = payload["mode"]
+        data = payload.get("data", payload) if isinstance(payload, dict) else payload
+        result = _widget_service().import_widget(data, mode=mode)
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": f"Import failed: {e}"}), 400
@@ -1657,3 +1792,451 @@ def admin_cms_import():
         logger.exception("CMS import failed")
         return jsonify({"error": str(e)}), 500
     return jsonify(result), 200
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# S47.0 — Unified posts + terms (admin CRUD)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@cms_bp.route("/api/v1/admin/cms/post-types", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_list_post_types():
+    """GET /api/v1/admin/cms/post-types — registered post types."""
+    return (
+        jsonify(
+            [
+                {
+                    "key": post_type.key,
+                    "label": post_type.label,
+                    "routable": post_type.routable,
+                    "hierarchical": post_type.hierarchical,
+                    "default_template": post_type.default_template,
+                }
+                for post_type in post_type_registry.list_post_types()
+            ]
+        ),
+        200,
+    )
+
+
+@cms_bp.route("/api/v1/admin/cms/term-types", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_list_term_types():
+    """GET /api/v1/admin/cms/term-types — registered term types."""
+    return (
+        jsonify(
+            [
+                {
+                    "key": term_type.key,
+                    "label": term_type.label,
+                    "hierarchical": term_type.hierarchical,
+                }
+                for term_type in term_type_registry.list_term_types()
+            ]
+        ),
+        200,
+    )
+
+
+@cms_bp.route("/api/v1/admin/cms/posts", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_list_posts():
+    """GET /api/v1/admin/cms/posts — paginated list, any status."""
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 20, type=int), 100)
+    post_type = request.args.get("type")
+    status = request.args.get("status")
+    search = request.args.get("search")
+    result = _post_service().list_posts(
+        post_type=post_type,
+        status=status,
+        search=search,
+        page=page,
+        per_page=per_page,
+    )
+    return jsonify(result), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/posts", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_create_post():
+    """POST /api/v1/admin/cms/posts — create a post."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    try:
+        post = _post_service().create_post(data)
+        return jsonify(post), 201
+    except UnknownPostTypeError as e:
+        return jsonify({"error": str(e)}), 400
+    except InvalidLayoutOrStyleError as e:
+        return jsonify({"error": str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except PostHierarchyError as e:
+        return jsonify({"error": str(e)}), 422
+    except PostSlugConflictError as e:
+        return jsonify({"error": str(e)}), 409
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_get_post(post_id: str):
+    """GET /api/v1/admin/cms/posts/<id> — single post, any status."""
+    try:
+        return jsonify(_post_service().get_post(post_id)), 200
+    except PostNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>", methods=["PUT"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_update_post(post_id: str):
+    """PUT /api/v1/admin/cms/posts/<id> — update a post."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    try:
+        return jsonify(_post_service().update_post(post_id, data)), 200
+    except PostNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except InvalidLayoutOrStyleError as e:
+        return jsonify({"error": str(e)}), 400
+    except InvalidStatusTransitionError as e:
+        return jsonify({"error": str(e)}), 422
+    except PostHierarchyError as e:
+        return jsonify({"error": str(e)}), 422
+    except PostSlugConflictError as e:
+        return jsonify({"error": str(e)}), 409
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>", methods=["DELETE"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_delete_post(post_id: str):
+    """DELETE /api/v1/admin/cms/posts/<id> — delete a post."""
+    try:
+        _post_service().delete_post(post_id)
+        return jsonify({"deleted": post_id}), 200
+    except PostNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@cms_bp.route("/api/v1/admin/cms/seo/regenerate", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_regenerate_seo():
+    """POST /api/v1/admin/cms/seo/regenerate — rebuild the SEO prerender files.
+
+    Re-emits ``content.changed`` for every published post so the prerender
+    writer (re)writes ``${VAR_DIR}/seo/<slug>.html`` — needed for content that
+    predates the writer or arrived via a bulk backfill/import.
+    """
+    count = _post_service().regenerate_prerender()
+    return jsonify({"regenerated": count}), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>/publish", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_publish_post(post_id: str):
+    """POST /api/v1/admin/cms/posts/<id>/publish — move to published."""
+    return _admin_change_post_status(post_id, POST_STATUS_PUBLISHED)
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>/unpublish", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_unpublish_post(post_id: str):
+    """POST /api/v1/admin/cms/posts/<id>/unpublish — move back to draft."""
+    return _admin_change_post_status(post_id, "draft")
+
+
+def _admin_change_post_status(post_id: str, target_status: str):
+    try:
+        return jsonify(_post_service().change_status(post_id, target_status)), 200
+    except PostNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except InvalidStatusTransitionError as e:
+        return jsonify({"error": str(e)}), 409
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>/terms", methods=["PUT"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_assign_post_terms(post_id: str):
+    """PUT /api/v1/admin/cms/posts/<id>/terms — replace term links."""
+    data = request.get_json()
+    term_ids = (data or {}).get("term_ids")
+    if not isinstance(term_ids, list):
+        return jsonify({"error": "term_ids array required"}), 400
+    try:
+        _post_service().assign_terms(post_id, term_ids)
+        return jsonify({"post_id": post_id, "term_ids": term_ids}), 200
+    except PostNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@cms_bp.route("/api/v1/admin/cms/terms", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_list_terms():
+    """GET /api/v1/admin/cms/terms?type= — terms of a type."""
+    term_type = request.args.get("type")
+    if not term_type:
+        return jsonify({"error": "type query param required"}), 400
+    return jsonify(_term_service().list_terms(term_type)), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/terms", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_create_term():
+    """POST /api/v1/admin/cms/terms — create a term."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    try:
+        return jsonify(_term_service().create_term(data)), 201
+    except UnknownTermTypeError as e:
+        return jsonify({"error": str(e)}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except TermSlugConflictError as e:
+        return jsonify({"error": str(e)}), 409
+
+
+@cms_bp.route("/api/v1/admin/cms/terms/<term_id>", methods=["PUT"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_update_term(term_id: str):
+    """PUT /api/v1/admin/cms/terms/<id> — update a term."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    try:
+        return jsonify(_term_service().update_term(term_id, data)), 200
+    except TermNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except TermSlugConflictError as e:
+        return jsonify({"error": str(e)}), 409
+
+
+@cms_bp.route("/api/v1/admin/cms/terms/<term_id>", methods=["DELETE"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_delete_term(term_id: str):
+    """DELETE /api/v1/admin/cms/terms/<id> — delete a term."""
+    try:
+        _term_service().delete_term(term_id)
+        return jsonify({"deleted": term_id}), 200
+    except TermNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@cms_bp.route("/api/v1/admin/cms/terms/export", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_export_terms():
+    """GET /api/v1/admin/cms/terms/export?type= — taxonomy as VBWD-standard JSON.
+
+    Download-friendly: served as ``application/json`` with a ``Content-Disposition``
+    attachment. Optional ``type`` query param scopes the export to one term-type.
+    """
+    from flask import Response
+
+    term_type = request.args.get("type") or None
+    payload = _term_import_export_service().export_terms(term_type=term_type)
+    return Response(
+        json.dumps(payload, ensure_ascii=False),
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=cms-terms.json"},
+    )
+
+
+@cms_bp.route("/api/v1/admin/cms/terms/import", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_import_terms():
+    """POST /api/v1/admin/cms/terms/import — upsert terms from a VBWD-standard JSON.
+
+    Body is the export envelope; returns ``{created, updated}``. Upsert is by the
+    natural key ``(term_type, slug)`` and is idempotent.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    try:
+        result = _term_import_export_service().import_terms(data)
+        return jsonify(result), 200
+    except TermImportError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/export", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_export_posts():
+    """GET /api/v1/admin/cms/posts/export?type= — posts as VBWD-standard JSON.
+
+    Download-friendly: served as ``application/json`` with a ``Content-Disposition``
+    attachment. Optional ``type`` query param scopes the export to one post-type.
+    Layout/style/parent/term references are emitted as slugs (id-free) so the
+    payload re-resolves on any target DB.
+    """
+    post_type = request.args.get("type") or None
+    payload = _post_import_export_service().export_posts(post_type=post_type)
+    filename = f"cms-posts-{post_type}.json" if post_type else "cms-posts.json"
+    return Response(
+        json.dumps(payload, ensure_ascii=False),
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/import", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_import_posts():
+    """POST /api/v1/admin/cms/posts/import — upsert posts from a VBWD-standard JSON.
+
+    Body is the export envelope; returns ``{created, updated}``. Upsert is by the
+    natural key ``(type, slug)`` and is idempotent; layout/style/parent/terms are
+    resolved by slug on the target DB.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    try:
+        result = _post_import_export_service().import_posts(data)
+        return jsonify(result), 200
+    except PostImportError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# S47.0 — Unified posts + terms (public read)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@cms_bp.route("/api/v1/cms/posts", methods=["GET"])
+def public_list_posts():
+    """GET /api/v1/cms/posts — published posts, paginated, filterable."""
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 20, type=int), 100)
+    post_type = request.args.get("type")
+    term_type = request.args.get("term_type")
+    term_slug = request.args.get("term_slug")
+
+    service = _post_service()
+    if term_type and term_slug:
+        result = service.list_posts_by_term(
+            term_type=term_type,
+            term_slug=term_slug,
+            post_type=post_type,
+            status=POST_STATUS_PUBLISHED,
+            page=page,
+            per_page=per_page,
+        )
+    else:
+        result = service.list_posts(
+            post_type=post_type,
+            status=POST_STATUS_PUBLISHED,
+            page=page,
+            per_page=per_page,
+        )
+    return jsonify(result), 200
+
+
+@cms_bp.route("/api/v1/cms/posts/<path:slug>", methods=["GET"])
+def public_get_post(slug: str):
+    """GET /api/v1/cms/posts/<path:slug>?type= — single post by path.
+
+    Resolves nested page paths (e.g. ``about/team``) via the full-path slug.
+    Published posts are public; private posts require an authorized session.
+    """
+    post_type = request.args.get("type", "page")
+    post = _post_service().resolve_published_path(post_type, slug)
+    if not post or not _post_is_publicly_visible(post):
+        return jsonify({"error": "Post not found"}), 404
+    return jsonify(post), 200
+
+
+@cms_bp.route("/api/v1/cms/terms", methods=["GET"])
+def public_list_terms():
+    """GET /api/v1/cms/terms?type= — terms of a type."""
+    term_type = request.args.get("type")
+    if not term_type:
+        return jsonify({"error": "type query param required"}), 400
+    return jsonify(_term_service().list_terms(term_type)), 200
+
+
+@cms_bp.route("/api/v1/cms/search", methods=["GET"])
+def public_search_posts():
+    """GET /api/v1/cms/search — full-text search over published posts (S47.4).
+
+    Query params: ``q`` (search text), ``type`` (optional post type),
+    ``term_type``+``term_slug`` (optional "search within category"),
+    ``page``/``per_page``. Blank ``q`` yields an empty result, never all posts.
+    Returns the same paginated summary shape as /cms/posts (so PostList reuses).
+    """
+    query = request.args.get("q", "")
+    post_type = request.args.get("type")
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 20, type=int), 100)
+    term_type = request.args.get("term_type")
+    term_slug = request.args.get("term_slug")
+    term_filter = (term_type, term_slug) if term_type and term_slug else None
+
+    result = _search_service().search(
+        query,
+        post_type=post_type,
+        term_filter=term_filter,
+        page=page,
+        per_page=per_page,
+    )
+    return jsonify(result), 200
+
+
+@cms_bp.route("/api/v1/cms/rss.xml", methods=["GET"])
+def public_rss_feed():
+    """GET /api/v1/cms/rss.xml — RSS 2.0 for the blog / a per-term archive.
+
+    Query params: ``type`` (post type, default ``post``), ``term_type`` +
+    ``term_slug`` (narrow to one taxonomy term). Reuses the shared published-post
+    query (S47.0/47.4) — newest-first, capped at ``rss_item_limit``. An unknown
+    term yields an empty but valid channel (never a 500).
+    """
+    post_type = request.args.get("type", "post")
+    term_type = request.args.get("term_type")
+    term_slug = request.args.get("term_slug")
+    term = (term_type, term_slug) if term_type and term_slug else None
+
+    xml = _rss_feed_service().build(post_type=post_type, term=term)
+    return Response(xml, content_type="application/rss+xml; charset=utf-8")

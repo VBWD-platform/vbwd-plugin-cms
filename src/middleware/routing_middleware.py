@@ -6,8 +6,17 @@ from flask import request, redirect, Response, g
 
 _PASSTHROUGH_PREFIXES = ("/api/", "/admin/", "/uploads/", "/_vbwd/")
 
+# Core SEO endpoints (S47.1) are owned by core's seo blueprint and must never
+# be rewritten/redirected by a cms routing rule, or robots/sitemap would 404.
+_PASSTHROUGH_EXACT = ("/robots.txt", "/sitemap.xml")
+_PASSTHROUGH_SITEMAP_CHUNK = "/sitemap-"
+
 
 def _is_passthrough(path: str) -> bool:
+    if path in _PASSTHROUGH_EXACT:
+        return True
+    if path.startswith(_PASSTHROUGH_SITEMAP_CHUNK) and path.endswith(".xml"):
+        return True
     return any(path.startswith(p) for p in _PASSTHROUGH_PREFIXES)
 
 

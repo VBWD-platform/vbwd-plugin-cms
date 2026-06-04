@@ -12,3 +12,6 @@ from plugins.cms.src.models.cms_page_content_block import (  # noqa: F401
 from plugins.cms.src.models.cms_page import CmsPage  # noqa: F401
 from plugins.cms.src.models.cms_page_widget import CmsPageWidget  # noqa: F401
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule  # noqa: F401
+from plugins.cms.src.models.cms_post import CmsPost  # noqa: F401
+from plugins.cms.src.models.cms_term import CmsTerm  # noqa: F401
+from plugins.cms.src.models.cms_post_term import CmsPostTerm  # noqa: F401

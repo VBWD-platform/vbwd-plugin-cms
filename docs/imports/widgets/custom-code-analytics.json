@@ -1,0 +1,15 @@
+{
+    "slug": "custom-code-analytics",
+    "name": "Custom Code — Analytics (gtag)",
+    "widget_type": "vue-component",
+    "content_json": {
+        "component": "CustomCode"
+    },
+    "source_css": null,
+    "config": {
+        "component_name": "CustomCode",
+        "code": "<!-- Google tag (gtag.js) — replace G-XXXXXXXXXX with your Measurement ID -->\n<script async src=\"https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX\"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n  gtag('config', 'G-XXXXXXXXXX');\n</script>"
+    },
+    "sort_order": 0,
+    "is_active": true
+}

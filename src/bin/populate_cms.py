@@ -1078,7 +1078,6 @@ def _get_or_create_page(
         layout_id=layout.id if layout else None,
         style_id=style.id if style else None,
         category_id=category_id,
-        use_theme_switcher_styles=False,
         meta_title=name,
         meta_description=meta_description or name,
         robots=robots,
@@ -1114,6 +1113,127 @@ def _set_page_widgets(
         db.session.add(pw)
     db.session.flush()
     print(f"    + {len(assignments)} page widget(s) for '{page.slug}'")
+
+
+# ─── Unified model seed (S47.0) ────────────────────────────────────────────────
+# Seeds cms_post / cms_term THROUGH the services (never raw SQL); idempotent —
+# a re-run hits the slug-uniqueness guard and creates nothing new. Cold-CI-safe.
+
+_UNIFIED_TERMS = [
+    {"term_type": "category", "slug": "news", "name": "News", "sort_order": 0},
+    {"term_type": "category", "slug": "guides", "name": "Guides", "sort_order": 1},
+    {"term_type": "tag", "slug": "release", "name": "Release", "sort_order": 0},
+    {"term_type": "tag", "slug": "tutorial", "name": "Tutorial", "sort_order": 1},
+]
+
+_UNIFIED_POSTS = [
+    {
+        "type": "page",
+        "slug": "about-unified",
+        "title": "About (Unified)",
+        "content_html": "<h1>About</h1>",
+        "content_json": {"type": "doc", "content": []},
+        "status": "published",
+    },
+    {
+        "type": "page",
+        "slug": "contact-unified",
+        "title": "Contact (Unified)",
+        "content_html": "<h1>Contact</h1>",
+        "content_json": {"type": "doc", "content": []},
+        "status": "published",
+    },
+    {
+        "type": "post",
+        "slug": "hello-world",
+        "title": "Hello World",
+        "content_html": "<p>First post.</p>",
+        "content_json": {"type": "doc", "content": []},
+        "status": "published",
+    },
+    {
+        "type": "post",
+        "slug": "second-post",
+        "title": "Second Post",
+        "content_html": "<p>Another post.</p>",
+        "content_json": {"type": "doc", "content": []},
+        "status": "draft",
+    },
+]
+
+
+def seed_unified_content(post_service, term_service) -> dict:
+    """Idempotently seed the unified cms_post / cms_term model via services.
+
+    Returns a ``{"posts_created", "terms_created"}`` summary. A slug that
+    already exists raises a *SlugConflictError from the service, which we treat
+    as "already seeded" — so the seeder is safe to re-run on every deploy.
+    """
+    from plugins.cms.src.services.post_service import PostSlugConflictError
+    from plugins.cms.src.services.term_service import TermSlugConflictError
+
+    terms_created = 0
+    for term in _UNIFIED_TERMS:
+        try:
+            term_service.create_term(dict(term))
+            terms_created += 1
+        except TermSlugConflictError:
+            continue
+
+    posts_created = 0
+    for post in _UNIFIED_POSTS:
+        try:
+            post_service.create_post(dict(post))
+            posts_created += 1
+        except PostSlugConflictError:
+            continue
+
+    return {"posts_created": posts_created, "terms_created": terms_created}
+
+
+def _seed_unified_via_services() -> None:
+    """Build the unified services from db.session and seed idempotently.
+
+    Ensures the built-in post/term types are registered (the standalone
+    ``__main__`` path does not run the plugin's ``on_enable``).
+    """
+    from plugins.cms.src.services import post_type_registry, term_type_registry
+    from plugins.cms.src.services.post_type_registry import PostType
+    from plugins.cms.src.services.term_type_registry import TermType
+    from plugins.cms.src.repositories.post_repository import PostRepository
+    from plugins.cms.src.repositories.term_repository import TermRepository
+    from plugins.cms.src.repositories.post_term_repository import PostTermRepository
+    from plugins.cms.src.services.post_service import PostService
+    from plugins.cms.src.services.term_service import TermService
+
+    if not post_type_registry.is_registered("page"):
+        post_type_registry.register_post_type(
+            PostType(key="page", label="Page", routable=True, hierarchical=True)
+        )
+    if not post_type_registry.is_registered("post"):
+        post_type_registry.register_post_type(
+            PostType(key="post", label="Post", routable=True, hierarchical=False)
+        )
+    if not term_type_registry.is_registered("category"):
+        term_type_registry.register_term_type(
+            TermType(key="category", label="Category", hierarchical=True)
+        )
+    if not term_type_registry.is_registered("tag"):
+        term_type_registry.register_term_type(
+            TermType(key="tag", label="Tag", hierarchical=False)
+        )
+
+    post_service = PostService(
+        repo=PostRepository(db.session),
+        term_repo=TermRepository(db.session),
+        post_term_repo=PostTermRepository(db.session),
+    )
+    term_service = TermService(TermRepository(db.session))
+    summary = seed_unified_content(post_service, term_service)
+    print(
+        f"  Unified     : +{summary['posts_created']} posts, "
+        f"+{summary['terms_created']} terms"
+    )
 
 
 def populate_cms() -> None:
@@ -1375,6 +1495,9 @@ def populate_cms() -> None:
         print("  + routing rule: default → home1")
     else:
         print(f"  ~ routing rule: default → {rule.target_slug} (exists)")
+
+    print("\n── Unified content (cms_post / cms_term) ───────────────────────")
+    _seed_unified_via_services()
 
     print("\n" + "=" * 55)
     print("✓ CMS demo data population complete")

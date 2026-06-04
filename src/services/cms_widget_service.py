@@ -154,11 +154,100 @@ class CmsWidgetService:
                 zf.writestr(f"widgets/{w.slug}.json", json.dumps(d, ensure_ascii=False))
         return buf.getvalue()
 
-    def import_widget(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        slug = unique_slug(
-            data.get("slug") or _slugify(data.get("name", "imported")),
-            lambda s: self._repo.find_by_slug(s) is not None,
-        )
+    def import_widgets_zip(self, raw: bytes, mode: str = "copy") -> Dict[str, Any]:
+        """Import every .json entry inside a zip archive.
+
+        Accepts either flat (`<slug>.json`) or nested (`widgets/<slug>.json`)
+        layout — the export zip uses the nested form, loose uploads tend
+        to be flat.
+
+        Returns { imported, skipped, failed, items, errors }:
+          * imported — number of widgets successfully created or replaced
+          * skipped  — non-JSON entries (README, etc.)
+          * failed   — JSON entries that could not be imported
+          * items    — list of imported widget dicts
+          * errors   — list of {file, error} for each failure
+        """
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(raw))
+        except zipfile.BadZipFile as e:
+            raise ValueError(f"Not a valid zip archive: {e}") from e
+
+        imported: List[Dict[str, Any]] = []
+        errors: List[Dict[str, str]] = []
+        skipped = 0
+
+        for name in archive.namelist():
+            # zip directories end with "/"; ignore those.
+            if name.endswith("/"):
+                continue
+            # macOS `zip` injects AppleDouble resource-fork sidecars under
+            # __MACOSX/._*. They carry the original .json extension but
+            # contain binary metadata — drop them silently.
+            basename = name.rsplit("/", 1)[-1]
+            if name.startswith("__MACOSX/") or basename.startswith("._"):
+                continue
+            if not name.lower().endswith(".json"):
+                skipped += 1
+                continue
+            try:
+                data = json.loads(archive.read(name))
+                if (
+                    isinstance(data, dict)
+                    and "data" in data
+                    and isinstance(data["data"], dict)
+                ):
+                    data = data["data"]
+                if not isinstance(data, dict):
+                    raise ValueError("entry is not a JSON object")
+                imported.append(self.import_widget(data, mode=mode))
+            except Exception as e:
+                errors.append({"file": name, "error": str(e)})
+
+        return {
+            "imported": len(imported),
+            "skipped": skipped,
+            "failed": len(errors),
+            "items": imported,
+            "errors": errors,
+        }
+
+    def import_widget(self, data: Dict[str, Any], mode: str = "copy") -> Dict[str, Any]:
+        """Import one widget from a JSON payload.
+
+        mode:
+          * "copy"    — if a widget with that slug exists, save as a new
+                        row with "-2" / "-3" suffix. Never mutates existing
+                        rows. (default, preserves legacy behaviour)
+          * "replace" — if a widget with that slug exists, overwrite its
+                        fields in place (and re-import its menu tree).
+        """
+        if mode not in ("copy", "replace"):
+            raise ValueError(f"Unknown import mode: {mode!r}")
+
+        requested_slug = data.get("slug") or _slugify(data.get("name", "imported"))
+
+        if mode == "replace":
+            existing = self._repo.find_by_slug(requested_slug)
+            if existing is not None:
+                existing.name = data.get("name", existing.name).strip()
+                existing.widget_type = data.get("widget_type", existing.widget_type)
+                existing.content_json = data.get("content_json", existing.content_json)
+                existing.source_css = data.get("source_css", existing.source_css)
+                existing.config = data.get("config", existing.config)
+                existing.sort_order = data.get("sort_order", existing.sort_order)
+                existing.is_active = data.get("is_active", existing.is_active)
+                self._repo.save(existing)
+                if data.get("menu_items") and existing.widget_type == "menu":
+                    self._menu_repo.replace_tree(str(existing.id), data["menu_items"])
+                return self._to_dto(existing)
+            slug = requested_slug
+        else:
+            slug = unique_slug(
+                requested_slug,
+                lambda s: self._repo.find_by_slug(s) is not None,
+            )
+
         obj = self._build(data, slug)
         self._repo.save(obj)
         if data.get("menu_items") and obj.widget_type == "menu":

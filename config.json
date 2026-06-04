@@ -28,5 +28,30 @@
     "type": "string",
     "default": "en",
     "description": "Default language code applied to new pages"
+  },
+  "posts_per_page": {
+    "type": "number",
+    "default": 20,
+    "description": "Default page size for public post listings"
+  },
+  "scheduled_publish_interval_seconds": {
+    "type": "number",
+    "default": 60,
+    "description": "How often the scheduled-publish tick runs (seconds)"
+  },
+  "public_base_url": {
+    "type": "string",
+    "default": "",
+    "description": "Absolute site root for RSS feed channel + fallback item permalinks"
+  },
+  "rss_item_limit": {
+    "type": "number",
+    "default": 20,
+    "description": "Maximum number of items in an RSS feed"
+  },
+  "debug_mode": {
+    "type": "boolean",
+    "default": false,
+    "description": "Enable verbose CMS debug logging"
   }
 }
