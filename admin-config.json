@@ -89,6 +89,12 @@
           "description": "Maximum number of items in an RSS feed"
         },
         {
+          "key": "seo_prerender_enabled",
+          "label": "Switch on prerendered SEO generation",
+          "component": "checkbox",
+          "description": "When on, content changes write prerendered SEO HTML for crawlers. SPA only if switched off."
+        },
+        {
           "key": "debug_mode",
           "label": "Debug Mode",
           "component": "switch",

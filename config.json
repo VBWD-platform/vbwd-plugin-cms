@@ -49,6 +49,11 @@
     "default": 20,
     "description": "Maximum number of items in an RSS feed"
   },
+  "seo_prerender_enabled": {
+    "type": "boolean",
+    "default": true,
+    "description": "Switch on prerendered SEO generation (SPA only if switched off)"
+  },
   "debug_mode": {
     "type": "boolean",
     "default": false,

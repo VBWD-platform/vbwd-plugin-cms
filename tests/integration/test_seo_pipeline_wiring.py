@@ -23,6 +23,7 @@ from plugins.cms.src.services import post_type_registry
 from plugins.cms.src.services.post_type_registry import PostType
 from plugins.cms.src.services.post_service import PostService
 from plugins.cms.src.services.content_event_publisher import ContentEventPublisher
+from plugins.cms.src.services import seo_wiring
 from plugins.cms.src.services.seo_wiring import (
     register_seo_pipeline,
     unregister_seo_pipeline,
@@ -33,6 +34,15 @@ from plugins.cms.src.services.seo_wiring import (
 def seo_var_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("VBWD_VAR_DIR", str(tmp_path))
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def _prerender_enabled(monkeypatch):
+    # These tests exercise the prerender pipeline, so the SEO toggle must be on
+    # regardless of whatever ``seo_prerender_enabled`` value the live dev
+    # ``plugins/config.json`` happens to hold (an admin may have switched it
+    # off). Force it on so the suite stays hermetic.
+    monkeypatch.setattr(seo_wiring, "_seo_prerender_enabled", lambda: True)
 
 
 @pytest.fixture(autouse=True)

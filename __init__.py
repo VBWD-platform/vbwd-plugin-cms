@@ -26,6 +26,11 @@ DEFAULT_CONFIG = {
     # to "<public_base_url>/<slug>" when a post has no canonical URL.
     "public_base_url": "",
     "rss_item_limit": 20,
+    # When on, content changes write prerendered SEO HTML to ${VAR_DIR}/seo/
+    # for crawlers; when off the app serves the SPA only (no prerender). The
+    # SEO pipeline is still wired on enable — the toggle is read live per
+    # content change, so flipping it takes effect without re-enabling.
+    "seo_prerender_enabled": True,
     "debug_mode": False,
 }
 

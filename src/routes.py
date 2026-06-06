@@ -2021,12 +2021,32 @@ def admin_bulk_post_assign_term():
 def admin_regenerate_seo():
     """POST /api/v1/admin/cms/seo/regenerate — rebuild the SEO prerender files.
 
-    Re-emits ``content.changed`` for every published post so the prerender
-    writer (re)writes ``${VAR_DIR}/seo/<slug>.html`` — needed for content that
-    predates the writer or arrived via a bulk backfill/import.
+    (Re)writes ``${VAR_DIR}/seo/<slug>.html`` for every published post — needed
+    for content that predates the writer or arrived via a bulk backfill/import.
+    Runs regardless of the ``seo_prerender_enabled`` toggle (manual override)
+    and returns the number of files actually written.
     """
-    count = _post_service().regenerate_prerender()
+    from plugins.cms.src.services.seo_wiring import regenerate_prerendered
+
+    count = regenerate_prerendered()
     return jsonify({"regenerated": count}), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/seo/cleanup", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_cleanup_seo():
+    """POST /api/v1/admin/cms/seo/cleanup — delete all SEO prerender files.
+
+    Removes every ``${VAR_DIR}/seo/*.html``. nginx serves prerendered pages by
+    file existence, so after switching ``seo_prerender_enabled`` off this is how
+    the stale static pages stop being served and traffic falls back to the SPA.
+    """
+    from plugins.cms.src.services.seo_wiring import purge_prerendered
+
+    count = purge_prerendered()
+    return jsonify({"removed": count}), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/posts/<post_id>/publish", methods=["POST"])

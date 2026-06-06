@@ -60,6 +60,28 @@ def _public_base_url() -> str:
         return ""
 
 
+def _seo_prerender_enabled() -> bool:
+    """Resolve the cms ``seo_prerender_enabled`` toggle from live config (lazy).
+
+    Read per call (mirroring ``_public_base_url``) so flipping the admin
+    checkbox takes effect without re-enabling the plugin. When off, the app
+    serves the SPA only and no prerendered SEO HTML is written on content
+    changes. Defaults to ``True`` when no app/config is available so existing
+    behaviour (prerender on) is preserved.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return True
+        cfg = config_store.get_config("cms") or {}
+        return bool(cfg.get("seo_prerender_enabled", True))
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] seo_prerender_enabled lookup failed: %s", exc)
+        return True
+
+
 def _canonical_is_rewritten(slug: str) -> bool:
     """True if an active rewrite rule targets this canonical slug (cloaking).
 
@@ -137,8 +159,50 @@ def restamp_prerendered_assets() -> int:
     return rewritten
 
 
+def purge_prerendered() -> int:
+    """Manual cleanup: delete every prerendered ``${VAR_DIR}/seo/*.html``.
+
+    nginx serves prerendered pages purely by file existence, so switching the
+    ``seo_prerender_enabled`` toggle off only stops *future* writes — the files
+    already on disk keep being served. This removes them (recursively, since
+    nested slugs write ``seo/<a>/<b>.html``) so traffic falls through to the
+    SPA. Non-``.html`` files are left untouched. Returns the number removed.
+    """
+    seo_dir = os.path.join(_var_dir(), "seo")
+    if not os.path.isdir(seo_dir):
+        return 0
+    removed = 0
+    for root, _dirs, files in os.walk(seo_dir):
+        for name in files:
+            if name.endswith(".html"):
+                os.remove(os.path.join(root, name))
+                removed += 1
+    logger.info("[cms.seo] Purged %d prerendered file(s) from '%s'.", removed, seo_dir)
+    return removed
+
+
+def regenerate_prerendered() -> int:
+    """Manual rebuild: (re)write a prerendered file for every published post.
+
+    Writes directly via the writer (not the automatic ``content.changed`` path),
+    so it runs regardless of the ``seo_prerender_enabled`` toggle — a deliberate
+    admin override. Use it to (re)build files for content that predates the
+    writer or arrived via bulk import/backfill. Returns the number written.
+    """
+    writer = _build_writer()
+    loader = SeoPostLoader(_session())
+    written = 0
+    for post in loader.iter_candidate_posts():
+        writer.handle_content_changed({"post_id": str(post.id)})
+        written += 1
+    logger.info("[cms.seo] Regenerated %d prerendered file(s).", written)
+    return written
+
+
 def _on_content_changed(_event_name: str, data: dict) -> None:
     """EventBus subscriber: keep the prerender file in sync with the post."""
+    if not _seo_prerender_enabled():
+        return
     try:
         _build_writer().handle_content_changed(data)
     except Exception as exc:  # pragma: no cover - defensive
