@@ -125,6 +125,80 @@ class TestCreatePost:
         assert CONTENT_CHANGED in _dispatched_names(dispatcher)
 
 
+class TestPreviewToken:
+    def test_create_generates_preview_token(self):
+        service, repo, _, _ = _make_service()
+        result = service.create_post({"type": "post", "title": "P"})
+        assert result["preview_token"]
+        assert len(result["preview_token"]) >= 16
+
+    def test_get_post_backfills_missing_preview_token(self):
+        post = _post()
+        post.preview_token = None
+        service, repo, _, _ = _make_service(posts=[post])
+        dto = service.get_post(str(post.id))
+        assert dto["preview_token"]
+        assert post.preview_token == dto["preview_token"]
+
+    def test_get_post_keeps_existing_preview_token(self):
+        post = _post()
+        post.preview_token = "fixed-token"
+        service, _, _, _ = _make_service(posts=[post])
+        assert service.get_post(str(post.id))["preview_token"] == "fixed-token"
+
+
+class TestBulkOps:
+    def test_bulk_delete(self):
+        service, repo, _, _ = _make_service()
+        repo.bulk_delete.return_value = 3
+        assert service.bulk_delete(["a", "b", "c"]) == {"deleted": 3}
+        repo.bulk_delete.assert_called_once_with(["a", "b", "c"])
+
+    def test_bulk_set_status_publishes_draft_posts(self):
+        posts = [_post(slug="a", status="draft"), _post(slug="b", status="draft")]
+        service, repo, _, _ = _make_service(posts=posts)
+        repo.find_by_ids.return_value = posts
+        result = service.bulk_set_status([str(p.id) for p in posts], "published")
+        assert result == {"updated": 2}
+        assert all(p.status == "published" for p in posts)
+
+    def test_bulk_set_status_skips_illegal_transitions(self):
+        # published → pending is illegal → skipped, not raised.
+        published = _post(slug="t", status="published")
+        service, repo, _, _ = _make_service(posts=[published])
+        repo.find_by_ids.return_value = [published]
+        assert service.bulk_set_status([str(published.id)], "pending") == {"updated": 0}
+
+    def test_bulk_set_searchable_toggles_seo_excluded(self):
+        post = _post()
+        service, repo, _, _ = _make_service(posts=[post])
+        repo.find_by_ids.return_value = [post]
+        service.bulk_set_searchable([str(post.id)], False)
+        assert post.seo_excluded is True
+        service.bulk_set_searchable([str(post.id)], True)
+        assert post.seo_excluded is False
+
+    def test_bulk_assign_term_adds_without_dropping_existing(self):
+        post = _post()
+        service, _, _, _ = _make_service(posts=[post])
+        existing = MagicMock()
+        existing.term_id = "tag-1"
+        service._post_term_repo.find_by_post.return_value = [existing]
+        result = service.bulk_assign_term([str(post.id)], "cat-9")
+        assert result == {"updated": 1}
+        # replaced with the union (existing tag + new category)
+        args = service._post_term_repo.replace_for_post.call_args[0]
+        assert "tag-1" in args[1] and "cat-9" in args[1]
+
+    def test_bulk_assign_term_skips_when_already_present(self):
+        post = _post()
+        service, _, _, _ = _make_service(posts=[post])
+        existing = MagicMock()
+        existing.term_id = "cat-9"
+        service._post_term_repo.find_by_post.return_value = [existing]
+        assert service.bulk_assign_term([str(post.id)], "cat-9") == {"updated": 0}
+
+
 class TestRegeneratePrerender:
     def test_regenerate_emits_content_changed_for_each_published(self):
         published = [_post(slug="a", status="published"), _post(slug="b", status="published")]
@@ -225,6 +299,32 @@ class TestListSearch:
         service.list_posts(post_type="post")
         assert repo.find_paginated.call_args.kwargs["search"] is None
 
+    def test_list_posts_forwards_all_filters(self):
+        service, repo = self._service_with_paginated()
+        service.list_posts(
+            post_type="page",
+            language="de",
+            term_id="cat-1",
+            layout_id="lay-1",
+            style_id="sty-1",
+            date_from="2026-01-01",
+            date_to="2026-12-31",
+        )
+        kwargs = repo.find_paginated.call_args.kwargs
+        assert kwargs["language"] == "de"
+        assert kwargs["term_id"] == "cat-1"
+        assert kwargs["layout_id"] == "lay-1"
+        assert kwargs["style_id"] == "sty-1"
+        assert kwargs["date_from"] == "2026-01-01"
+        assert kwargs["date_to"] == "2026-12-31"
+
+    def test_list_posts_blank_filters_normalized_to_none(self):
+        service, repo = self._service_with_paginated()
+        service.list_posts(post_type="page", language="", layout_id="")
+        kwargs = repo.find_paginated.call_args.kwargs
+        assert kwargs["language"] is None
+        assert kwargs["layout_id"] is None
+
 
 class TestHierarchy:
     def test_parent_rejected_for_non_hierarchical_type(self):
@@ -300,11 +400,18 @@ class TestStatusTransitions:
         service, _, _, _ = _make_service(posts=[post])
         assert service.change_status(str(post.id), "trash")["status"] == "trash"
 
-    def test_illegal_trash_to_published_rejected(self):
+    def test_trash_can_be_restored_to_published(self):
+        # A trashed post is restorable (undo delete).
         post = _post(status="trash")
         service, _, _, _ = _make_service(posts=[post])
+        assert service.change_status(str(post.id), "published")["status"] == "published"
+
+    def test_illegal_transition_rejected(self):
+        # published → pending is not a legal move (published → {private, draft}).
+        post = _post(status="published")
+        service, _, _, _ = _make_service(posts=[post])
         with pytest.raises(InvalidStatusTransitionError):
-            service.change_status(str(post.id), "published")
+            service.change_status(str(post.id), "pending")
 
     def test_unknown_target_status_rejected(self):
         post = _post(status="draft")
@@ -344,10 +451,15 @@ class TestStatusTransitions:
         assert result["status"] == "draft"
 
     def test_update_post_illegal_status_transition_rejected(self):
-        post = _post(status="trash")
+        post = _post(status="published")
         service, _, _, _ = _make_service(posts=[post])
         with pytest.raises(InvalidStatusTransitionError):
-            service.update_post(str(post.id), {"status": "published"})
+            service.update_post(str(post.id), {"status": "pending"})
+
+    def test_update_post_restores_trashed_to_published(self):
+        post = _post(status="trash")
+        service, _, _, _ = _make_service(posts=[post])
+        assert service.update_post(str(post.id), {"status": "published"})["status"] == "published"
 
     def test_update_post_persists_published_at_for_scheduled(self):
         post = _post(status="draft")

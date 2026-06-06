@@ -92,3 +92,6 @@ class TermService:
         if not term:
             raise TermNotFoundError(f"Term '{term_id}' not found")
         self._repo.delete(term_id)
+
+    def bulk_delete(self, ids: List[str]) -> Dict[str, int]:
+        return {"deleted": self._repo.bulk_delete(ids)}

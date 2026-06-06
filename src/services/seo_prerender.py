@@ -51,6 +51,7 @@ class SeoPrerenderWriter:
         post_loader,
         canonical_rewrite_checker: Optional[Callable[[str], bool]] = None,
         asset_stamper: Optional[SeoAssetStamper] = None,
+        style_css_resolver: Optional[Callable[[object], str]] = None,
     ) -> None:
         self._seo_dir = os.path.join(var_dir, "seo")
         self._post_loader = post_loader
@@ -58,6 +59,10 @@ class SeoPrerenderWriter:
         self._asset_stamper = asset_stamper or SeoAssetStamper(
             os.environ.get("VBWD_FE_DIST_DIR")
         )
+        # Resolves the CSS a post renders with (its explicit/default style +
+        # the page's own ``source_css``) so the static page is styled pre-
+        # hydration. Injected (DI) — absent ⇒ no <style> emitted.
+        self._style_css_resolver = style_css_resolver
 
     # ── event entry point ────────────────────────────────────────────────
 
@@ -144,6 +149,15 @@ class SeoPrerenderWriter:
         # The marker-delimited block is what the re-stamp finds and replaces.
         asset_block = render_asset_block(self._asset_stamper.current_entry_tags())
 
+        # Inline the resolved style CSS + the page's own source_css so the
+        # static page is styled before the SPA hydrates (no FOUC; bots see it
+        # styled). The SPA later injects its own page style on mount.
+        style_block = ""
+        if self._style_css_resolver is not None:
+            css = (self._style_css_resolver(post) or "").strip()
+            if css:
+                style_block = f'\n    <style data-seo="ssr-style">{css}</style>'
+
         return (
             "<!DOCTYPE html>\n"
             '<html lang="' + (post.language or "en") + '">\n'
@@ -151,7 +165,8 @@ class SeoPrerenderWriter:
             '    <meta charset="utf-8" />\n'
             f"    {head}\n"
             f"    {json_ld_block}\n"
-            f"    {asset_block}\n"
+            f"    {asset_block}"
+            f"{style_block}\n"
             "  </head>\n"
             "  <body>\n"
             f'    <div id="app">{post.content_html or ""}</div>\n'

@@ -144,6 +144,7 @@ def _new_post(post_repo, **kwargs):
     post.excerpt = kwargs.get("excerpt")
     post.content_json = kwargs.get("content_json") or {}
     post.content_html = kwargs.get("content_html")
+    post.source_css = kwargs.get("source_css")
     post.status = kwargs.get("status", "draft")
     post.language = "en"
     post.sort_order = 0
@@ -261,6 +262,38 @@ class TestImport:
         service, post_repo, _, _, _, _ = _make_service()
         result = service.import_posts([{"type": "page", "slug": "a", "title": "A"}])
         assert result == {"created": 1, "updated": 0}
+
+    def test_import_preserves_existing_status_when_absent(self):
+        # Re-importing must not demote a published post to draft.
+        service, post_repo, _, _, _, _ = _make_service()
+        _new_post(post_repo, type="page", slug="home", title="Home", status="published")
+        service.import_posts(
+            {"type": "page", "slug": "home", "title": "Home"}  # no status key
+        )
+        assert post_repo.find_by_type_and_slug("page", "home").status == "published"
+
+    def test_import_maps_legacy_is_published(self):
+        service, post_repo, _, _, _, _ = _make_service()
+        service.import_posts(
+            {"type": "page", "slug": "p", "name": "P", "is_published": True}
+        )
+        assert post_repo.find_by_type_and_slug("page", "p").status == "published"
+
+    def test_new_post_without_status_defaults_draft(self):
+        service, post_repo, _, _, _, _ = _make_service()
+        service.import_posts({"type": "page", "slug": "fresh", "title": "Fresh"})
+        assert post_repo.find_by_type_and_slug("page", "fresh").status == "draft"
+
+    def test_source_css_round_trips(self):
+        service, post_repo, _, _, _, _ = _make_service()
+        _new_post(post_repo, type="post", slug="styled", title="Styled",
+                  source_css=".x{color:red}")
+        item = service.export_posts(post_type="post")["items"][0]
+        assert item["source_css"] == ".x{color:red}"
+        # import into a fresh service applies it
+        service2, repo2, _, _, _, _ = _make_service()
+        service2.import_posts({"items": [item]})
+        assert repo2.find_by_type_and_slug("post", "styled").source_css == ".x{color:red}"
 
     def test_import_uses_name_when_title_missing(self):
         # Legacy cms_page exports carry `name`, not `title`.

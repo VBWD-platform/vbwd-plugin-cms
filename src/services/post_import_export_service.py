@@ -32,6 +32,7 @@ _SCALAR_FIELDS = (
     "featured_image_url",
     "content_html",
     "content_json",
+    "source_css",
     "status",
     "language",
     "sort_order",
@@ -71,11 +72,21 @@ class PostImportExportService:
 
     # ── export ───────────────────────────────────────────────────────────────
 
-    def export_posts(self, post_type: Optional[str] = None) -> Dict[str, Any]:
-        """Return the VBWD-standard envelope for all posts (or one type)."""
+    def export_posts(
+        self,
+        post_type: Optional[str] = None,
+        ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Return the VBWD-standard envelope for all posts (or one type).
+
+        When ``ids`` is given, only those posts are exported ("export selected").
+        """
         posts = self._post_repo.find_paginated(
             post_type=post_type, per_page=100000
         ).get("items", [])
+        if ids is not None:
+            wanted = {str(i) for i in ids}
+            posts = [post for post in posts if str(post.id) in wanted]
         slug_by_post_id = {str(post.id): post.slug for post in posts}
         return {
             "version": ENVELOPE_VERSION,
@@ -168,7 +179,9 @@ class PostImportExportService:
         post.featured_image_url = item.get("featured_image_url")
         post.content_json = item.get("content_json") or {}
         post.content_html = item.get("content_html")
-        post.status = item.get("status") or "draft"
+        # Page/post own CSS (editor "CSS" tab) travels with the export.
+        post.source_css = item.get("source_css")
+        post.status = self._resolve_status(item, existing)
         post.language = item.get("language") or "en"
         post.sort_order = item.get("sort_order", 0)
         post.layout_id = self._resolve_ref(self._layout_repo, item.get("layout_slug"))
@@ -179,6 +192,20 @@ class PostImportExportService:
             post.parent_id = None
         self._post_repo.save(post)
         return post, existing is None
+
+    def _resolve_status(self, item: Dict[str, Any], existing: Optional[CmsPost]) -> str:
+        """Status precedence on import: explicit ``status`` → legacy
+        ``is_published`` → the existing row's status (never silently demote a
+        published page to draft on re-import) → ``draft`` for a brand-new row.
+        """
+        explicit = (item.get("status") or "").strip()
+        if explicit:
+            return explicit
+        if "is_published" in item:
+            return "published" if item.get("is_published") else "draft"
+        if existing is not None:
+            return existing.status
+        return "draft"
 
     def _apply_seo(self, post: CmsPost, item: Dict[str, Any]) -> None:
         post.meta_title = item.get("meta_title")

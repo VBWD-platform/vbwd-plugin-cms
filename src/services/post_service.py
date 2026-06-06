@@ -13,6 +13,7 @@ Responsibilities:
 """
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from vbwd.events.dispatcher import Event
 
@@ -52,7 +53,14 @@ _ALLOWED_TRANSITIONS: Dict[str, set] = {
     },
     POST_STATUS_PUBLISHED: {POST_STATUS_PRIVATE, POST_STATUS_DRAFT},
     POST_STATUS_PRIVATE: {POST_STATUS_PUBLISHED, POST_STATUS_DRAFT},
-    POST_STATUS_TRASH: set(),
+    # Trash is restorable to any working status (undo a delete).
+    POST_STATUS_TRASH: {
+        POST_STATUS_DRAFT,
+        POST_STATUS_PENDING,
+        POST_STATUS_SCHEDULED,
+        POST_STATUS_PUBLISHED,
+        POST_STATUS_PRIVATE,
+    },
 }
 
 # Content fields whose edit fires content.changed (besides status).
@@ -62,6 +70,7 @@ _CONTENT_FIELDS = (
     "featured_image_url",
     "content_json",
     "content_html",
+    "source_css",
     "type_data",
     "slug",
     "meta_title",
@@ -182,6 +191,11 @@ class PostService:
         post = self._repo.find_by_id(post_id)
         if not post:
             raise PostNotFoundError(f"Post '{post_id}' not found")
+        # Back-fill a preview token for posts that predate the column so the
+        # editor always has a shareable preview URL.
+        if not post.preview_token:
+            post.preview_token = uuid4().hex
+            self._repo.save(post)
         return self._with_term_ids(self._with_resolved_style(post.to_dict()), post.id)
 
     def list_posts(
@@ -192,14 +206,30 @@ class PostService:
         page: int = 1,
         per_page: int = 20,
         newest_first: bool = False,
+        sort_by: Optional[str] = None,
+        sort_dir: str = "asc",
+        language: Optional[str] = None,
+        term_id: Optional[str] = None,
+        layout_id: Optional[str] = None,
+        style_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = self._repo.find_paginated(
             post_type=post_type,
             status=status,
             search=(search or None) and search.strip() or None,
+            language=language or None,
+            term_id=term_id or None,
+            layout_id=layout_id or None,
+            style_id=style_id or None,
+            date_from=date_from or None,
+            date_to=date_to or None,
             page=page,
             per_page=per_page,
             newest_first=newest_first,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
         )
         return self._serialize_page(result)
 
@@ -265,6 +295,7 @@ class PostService:
         post.title = title
         post.excerpt = data.get("excerpt")
         post.featured_image_url = data.get("featured_image_url")
+        post.source_css = data.get("source_css")
         post.content_json = data.get("content_json") or {}
         post.content_html = data.get("content_html")
         post.type_data = data.get("type_data")
@@ -278,6 +309,7 @@ class PostService:
         self._apply_layout_style(post, data)
         if post.status == POST_STATUS_PUBLISHED and not post.published_at:
             post.published_at = datetime.now(timezone.utc)
+        post.preview_token = uuid4().hex
 
         self._repo.save(post)
         self._emit_content_changed(post, reason="created")
@@ -309,6 +341,7 @@ class PostService:
             "featured_image_url",
             "content_json",
             "content_html",
+            "source_css",
             "type_data",
             "author_id",
             "language",
@@ -381,6 +414,49 @@ class PostService:
         if not post:
             raise PostNotFoundError(f"Post '{post_id}' not found")
         self._post_term_repo.replace_for_post(post_id, term_ids)
+
+    # ── bulk operations (admin list bulk-bar) ─────────────────────────────
+    def bulk_delete(self, ids: List[str]) -> Dict[str, int]:
+        return {"deleted": self._repo.bulk_delete(ids)}
+
+    def bulk_set_status(self, ids: List[str], status: str) -> Dict[str, int]:
+        """Publish/unpublish (or any transition) many posts. Posts whose current
+        status can't legally move to ``status`` are skipped, not errored."""
+        updated = 0
+        for post in self._repo.find_by_ids(ids):
+            try:
+                changed = self._transition_status(post, status)
+            except InvalidStatusTransitionError:
+                continue
+            if changed:
+                self._repo.save(post)
+                self._emit_content_changed(post, reason="status_changed")
+                updated += 1
+        return {"updated": updated}
+
+    def bulk_set_searchable(self, ids: List[str], searchable: bool) -> Dict[str, int]:
+        """Toggle search visibility for many posts (searchable ⇔ not excluded)."""
+        posts = self._repo.find_by_ids(ids)
+        for post in posts:
+            post.seo_excluded = not searchable
+            self._repo.save(post)
+            self._emit_content_changed(post, reason="updated")
+        return {"updated": len(posts)}
+
+    def bulk_assign_term(self, ids: List[str], term_id: str) -> Dict[str, int]:
+        """Add one term (e.g. a category) to many posts without dropping the
+        terms they already carry."""
+        updated = 0
+        for post_id in ids:
+            existing = [
+                str(link.term_id)
+                for link in self._post_term_repo.find_by_post(str(post_id))
+            ]
+            if term_id not in existing:
+                existing.append(term_id)
+                self._post_term_repo.replace_for_post(str(post_id), existing)
+                updated += 1
+        return {"updated": updated}
 
     def regenerate_prerender(self) -> int:
         """Re-emit ``content.changed`` for every published post so the SEO

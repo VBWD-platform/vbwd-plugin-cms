@@ -68,6 +68,9 @@ class CmsPost(BaseModel):
     featured_image_url = db.Column(db.String(512), nullable=True)
     content_json = db.Column(db.JSON, nullable=False, default=dict)
     content_html = db.Column(db.Text, nullable=True)
+    # Page/post-scoped CSS authored on the editor's "CSS" tab. Applied on top of
+    # the resolved style by the public renderer.
+    source_css = db.Column(db.Text, nullable=True)
     type_data = db.Column(db.JSON, nullable=True)
 
     author_id = db.Column(
@@ -92,6 +95,9 @@ class CmsPost(BaseModel):
     language = db.Column(db.String(8), nullable=False, default="en")
     translation_group_id = db.Column(db.UUID, nullable=True, index=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
+    # Capability token for previewing an unpublished post via a shareable URL
+    # (?preview_token=…). Generated on create; mirrors cms_page.preview_token.
+    preview_token = db.Column(db.String(64), nullable=True, index=True)
 
     # SEO columns (mirrored from cms_page).
     meta_title = db.Column(db.String(255), nullable=True)
@@ -139,6 +145,7 @@ class CmsPost(BaseModel):
             "featured_image_url": self.featured_image_url,
             "content_json": self.content_json,
             "content_html": self.content_html,
+            "source_css": self.source_css,
             "type_data": self.type_data,
             "author_id": str(self.author_id) if self.author_id else None,
             "parent_id": str(self.parent_id) if self.parent_id else None,
@@ -147,6 +154,7 @@ class CmsPost(BaseModel):
                 self.published_at.isoformat() if self.published_at else None
             ),
             "language": self.language,
+            "preview_token": self.preview_token,
             "translation_group_id": (
                 str(self.translation_group_id) if self.translation_group_id else None
             ),

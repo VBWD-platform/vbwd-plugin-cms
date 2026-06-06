@@ -131,6 +131,14 @@ class CmsLayoutService:
         count = self._repo.bulk_delete(ids)
         return {"deleted": count}
 
+    def bulk_set_active(self, ids: List[str], active: bool) -> Dict[str, Any]:
+        """Activate / deactivate many layouts at once."""
+        layouts = self._repo.find_by_ids(ids)
+        for layout in layouts:
+            layout.is_active = active
+            self._repo.save(layout)
+        return {"updated": len(layouts)}
+
     def set_widget_assignments(
         self, layout_id: str, assignments: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:

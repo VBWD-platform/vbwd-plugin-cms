@@ -1122,6 +1122,19 @@ def admin_bulk_layouts():
     return jsonify(result), 200
 
 
+@cms_bp.route("/api/v1/admin/cms/layouts/bulk/active", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.layouts.manage")
+def admin_bulk_layout_active():
+    """POST /api/v1/admin/cms/layouts/bulk/active — activate/deactivate many."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list) or "active" not in data:
+        return jsonify({"error": "ids array and active required"}), 400
+    return jsonify(_layout_service().bulk_set_active(ids, bool(data["active"]))), 200
+
+
 @cms_bp.route("/api/v1/admin/cms/layouts/export", methods=["POST"])
 @require_auth
 @require_admin
@@ -1860,6 +1873,14 @@ def admin_list_posts():
         search=search,
         page=page,
         per_page=per_page,
+        sort_by=request.args.get("sort_by"),
+        sort_dir=request.args.get("sort_dir", "asc"),
+        language=request.args.get("language"),
+        term_id=request.args.get("category") or request.args.get("term_id"),
+        layout_id=request.args.get("layout_id"),
+        style_id=request.args.get("style_id"),
+        date_from=request.args.get("date_from"),
+        date_to=request.args.get("date_to"),
     )
     return jsonify(result), 200
 
@@ -1934,6 +1955,63 @@ def admin_delete_post(post_id: str):
         return jsonify({"deleted": post_id}), 200
     except PostNotFoundError as e:
         return jsonify({"error": str(e)}), 404
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/bulk", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_posts():
+    """POST /api/v1/admin/cms/posts/bulk — bulk delete by ids."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    return jsonify(_post_service().bulk_delete(ids)), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/bulk/status", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_post_status():
+    """POST /api/v1/admin/cms/posts/bulk/status — publish/unpublish many."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    status = (data.get("status") or "").strip()
+    if not isinstance(ids, list) or not status:
+        return jsonify({"error": "ids array and status required"}), 400
+    return jsonify(_post_service().bulk_set_status(ids, status)), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/bulk/searchable", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_post_searchable():
+    """POST /api/v1/admin/cms/posts/bulk/searchable — toggle search visibility."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list) or "searchable" not in data:
+        return jsonify({"error": "ids array and searchable required"}), 400
+    return (
+        jsonify(_post_service().bulk_set_searchable(ids, bool(data["searchable"]))),
+        200,
+    )
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/bulk/assign-term", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_post_assign_term():
+    """POST /api/v1/admin/cms/posts/bulk/assign-term — add a term to many."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    term_id = (data.get("term_id") or "").strip()
+    if not isinstance(ids, list) or not term_id:
+        return jsonify({"error": "ids array and term_id required"}), 400
+    return jsonify(_post_service().bulk_assign_term(ids, term_id)), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/seo/regenerate", methods=["POST"])
@@ -2056,6 +2134,19 @@ def admin_delete_term(term_id: str):
         return jsonify({"error": str(e)}), 404
 
 
+@cms_bp.route("/api/v1/admin/cms/terms/bulk", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_terms():
+    """POST /api/v1/admin/cms/terms/bulk — bulk delete by ids."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    return jsonify(_term_service().bulk_delete(ids)), 200
+
+
 @cms_bp.route("/api/v1/admin/cms/terms/export", methods=["GET"])
 @require_auth
 @require_admin
@@ -2110,7 +2201,10 @@ def admin_export_posts():
     payload re-resolves on any target DB.
     """
     post_type = request.args.get("type") or None
-    payload = _post_import_export_service().export_posts(post_type=post_type)
+    # Optional ``ids`` (comma-separated) scopes to "export selected".
+    ids_param = request.args.get("ids")
+    ids = [i for i in ids_param.split(",") if i] if ids_param else None
+    payload = _post_import_export_service().export_posts(post_type=post_type, ids=ids)
     filename = f"cms-posts-{post_type}.json" if post_type else "cms-posts.json"
     return Response(
         json.dumps(payload, ensure_ascii=False),
@@ -2180,10 +2274,20 @@ def public_get_post(slug: str):
 
     Resolves nested page paths (e.g. ``about/team``) via the full-path slug.
     Published posts are public; private posts require an authorized session.
+    A matching ``?preview_token=`` returns the post regardless of status, so an
+    admin can preview a draft/pending/scheduled/private/trash post via a
+    shareable link (the editor's "Preview" button).
     """
     post_type = request.args.get("type", "page")
+    preview_token = request.args.get("preview_token")
     post = _post_service().resolve_published_path(post_type, slug)
-    if not post or not _post_is_publicly_visible(post):
+    if not post:
+        return jsonify({"error": "Post not found"}), 404
+    if preview_token:
+        if post.get("preview_token") and post["preview_token"] == preview_token:
+            return jsonify(post), 200
+        return jsonify({"error": "Invalid preview token"}), 403
+    if not _post_is_publicly_visible(post):
         return jsonify({"error": "Post not found"}), 404
     return jsonify(post), 200
 

@@ -58,6 +58,19 @@ def _layout(slug="my-layout", areas=None):
     return lo
 
 
+class TestBulkSetActive:
+    def test_bulk_set_active_toggles_is_active(self):
+        a, b = _layout(slug="a"), _layout(slug="b")
+        service, repo, _ = _make_service(layouts=[a, b])
+        repo.find_by_ids.return_value = [a, b]
+        result = service.bulk_set_active([str(a.id), str(b.id)], False)
+        assert result == {"updated": 2}
+        assert a.is_active is False and b.is_active is False
+        # reactivate
+        service.bulk_set_active([str(a.id)], True)
+        assert a.is_active is True
+
+
 class TestCreateLayout:
     def test_create_layout_validates_area_types(self):
         svc, _, _ = _make_service()

@@ -61,3 +61,17 @@ class TermRepository:
             self.session.commit()
             return True
         return False
+
+    def bulk_delete(self, ids: List[str]) -> int:
+        if not ids:
+            return 0
+        terms = (
+            self.session.query(CmsTerm)
+            .filter(CmsTerm.id.in_([str(i) for i in ids]))
+            .all()
+        )
+        for term in terms:
+            self.session.delete(term)
+        self.session.flush()
+        self.session.commit()
+        return len(terms)

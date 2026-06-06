@@ -88,12 +88,37 @@ def _fe_dist_dir() -> Optional[str]:
     return os.environ.get("VBWD_FE_DIST_DIR")
 
 
+def _resolve_post_css(post) -> str:
+    """The CSS a post renders with: its explicit style, else the active default
+    style, plus the page's own ``source_css`` (CSS tab) layered on top — the
+    same resolution the public renderer applies, inlined for the static page."""
+    from plugins.cms.src.repositories.cms_style_repository import (
+        CmsStyleRepository,
+    )
+
+    repo = CmsStyleRepository(_session())
+    style = None
+    if getattr(post, "style_id", None):
+        style = repo.find_by_id(str(post.style_id))
+    if style is None:
+        default = repo.find_default()
+        if default is not None and getattr(default, "is_active", True):
+            style = default
+    parts = []
+    if style is not None and getattr(style, "source_css", None):
+        parts.append(style.source_css)
+    if getattr(post, "source_css", None):
+        parts.append(post.source_css)
+    return "\n".join(parts)
+
+
 def _build_writer() -> SeoPrerenderWriter:
     return SeoPrerenderWriter(
         var_dir=_var_dir(),
         post_loader=SeoPostLoader(_session()),
         canonical_rewrite_checker=_canonical_is_rewritten,
         asset_stamper=SeoAssetStamper(_fe_dist_dir()),
+        style_css_resolver=_resolve_post_css,
     )
 
 

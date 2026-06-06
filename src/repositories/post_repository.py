@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
 from plugins.cms.src.models.cms_post import (
     CmsPost,
@@ -35,15 +35,34 @@ class PostRepository:
         status: Optional[str] = None,
         term_id: Optional[str] = None,
         search: Optional[str] = None,
+        language: Optional[str] = None,
+        layout_id: Optional[str] = None,
+        style_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         page: int = 1,
         per_page: int = 20,
         newest_first: bool = False,
+        sort_by: Optional[str] = None,
+        sort_dir: str = "asc",
     ) -> Dict[str, Any]:
         query = self.session.query(CmsPost)
         if post_type:
             query = query.filter(CmsPost.type == post_type)
         if status:
             query = query.filter(CmsPost.status == status)
+        if language:
+            query = query.filter(CmsPost.language == language)
+        if layout_id:
+            query = query.filter(CmsPost.layout_id == layout_id)
+        if style_id:
+            query = query.filter(CmsPost.style_id == style_id)
+        # Time period — date-granular, inclusive, against the shown "updated"
+        # column (func.date so a plain YYYY-MM-DD compares cleanly).
+        if date_from:
+            query = query.filter(func.date(CmsPost.updated_at) >= date_from)
+        if date_to:
+            query = query.filter(func.date(CmsPost.updated_at) <= date_to)
         if term_id:
             query = query.join(CmsPostTerm, CmsPostTerm.post_id == CmsPost.id).filter(
                 CmsPostTerm.term_id == term_id
@@ -58,7 +77,7 @@ class PostRepository:
 
         total = query.count()
         items = (
-            self._apply_ordering(query, newest_first)
+            self._apply_ordering(query, newest_first, sort_by, sort_dir)
             .offset((page - 1) * per_page)
             .limit(per_page)
             .all()
@@ -107,14 +126,38 @@ class PostRepository:
             "pages": max(1, (total + per_page - 1) // per_page),
         }
 
-    def _apply_ordering(self, query, newest_first: bool):
+    # Columns the admin list may sort by (whitelist guards against arbitrary
+    # attribute access from a client-supplied sort_by).
+    _SORTABLE = {
+        "title": CmsPost.title,
+        "slug": CmsPost.slug,
+        "type": CmsPost.type,
+        "status": CmsPost.status,
+        "language": CmsPost.language,
+        "sort_order": CmsPost.sort_order,
+        "created_at": CmsPost.created_at,
+        "updated_at": CmsPost.updated_at,
+        "published_at": CmsPost.published_at,
+    }
+
+    def _apply_ordering(
+        self,
+        query,
+        newest_first: bool,
+        sort_by: Optional[str] = None,
+        sort_dir: str = "asc",
+    ):
         """Apply the result ordering for a list query.
 
-        Default (list/archive UI) is ``sort_order`` then most-recently-edited.
-        ``newest_first`` (used by the RSS feed) orders by ``published_at``
-        descending — newest published first — with ``created_at`` as a stable
-        tiebreak for rows sharing (or missing) a publish timestamp.
+        An explicit ``sort_by`` (whitelisted column) wins, in ``sort_dir``
+        direction. Otherwise: ``newest_first`` (RSS feed) orders by
+        ``published_at`` desc; the default (list UI) is ``sort_order`` then
+        most-recently-edited.
         """
+        column = self._SORTABLE.get((sort_by or "").strip())
+        if column is not None:
+            ordering = column.desc() if sort_dir == "desc" else column.asc()
+            return query.order_by(ordering, CmsPost.id.asc())
         if newest_first:
             return query.order_by(
                 CmsPost.published_at.desc().nullslast(),
@@ -157,3 +200,20 @@ class PostRepository:
             self.session.commit()
             return True
         return False
+
+    def find_by_ids(self, ids: List[str]) -> List[CmsPost]:
+        if not ids:
+            return []
+        return (
+            self.session.query(CmsPost)
+            .filter(CmsPost.id.in_([str(i) for i in ids]))
+            .all()
+        )
+
+    def bulk_delete(self, ids: List[str]) -> int:
+        posts = self.find_by_ids(ids)
+        for post in posts:
+            self.session.delete(post)
+        self.session.flush()
+        self.session.commit()
+        return len(posts)

@@ -91,6 +91,31 @@ def test_published_writes_head_body_and_payload(tmp_path):
     assert 'id="__POST__"' in html
 
 
+def test_inlines_resolved_style_css_when_resolver_present(tmp_path):
+    post = _Post(content_html="<p>Body</p>")
+    writer = _writer(
+        tmp_path, [post],
+        style_css_resolver=lambda p: ".hero{color:red}",
+    )
+    writer.handle_content_changed(_event(post))
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert '<style data-seo="ssr-style">.hero{color:red}</style>' in html
+
+
+def test_no_style_block_without_resolver(tmp_path):
+    post = _Post()
+    writer = _writer(tmp_path, [post])  # no resolver
+    writer.handle_content_changed(_event(post))
+    assert 'data-seo="ssr-style"' not in _seo_file(tmp_path, "pricing").read_text()
+
+
+def test_empty_resolved_css_emits_no_style_block(tmp_path):
+    post = _Post()
+    writer = _writer(tmp_path, [post], style_css_resolver=lambda p: "")
+    writer.handle_content_changed(_event(post))
+    assert 'data-seo="ssr-style"' not in _seo_file(tmp_path, "pricing").read_text()
+
+
 def test_published_embeds_entry_tags_between_markers(tmp_path):
     from plugins.cms.src.services.seo_asset_stamp import (
         ASSETS_BEGIN_MARKER,

@@ -186,6 +186,31 @@ class TestListSearch:
         assert f"a-{marker}" in slugs and f"b-{marker}" in slugs
 
 
+class TestListFilters:
+    def test_filter_by_language(self, db):
+        service = _post_service(db)
+        marker = uuid.uuid4().hex[:6]
+        service.create_post({"type": "post", "title": "EN", "slug": f"en-{marker}", "language": "en"})
+        service.create_post({"type": "post", "title": "DE", "slug": f"de-{marker}", "language": "de"})
+        result = service.list_posts(post_type="post", language="de")
+        slugs = [i["slug"] for i in result["items"]]
+        assert f"de-{marker}" in slugs and f"en-{marker}" not in slugs
+
+    def test_filter_by_date_range_on_updated(self, db):
+        service = _post_service(db)
+        marker = uuid.uuid4().hex[:6]
+        service.create_post({"type": "post", "title": "X", "slug": f"x-{marker}"})
+        # Today is within range; a past-only window excludes it.
+        within = service.list_posts(
+            post_type="post", date_from="2000-01-01", date_to="2999-12-31"
+        )
+        assert any(i["slug"] == f"x-{marker}" for i in within["items"])
+        past = service.list_posts(
+            post_type="post", date_from="2000-01-01", date_to="2000-01-02"
+        )
+        assert all(i["slug"] != f"x-{marker}" for i in past["items"])
+
+
 class TestNestedPathResolution:
     def test_nested_page_resolves_by_full_path(self, db):
         service = _post_service(db)
