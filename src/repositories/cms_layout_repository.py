@@ -13,6 +13,12 @@ class CmsLayoutRepository:
     def find_by_id(self, layout_id: str) -> Optional[CmsLayout]:
         return self.session.query(CmsLayout).filter(CmsLayout.id == layout_id).first()
 
+    def find_default(self) -> Optional[CmsLayout]:
+        """Return the single layout with is_default=True, or None."""
+        return (
+            self.session.query(CmsLayout).filter(CmsLayout.is_default.is_(True)).first()
+        )
+
     def find_all(
         self,
         page: int = 1,

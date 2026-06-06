@@ -10,6 +10,11 @@ from vbwd.extensions import db
 from vbwd.models.base import BaseModel
 
 
+# The ``term_type`` discriminator value for category terms (the unified taxonomy
+# replacement for the legacy cms_category table). Single source of truth.
+CATEGORY_TERM_TYPE = "category"
+
+
 class CmsTerm(BaseModel):
     """A single taxonomy term (category, tag, or custom type)."""
 

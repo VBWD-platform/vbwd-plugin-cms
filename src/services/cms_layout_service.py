@@ -107,6 +107,16 @@ class CmsLayoutService:
                 raise CmsLayoutSlugConflictError(
                     f"Slug '{data['slug']}' is already in use"
                 )
+        # Promotions to default must go through set_default to demote any
+        # previous default atomically; explicit demotions flow through here.
+        if data.get("is_default") is True and not obj.is_default:
+            self.set_default(layout_id)
+            refetched = self._repo.find_by_id(layout_id)
+            if refetched is None:
+                raise CmsLayoutNotFoundError(
+                    f"Layout {layout_id} disappeared after set_default"
+                )
+            obj = refetched
         for field in (
             "name",
             "slug",
@@ -117,8 +127,33 @@ class CmsLayoutService:
         ):
             if field in data:
                 setattr(obj, field, data[field])
+        if data.get("is_default") is False:
+            obj.is_default = False
         self._repo.save(obj)
         return self._to_dto(obj)
+
+    # ── default-layout management ─────────────────────────────────────────────
+
+    def set_default(self, layout_id: str) -> Dict[str, Any]:
+        """Promote a layout to default. Demotes any previous default in the
+        same transaction so the single-default invariant holds."""
+        target = self._repo.find_by_id(layout_id)
+        if not target:
+            raise CmsLayoutNotFoundError(f"Layout {layout_id} not found")
+        previous = self._repo.find_default()
+        if previous is not None and str(previous.id) != str(target.id):
+            previous.is_default = False
+            self._repo.save(previous)
+        target.is_default = True
+        self._repo.save(target)
+        return self._to_dto(target)
+
+    def clear_default(self) -> None:
+        """Unset whichever layout is currently default. Idempotent."""
+        previous = self._repo.find_default()
+        if previous is not None:
+            previous.is_default = False
+            self._repo.save(previous)
 
     def delete_layout(self, layout_id: str) -> None:
         self._lw_repo.delete_by_layout(layout_id)
@@ -235,6 +270,7 @@ class CmsLayoutService:
         obj.areas = data.get("areas", [])
         obj.sort_order = data.get("sort_order", 0)
         obj.is_active = data.get("is_active", True)
+        obj.is_default = False
         return obj
 
     def _to_dto(

@@ -210,6 +210,46 @@ def _filter_assignments_by_access(
     return filtered
 
 
+def _enrich_assignments_with_widgets(assignments: list[dict]) -> list[dict]:
+    """Attach full widget data to each assignment (DRY — used by page/post,
+    public + admin). A failed widget lookup yields ``widget=None`` rather than
+    breaking the whole payload."""
+    if not assignments:
+        return assignments
+    widget_svc = _widget_service()
+    for assignment in assignments:
+        widget_id = assignment.get("widget_id")
+        if widget_id:
+            try:
+                assignment["widget"] = widget_svc.get_widget(widget_id)
+            except Exception:
+                assignment["widget"] = None
+    return assignments
+
+
+def _post_content_blocks_dict(post_id: str) -> dict:
+    """Return a post's additional content areas keyed by ``area_name`` (S55).
+
+    Shape mirrors the legacy page enrichment: ``{area_name: {content_html,
+    source_css, ...}}`` so the renderer can read ``contentBlocks[area]``.
+    """
+    blocks = _post_content_block_repo().find_by_post(post_id)
+    return {block.area_name: block.to_dict() for block in blocks}
+
+
+def _enrich_public_post_areas(post: dict) -> None:
+    """Add ``content_blocks`` + access-filtered, enriched ``page_assignments``
+    to a public post payload in place (S55 — mirror of /cms/pages/<slug>)."""
+    post_id = post.get("id")
+    if not post_id:
+        return
+    post["content_blocks"] = _post_content_blocks_dict(post_id)
+    user_level_ids = _get_current_user_access_level_ids()
+    assignments = [pw.to_dict() for pw in _post_widget_repo().find_by_post(post_id)]
+    assignments = _filter_assignments_by_access(assignments, user_level_ids)
+    post["page_assignments"] = _enrich_assignments_with_widgets(assignments)
+
+
 # ── Service factory helpers ───────────────────────────────────────────────────
 
 
@@ -242,6 +282,7 @@ def _post_service() -> PostService:
         event_dispatcher=ContentEventPublisher(),
         layout_repo=CmsLayoutRepository(db.session),
         style_repo=CmsStyleRepository(db.session),
+        content_block_repo=_post_content_block_repo(),
     )
 
 
@@ -321,6 +362,22 @@ def _page_widget_repo():
     )
 
     return CmsPageWidgetRepository(db.session)
+
+
+def _post_widget_repo():
+    from plugins.cms.src.repositories.cms_post_widget_repository import (
+        CmsPostWidgetRepository,
+    )
+
+    return CmsPostWidgetRepository(db.session)
+
+
+def _post_content_block_repo():
+    from plugins.cms.src.repositories.cms_post_content_block_repository import (
+        CmsPostContentBlockRepository,
+    )
+
+    return CmsPostContentBlockRepository(db.session)
 
 
 def _layout_service() -> CmsLayoutService:
@@ -1216,6 +1273,37 @@ def admin_delete_layout(layout_id: str):
         return jsonify({"error": str(e)}), 404
 
 
+# ── Default-layout management (mirrors the default-style routes) ─────────────
+
+
+@cms_bp.route("/api/v1/admin/cms/layouts/default", methods=["DELETE"])
+@require_auth
+@require_admin
+@require_permission("cms.layouts.manage")
+def admin_clear_default_layout():
+    """DELETE /api/v1/admin/cms/layouts/default — clear the default flag.
+
+    Idempotent: returns 200 whether or not a default was set.
+    """
+    _layout_service().clear_default()
+    return jsonify({"cleared": True}), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>/default", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.layouts.manage")
+def admin_set_default_layout(layout_id: str):
+    """POST /api/v1/admin/cms/layouts/<id>/default — promote to default.
+
+    Demotes any existing default atomically.
+    """
+    try:
+        return jsonify(_layout_service().set_default(layout_id)), 200
+    except CmsLayoutNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+
+
 @cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>/widgets", methods=["PUT"])
 @require_auth
 @require_admin
@@ -1914,11 +2002,20 @@ def admin_create_post():
 @require_admin
 @require_permission("cms.manage")
 def admin_get_post(post_id: str):
-    """GET /api/v1/admin/cms/posts/<id> — single post, any status."""
+    """GET /api/v1/admin/cms/posts/<id> — single post, any status.
+
+    Includes ``content_blocks`` (additional content areas keyed by area_name)
+    and ``page_assignments`` (the post's per-area widgets, enriched) so the
+    editor can load existing values (S55).
+    """
     try:
-        return jsonify(_post_service().get_post(post_id)), 200
+        result = _post_service().get_post(post_id)
     except PostNotFoundError as e:
         return jsonify({"error": str(e)}), 404
+    result["content_blocks"] = _post_content_blocks_dict(post_id)
+    assignments = [pw.to_dict() for pw in _post_widget_repo().find_by_post(post_id)]
+    result["page_assignments"] = _enrich_assignments_with_widgets(assignments)
+    return jsonify(result), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/posts/<post_id>", methods=["PUT"])
@@ -1955,6 +2052,37 @@ def admin_delete_post(post_id: str):
         return jsonify({"deleted": post_id}), 200
     except PostNotFoundError as e:
         return jsonify({"error": str(e)}), 404
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>/widgets", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_get_post_widgets(post_id: str):
+    """GET /api/v1/admin/cms/posts/<id>/widgets — list post widget assignments.
+
+    Mirror of admin_get_page_widgets (S55). Each assignment is enriched with
+    its full widget data so the editor can render the picker selection.
+    """
+    assignments = [pw.to_dict() for pw in _post_widget_repo().find_by_post(post_id)]
+    return jsonify(_enrich_assignments_with_widgets(assignments)), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/<post_id>/widgets", methods=["PUT"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_set_post_widgets(post_id: str):
+    """PUT /api/v1/admin/cms/posts/<id>/widgets — replace widget assignments.
+
+    Body: a JSON array of ``{widget_id, area_name, sort_order,
+    required_access_level_ids}``. Mirror of admin_set_page_widgets (S55).
+    """
+    data = request.get_json()
+    if not isinstance(data, list):
+        return jsonify({"error": "JSON array of assignments required"}), 400
+    created = _post_widget_repo().replace_for_post(post_id, data)
+    return jsonify([pw.to_dict() for pw in created]), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/posts/bulk", methods=["POST"])
@@ -2012,6 +2140,38 @@ def admin_bulk_post_assign_term():
     if not isinstance(ids, list) or not term_id:
         return jsonify({"error": "ids array and term_id required"}), 400
     return jsonify(_post_service().bulk_assign_term(ids, term_id)), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/bulk/assign-layout", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_post_assign_layout():
+    """POST /api/v1/admin/cms/posts/bulk/assign-layout — set a layout on many,
+    or clear it when ``layout_id`` is missing/null (the bulk-"Unset" action)."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    layout_id = (data.get("layout_id") or "").strip() or None
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    try:
+        return jsonify(_post_service().bulk_assign_layout(ids, layout_id)), 200
+    except InvalidLayoutOrStyleError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/bulk/unassign-category", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_post_unassign_category():
+    """POST /api/v1/admin/cms/posts/bulk/unassign-category — remove all
+    category-type terms from many (keeps tags)."""
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    return jsonify(_post_service().bulk_unassign_category(ids)), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/seo/regenerate", methods=["POST"])
@@ -2303,6 +2463,7 @@ def public_get_post(slug: str):
     post = _post_service().resolve_published_path(post_type, slug)
     if not post:
         return jsonify({"error": "Post not found"}), 404
+    _enrich_public_post_areas(post)
     if preview_token:
         if post.get("preview_token") and post["preview_token"] == preview_token:
             return jsonify(post), 200

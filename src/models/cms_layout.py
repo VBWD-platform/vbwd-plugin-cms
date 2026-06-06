@@ -29,6 +29,9 @@ class CmsLayout(BaseModel):
     areas = db.Column(db.JSON, nullable=False, default=list)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # At most one row has is_default=True, enforced by a partial unique
+    # index created in migration 20260606_1100_cms_layout_default.
+    is_default = db.Column(db.Boolean, nullable=False, default=False)
 
     def to_dict(self) -> dict:
         return {
@@ -39,6 +42,7 @@ class CmsLayout(BaseModel):
             "areas": self.areas,
             "sort_order": self.sort_order,
             "is_active": self.is_active,
+            "is_default": bool(self.is_default),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

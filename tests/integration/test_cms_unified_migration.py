@@ -44,8 +44,16 @@ def migration_connection(db):
     transaction = connection.begin()
     operations = Operations(MigrationContext.configure(connection))
     # Start from a clean slate: the db fixture's create_all() already made
-    # these tables, so drop them before exercising the migration.
-    for table in ("cms_post_term", "cms_term", "cms_post"):
+    # these tables, so drop them before exercising the migration. Tables that
+    # FK cms_post (cms_post_widget / cms_post_content_block, added later in the
+    # cms chain by S55) must drop first so the cms_post drop is unblocked.
+    for table in (
+        "cms_post_widget",
+        "cms_post_content_block",
+        "cms_post_term",
+        "cms_term",
+        "cms_post",
+    ):
         if table in _table_names(connection):
             operations.drop_table(table)
     try:

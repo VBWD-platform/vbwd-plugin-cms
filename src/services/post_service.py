@@ -26,6 +26,7 @@ from plugins.cms.src.models.cms_post import (
     POST_STATUS_PRIVATE,
     POST_STATUS_TRASH,
 )
+from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE
 from plugins.cms.src.services import post_type_registry
 from plugins.cms.src.services._slug import slugify
 
@@ -138,15 +139,23 @@ class PostService:
         event_dispatcher=None,
         layout_repo=None,
         style_repo=None,
+        content_block_repo=None,
     ) -> None:
         self._repo = repo
         self._term_repo = term_repo
         self._post_term_repo = post_term_repo
         self._event_dispatcher = event_dispatcher
+        # Optional per-area content-block repo (S55). When present, an optional
+        # ``content_blocks`` key in the create/update payload upserts additional
+        # content areas (the primary area stays on ``content_html``). Absent →
+        # the feature is silently inert, so a caller that does not wire it keeps
+        # working (the disabled-feature path).
+        self._content_block_repo = content_block_repo
         # Optional layout/style repos: when present, a provided layout_id /
         # style_id is validated to exist (mirrors how cms_page is themed). When
         # absent the ids are persisted unchecked, so a caller that does not wire
-        # them keeps working (the disabled-validation path).
+        # them keeps working (the disabled-validation path). The repos also back
+        # the admin-designated default (find_default) applied on PUBLIC reads.
         self._layout_repo = layout_repo
         self._style_repo = style_repo
 
@@ -178,6 +187,36 @@ class PostService:
         else:
             dto["resolved_style_id"] = None
             dto["resolved_style_source"] = None
+        return dto
+
+    def _with_resolved_layout(self, dto: Dict[str, Any]) -> Dict[str, Any]:
+        """Augment a post dict with resolved_layout_id / resolved_layout_source.
+
+        Mirrors _with_resolved_style — the default is the cms_layout row
+        flagged ``is_default`` (via layout_repo.find_default), not a config:
+          - Explicit layout_id wins (source='explicit').
+          - Otherwise an active default layout is used (source='default').
+          - Otherwise both fields resolve to None / 'none'.
+
+        Applied on the PUBLIC payload only — the editor keeps the raw,
+        possibly-empty layout_id so "no layout" stays truthful. A missing/
+        absent layout_repo is tolerated — the fields still appear so the
+        public renderer can rely on their presence.
+        """
+        layout_id = dto.get("layout_id")
+        if layout_id:
+            dto["resolved_layout_id"] = str(layout_id)
+            dto["resolved_layout_source"] = "explicit"
+            return dto
+        default = None
+        if self._layout_repo is not None and hasattr(self._layout_repo, "find_default"):
+            default = self._layout_repo.find_default()
+        if default is not None and getattr(default, "is_active", True):
+            dto["resolved_layout_id"] = str(default.id)
+            dto["resolved_layout_source"] = "default"
+        else:
+            dto["resolved_layout_id"] = None
+            dto["resolved_layout_source"] = "none"
         return dto
 
     def _with_term_ids(self, dto: Dict[str, Any], post_id: Any) -> Dict[str, Any]:
@@ -266,7 +305,24 @@ class PostService:
         post = self._repo.find_by_type_and_slug(post_type, normalized)
         if not post:
             return None
-        return self._with_resolved_style(post.to_dict())
+        return self._with_resolved_layout(self._with_resolved_style(post.to_dict()))
+
+    def _apply_content_blocks(self, post_id: Any, data: Dict[str, Any]) -> None:
+        """Upsert any additional content areas carried in the payload (S55).
+
+        ``content_blocks`` is a list of ``{area_name, content_html, source_css?,
+        sort_order?, content_json?}``. The primary content area stays on
+        ``content_html`` (SEO body) and is never written here. No-op when no
+        content-block repo is wired or the key is absent.
+        """
+        if self._content_block_repo is None:
+            return
+        blocks = data.get("content_blocks")
+        if not isinstance(blocks, list) or not blocks:
+            return
+        normalized = [block for block in blocks if block.get("area_name")]
+        if normalized:
+            self._content_block_repo.replace_for_post(str(post_id), normalized)
 
     # ── writes ───────────────────────────────────────────────────────────
 
@@ -312,6 +368,7 @@ class PostService:
         post.preview_token = uuid4().hex
 
         self._repo.save(post)
+        self._apply_content_blocks(post.id, data)
         self._emit_content_changed(post, reason="created")
         return post.to_dict()
 
@@ -364,6 +421,7 @@ class PostService:
             status_changed = self._transition_status(post, data["status"])
 
         self._repo.save(post)
+        self._apply_content_blocks(post.id, data)
         if status_changed or any(field in data for field in _CONTENT_FIELDS):
             self._emit_content_changed(post, reason="updated")
         return post.to_dict()
@@ -457,6 +515,50 @@ class PostService:
                 self._post_term_repo.replace_for_post(str(post_id), existing)
                 updated += 1
         return {"updated": updated}
+
+    def bulk_unassign_category(self, ids: List[str]) -> Dict[str, int]:
+        """Remove every ``category``-type term from many posts, keeping any
+        tags (or other term types) they carry.
+
+        Mirrors ``bulk_assign_term`` (per-post junction edit via the term repo
+        to resolve each term's type). Counts posts that actually changed.
+        """
+        updated = 0
+        for post_id in ids:
+            links = self._post_term_repo.find_by_post(str(post_id))
+            remaining = [
+                str(link.term_id)
+                for link in links
+                if not self._is_category_term(str(link.term_id))
+            ]
+            if len(remaining) != len(links):
+                self._post_term_repo.replace_for_post(str(post_id), remaining)
+                updated += 1
+        return {"updated": updated}
+
+    def _is_category_term(self, term_id: str) -> bool:
+        term = self._term_repo.find_by_id(term_id)
+        return term is not None and term.term_type == CATEGORY_TERM_TYPE
+
+    def bulk_assign_layout(
+        self, ids: List[str], layout_id: Optional[str]
+    ) -> Dict[str, int]:
+        """Set one layout on many posts (e.g. all freshly imported pages), or
+        clear it when ``layout_id`` is falsy (the bulk-"Unset layout" action).
+
+        A non-empty layout_id is validated through the wired layout repo — an
+        unknown layout raises InvalidLayoutOrStyleError, same as the single-post
+        update path. A falsy layout_id sets ``layout_id = None`` without
+        validation. Fires ``content.changed`` per post so the SEO prerender
+        stays current.
+        """
+        self._resolve_themed_id(self._layout_repo, layout_id, "layout")
+        posts = self._repo.find_by_ids(ids)
+        for post in posts:
+            post.layout_id = layout_id
+            self._repo.save(post)
+            self._emit_content_changed(post, reason="updated")
+        return {"updated": len(posts)}
 
     def regenerate_prerender(self) -> int:
         """Re-emit ``content.changed`` for every published post so the SEO

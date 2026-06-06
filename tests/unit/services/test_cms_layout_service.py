@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import MagicMock
 from plugins.cms.src.services.cms_layout_service import (
     CmsLayoutService,
+    CmsLayoutNotFoundError,
     CmsLayoutSlugConflictError,
 )
 from plugins.cms.src.models.cms_layout import CmsLayout
@@ -179,3 +180,78 @@ class TestExportImport:
             }
         )
         assert result["slug"] == "my-layout-2"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Default-layout feature (mirrors the default-STYLE pattern)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _make_service_with_default(layouts=None):
+    """Extends _make_service with find_default + save that honours the
+    single-default invariant. Tests drive the real service behaviour;
+    this mock repo stays simple (no DB constraint)."""
+    svc, repo, lw_repo = _make_service(layouts)
+
+    def _find_default():
+        for layout in layouts or []:
+            if getattr(layout, "is_default", False):
+                return layout
+        return None
+
+    repo.find_default.side_effect = _find_default
+    return svc, repo, lw_repo
+
+
+class TestDefaultLayoutFlag:
+    def test_new_layout_is_not_default_by_default(self):
+        svc, _, _ = _make_service()
+        result = svc.create_layout({"name": "A", "areas": VALID_AREAS})
+        assert result["is_default"] is False
+
+    def test_set_default_promotes_layout(self):
+        a = _layout(slug="a")
+        a.is_default = False
+        svc, _, _ = _make_service_with_default([a])
+        result = svc.set_default(str(a.id))
+        assert result["is_default"] is True
+        assert a.is_default is True
+
+    def test_set_default_demotes_previous_default(self):
+        a = _layout(slug="a")
+        a.is_default = True
+        b = _layout(slug="b")
+        b.is_default = False
+        svc, _, _ = _make_service_with_default([a, b])
+        svc.set_default(str(b.id))
+        assert a.is_default is False
+        assert b.is_default is True
+
+    def test_set_default_on_missing_layout_raises_not_found(self):
+        svc, _, _ = _make_service_with_default([])
+        with pytest.raises(CmsLayoutNotFoundError):
+            svc.set_default("00000000-0000-0000-0000-000000000000")
+
+    def test_clear_default_unsets_flag(self):
+        a = _layout(slug="a")
+        a.is_default = True
+        svc, _, _ = _make_service_with_default([a])
+        svc.clear_default()
+        assert a.is_default is False
+
+    def test_update_layout_is_default_true_demotes_previous(self):
+        a = _layout(slug="a")
+        a.is_default = True
+        b = _layout(slug="b")
+        b.is_default = False
+        svc, _, _ = _make_service_with_default([a, b])
+        svc.update_layout(str(b.id), {"is_default": True})
+        assert a.is_default is False
+        assert b.is_default is True
+
+    def test_update_layout_is_default_false_clears_flag(self):
+        a = _layout(slug="a")
+        a.is_default = True
+        svc, _, _ = _make_service_with_default([a])
+        svc.update_layout(str(a.id), {"is_default": False})
+        assert a.is_default is False

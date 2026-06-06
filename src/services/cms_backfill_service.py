@@ -29,12 +29,11 @@ from plugins.cms.src.models.cms_post import (
     POST_STATUS_DRAFT,
     POST_STATUS_PUBLISHED,
 )
-from plugins.cms.src.models.cms_term import CmsTerm
+from plugins.cms.src.models.cms_term import CmsTerm, CATEGORY_TERM_TYPE
 
 
 BULK_BACKFILL_EVENT = "content.changed"
 PAGE_POST_TYPE = "page"
-CATEGORY_TERM_TYPE = "category"
 REDIRECT_CODE_PERMANENT = 301
 _MAX_SLUG_COLLISION_ATTEMPTS = 10_000
 

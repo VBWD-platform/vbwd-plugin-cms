@@ -19,6 +19,7 @@ from plugins.cms.src.services.post_service import (
     PostSlugConflictError,
     UnknownPostTypeError,
     InvalidStatusTransitionError,
+    InvalidLayoutOrStyleError,
     PostHierarchyError,
 )
 from plugins.cms.src.services.post_type_registry import (
@@ -197,6 +198,96 @@ class TestBulkOps:
         existing.term_id = "cat-9"
         service._post_term_repo.find_by_post.return_value = [existing]
         assert service.bulk_assign_term([str(post.id)], "cat-9") == {"updated": 0}
+
+
+class TestBulkAssignLayout:
+    def _service(self, posts, layout_exists=True):
+        service, repo, dispatcher, store = _make_service(posts=posts)
+        repo.find_by_ids.side_effect = lambda ids: [
+            store[str(i)] for i in ids if str(i) in store
+        ]
+        layout_repo = MagicMock()
+        layout_repo.find_by_id.return_value = MagicMock() if layout_exists else None
+        service._layout_repo = layout_repo
+        return service, repo, dispatcher
+
+    def test_assigns_layout_to_all_given_ids(self):
+        posts = [_post(slug="a"), _post(slug="b")]
+        service, repo, _ = self._service(posts)
+        layout_id = str(uuid4())
+        result = service.bulk_assign_layout([str(p.id) for p in posts], layout_id)
+        assert result == {"updated": 2}
+        assert all(str(p.layout_id) == layout_id for p in posts)
+        assert repo.save.call_count == 2
+
+    def test_unknown_layout_raises(self):
+        post = _post()
+        service, _, _ = self._service([post], layout_exists=False)
+        with pytest.raises(InvalidLayoutOrStyleError):
+            service.bulk_assign_layout([str(post.id)], str(uuid4()))
+
+    def test_emits_content_changed_per_post(self):
+        posts = [_post(slug="a"), _post(slug="b")]
+        service, _, dispatcher = self._service(posts)
+        service.bulk_assign_layout([str(p.id) for p in posts], str(uuid4()))
+        assert _dispatched_names(dispatcher).count(CONTENT_CHANGED) == 2
+
+    def test_none_layout_clears_layout_and_skips_validation(self):
+        posts = [_post(slug="a"), _post(slug="b")]
+        # layout_exists=False would make any validation raise — proves the
+        # unset path never validates.
+        service, repo, _ = self._service(posts, layout_exists=False)
+        for post in posts:
+            post.layout_id = uuid4()
+        result = service.bulk_assign_layout([str(p.id) for p in posts], None)
+        assert result == {"updated": 2}
+        assert all(p.layout_id is None for p in posts)
+        service._layout_repo.find_by_id.assert_not_called()
+
+    def test_none_layout_emits_content_changed_per_post(self):
+        posts = [_post(slug="a"), _post(slug="b")]
+        service, _, dispatcher = self._service(posts, layout_exists=False)
+        service.bulk_assign_layout([str(p.id) for p in posts], None)
+        assert _dispatched_names(dispatcher).count(CONTENT_CHANGED) == 2
+
+
+class TestBulkUnassignCategory:
+    def _service(self, posts, term_types):
+        """term_types: dict term_id -> term_type, backs term_repo.find_by_id."""
+        service, repo, dispatcher, store = _make_service(posts=posts)
+        repo.find_by_ids.side_effect = lambda ids: [
+            store[str(i)] for i in ids if str(i) in store
+        ]
+
+        def _find_term(term_id):
+            term = MagicMock()
+            term.term_type = term_types.get(str(term_id))
+            return term if term.term_type is not None else None
+
+        service._term_repo.find_by_id.side_effect = _find_term
+        return service, dispatcher
+
+    def test_removes_only_category_terms_and_keeps_tags(self):
+        post = _post()
+        service, _ = self._service([post], {"cat-1": "category", "tag-1": "tag"})
+        category_link = MagicMock()
+        category_link.term_id = "cat-1"
+        tag_link = MagicMock()
+        tag_link.term_id = "tag-1"
+        service._post_term_repo.find_by_post.return_value = [category_link, tag_link]
+        result = service.bulk_unassign_category([str(post.id)])
+        assert result == {"updated": 1}
+        remaining = service._post_term_repo.replace_for_post.call_args[0][1]
+        assert remaining == ["tag-1"]
+
+    def test_skips_posts_without_a_category(self):
+        post = _post()
+        service, _ = self._service([post], {"tag-1": "tag"})
+        tag_link = MagicMock()
+        tag_link.term_id = "tag-1"
+        service._post_term_repo.find_by_post.return_value = [tag_link]
+        assert service.bulk_unassign_category([str(post.id)]) == {"updated": 0}
+        service._post_term_repo.replace_for_post.assert_not_called()
 
 
 class TestRegeneratePrerender:
