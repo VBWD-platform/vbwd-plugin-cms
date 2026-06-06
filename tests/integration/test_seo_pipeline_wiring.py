@@ -10,8 +10,8 @@ import uuid
 import pytest
 
 from vbwd.events.bus import event_bus
-from vbwd.services import seo_registry
 
+from plugins.cms.src.services import seo_registry
 from plugins.cms.src.models.cms_post import (
     POST_STATUS_PUBLISHED,
     POST_STATUS_TRASH,

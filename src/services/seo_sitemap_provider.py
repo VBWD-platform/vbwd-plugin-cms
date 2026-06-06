@@ -13,7 +13,7 @@ without importing the ORM here.
 """
 from typing import Callable, List, Optional
 
-from vbwd.services.seo_registry import SitemapEntry
+from plugins.cms.src.services.seo_registry import SitemapEntry
 from plugins.cms.src.services.seo_scope import page_is_search_visible
 
 

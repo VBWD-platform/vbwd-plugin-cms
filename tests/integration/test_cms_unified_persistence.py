@@ -190,8 +190,12 @@ class TestListFilters:
     def test_filter_by_language(self, db):
         service = _post_service(db)
         marker = uuid.uuid4().hex[:6]
-        service.create_post({"type": "post", "title": "EN", "slug": f"en-{marker}", "language": "en"})
-        service.create_post({"type": "post", "title": "DE", "slug": f"de-{marker}", "language": "de"})
+        service.create_post(
+            {"type": "post", "title": "EN", "slug": f"en-{marker}", "language": "en"}
+        )
+        service.create_post(
+            {"type": "post", "title": "DE", "slug": f"de-{marker}", "language": "de"}
+        )
         result = service.list_posts(post_type="post", language="de")
         slugs = [i["slug"] for i in result["items"]]
         assert f"de-{marker}" in slugs and f"en-{marker}" not in slugs

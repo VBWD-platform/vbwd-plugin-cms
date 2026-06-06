@@ -286,14 +286,21 @@ class TestImport:
 
     def test_source_css_round_trips(self):
         service, post_repo, _, _, _, _ = _make_service()
-        _new_post(post_repo, type="post", slug="styled", title="Styled",
-                  source_css=".x{color:red}")
+        _new_post(
+            post_repo,
+            type="post",
+            slug="styled",
+            title="Styled",
+            source_css=".x{color:red}",
+        )
         item = service.export_posts(post_type="post")["items"][0]
         assert item["source_css"] == ".x{color:red}"
         # import into a fresh service applies it
         service2, repo2, _, _, _, _ = _make_service()
         service2.import_posts({"items": [item]})
-        assert repo2.find_by_type_and_slug("post", "styled").source_css == ".x{color:red}"
+        assert (
+            repo2.find_by_type_and_slug("post", "styled").source_css == ".x{color:red}"
+        )
 
     def test_import_uses_name_when_title_missing(self):
         # Legacy cms_page exports carry `name`, not `title`.

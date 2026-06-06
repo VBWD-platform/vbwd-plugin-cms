@@ -111,7 +111,7 @@ services:
 - **Delete / unpublish** → backend removes the file → `try_files` falls through
   to `/index.html`. No reload.
 - **`seo.mode=off`** → a backend flag flips `/robots.txt` to `Disallow: /`
-  (core `vbwd/routes/seo.py`). No nginx edit.
+  (cms `plugins/cms/src/seo_routes.py`). No nginx edit.
 
 The conf is **static**: it encodes the *routing strategy*, never per-post rules.
 

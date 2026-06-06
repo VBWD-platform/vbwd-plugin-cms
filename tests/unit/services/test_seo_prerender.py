@@ -94,7 +94,8 @@ def test_published_writes_head_body_and_payload(tmp_path):
 def test_inlines_resolved_style_css_when_resolver_present(tmp_path):
     post = _Post(content_html="<p>Body</p>")
     writer = _writer(
-        tmp_path, [post],
+        tmp_path,
+        [post],
         style_css_resolver=lambda p: ".hero{color:red}",
     )
     writer.handle_content_changed(_event(post))

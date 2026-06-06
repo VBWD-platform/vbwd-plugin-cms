@@ -201,7 +201,10 @@ class TestBulkOps:
 
 class TestRegeneratePrerender:
     def test_regenerate_emits_content_changed_for_each_published(self):
-        published = [_post(slug="a", status="published"), _post(slug="b", status="published")]
+        published = [
+            _post(slug="a", status="published"),
+            _post(slug="b", status="published"),
+        ]
         service, repo, dispatcher, _ = _make_service(posts=published)
         repo.find_all_published.return_value = published
 
@@ -237,7 +240,11 @@ class TestTermIds:
         post = _post()
         service, repo, _, _ = _make_service(posts=[post])
         repo.find_paginated.return_value = {
-            "items": [post], "total": 1, "page": 1, "per_page": 20, "pages": 1,
+            "items": [post],
+            "total": 1,
+            "page": 1,
+            "per_page": 20,
+            "pages": 1,
         }
         link = MagicMock()
         link.term_id = "tag-9"
@@ -459,7 +466,10 @@ class TestStatusTransitions:
     def test_update_post_restores_trashed_to_published(self):
         post = _post(status="trash")
         service, _, _, _ = _make_service(posts=[post])
-        assert service.update_post(str(post.id), {"status": "published"})["status"] == "published"
+        assert (
+            service.update_post(str(post.id), {"status": "published"})["status"]
+            == "published"
+        )
 
     def test_update_post_persists_published_at_for_scheduled(self):
         post = _post(status="draft")

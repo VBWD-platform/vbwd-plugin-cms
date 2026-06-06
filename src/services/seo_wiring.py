@@ -12,12 +12,12 @@ import os
 from typing import Optional
 
 from vbwd.events.bus import event_bus
-from vbwd.services.seo_registry import (
+
+from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
+from plugins.cms.src.services.seo_registry import (
     register_sitemap_provider,
     unregister_sitemap_provider,
 )
-
-from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
 from plugins.cms.src.services.post_service import CONTENT_CHANGED_EVENT
 from plugins.cms.src.services.seo_asset_stamp import SeoAssetStamper
 from plugins.cms.src.services.seo_post_loader import SeoPostLoader

@@ -61,6 +61,11 @@ class CmsPlugin(BasePlugin):
     def get_blueprint(self) -> Optional["Blueprint"]:
         from plugins.cms.src.routes import cms_bp
 
+        # Attach the root-level SEO routes (/sitemap.xml, /sitemap-<n>.xml,
+        # /robots.txt) onto cms_bp; importing the module registers them.
+        from plugins.cms.src import seo_routes
+
+        assert seo_routes.cms_bp is cms_bp
         return cms_bp
 
     def get_url_prefix(self) -> Optional[str]:

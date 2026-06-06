@@ -37,7 +37,9 @@ COLUMN = "featured_image_url"
 
 
 def _has_column(connection):
-    return COLUMN in {col["name"] for col in inspect(connection).get_columns("cms_post")}
+    return COLUMN in {
+        col["name"] for col in inspect(connection).get_columns("cms_post")
+    }
 
 
 @pytest.fixture

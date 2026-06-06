@@ -26,9 +26,7 @@ def upgrade():
     op.add_column(
         "cms_post", sa.Column("preview_token", sa.String(length=64), nullable=True)
     )
-    op.create_index(
-        "ix_cms_post_preview_token", "cms_post", ["preview_token"]
-    )
+    op.create_index("ix_cms_post_preview_token", "cms_post", ["preview_token"])
 
 
 def downgrade():
