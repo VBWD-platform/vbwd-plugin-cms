@@ -14,8 +14,9 @@ from plugins.cms.src.models.cms_post import (
 
 
 class _Term:
-    def __init__(self, seo_excluded=False):
+    def __init__(self, seo_excluded=False, slug="news"):
         self.seo_excluded = seo_excluded
+        self.slug = slug
 
 
 class _Post:
@@ -78,6 +79,51 @@ def test_excludes_post_with_excluded_term():
     post = _Post(terms=[_Term(seo_excluded=True)])
     provider = CmsSitemapProvider(_Loader([post]))
     assert provider.sitemap_entries() == []
+
+
+# ── S56.0: admin sitemap-config filtering ────────────────────────────────────
+
+
+def _provider(posts, config):
+    return CmsSitemapProvider(_Loader(posts), sitemap_config_provider=lambda: config)
+
+
+def test_excludes_pages_when_include_pages_false():
+    post = _Post(type="page")
+    assert _provider([post], {"sitemap_include_pages": False}).sitemap_entries() == []
+
+
+def test_keeps_non_page_when_include_pages_false():
+    post = _Post(type="post")
+    entries = _provider([post], {"sitemap_include_pages": False}).sitemap_entries()
+    assert len(entries) == 1
+
+
+def test_excludes_post_by_excluded_slug():
+    post = _Post(slug="hidden")
+    config = {"sitemap_excluded_slugs": ["hidden"]}
+    assert _provider([post], config).sitemap_entries() == []
+
+
+def test_include_terms_restricts_to_matching_posts():
+    matching = _Post(slug="a", terms=[_Term(slug="featured")])
+    other = _Post(slug="b", terms=[_Term(slug="news")])
+    config = {"sitemap_include_terms": ["featured"]}
+    entries = _provider([matching, other], config).sitemap_entries()
+    locs = {entry.loc for entry in entries}
+    assert "https://x/pricing" in locs or len(entries) == 1
+    assert len(entries) == 1
+
+
+def test_exclude_terms_drops_matching_posts():
+    post = _Post(terms=[_Term(slug="private")])
+    config = {"sitemap_exclude_terms": ["private"]}
+    assert _provider([post], config).sitemap_entries() == []
+
+
+def test_empty_config_behaves_like_no_filter():
+    post = _Post(type="page")
+    assert len(_provider([post], {}).sitemap_entries()) == 1
 
 
 def test_includes_hreflang_alternates():

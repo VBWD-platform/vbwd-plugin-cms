@@ -9,8 +9,8 @@ should be able to reproduce the routing from this document alone.
 > is `bin/pre-commit-check.sh` (`--plugin cms --full` GREEN on every touched
 > repo = done; `--quick` while iterating). All backend logic lives in
 > `plugins/cms/`; core (`vbwd/`) is untouched. nginx changes live in the
-> **source templates only** (`vbwd-fe-user/nginx.{dev,prod}.conf.template`),
-> never in a prod instance tree.
+> **source files only** (`vbwd-fe-user/nginx.dev.conf` +
+> `vbwd-fe-user/nginx.prod.conf.template`), never in a prod instance tree.
 
 ---
 
@@ -23,6 +23,7 @@ should be able to reproduce the routing from this document alone.
 | SPA hand-off util | `vbwd-fe-user/plugins/cms/src/composables/useSeoHandoff.ts` | Reads `#__POST__`; idempotent meta injection keyed by `data-seo="ssr"`. |
 | nginx (prod) | `vbwd-fe-user/nginx.prod.conf.template` | Serves the static prerender file to anon/bots; live SPA to logged-in users. |
 | nginx (dev) | `vbwd-fe-user/nginx.dev.conf` | Proxies everything to Vite (no static prerender serving in dev). |
+| SEO routes (sitemap/robots) | `plugins/cms/src/seo_routes.py` on `cms_bp` (root URLs; **moved out of core in S50.2**) | **Dynamic** `/sitemap.xml`, `/sitemap-<n>.xml`, `/robots.txt` generated per-request from published posts — NOT files. nginx **proxies** these to the backend (both dev + prod) — see §2b. |
 
 ---
 
@@ -78,6 +79,41 @@ GET /de/pricing
    static first paint → browser boots the hashed JS → useSeoHandoff reads
    #__POST__ → mounts the SAME markup → no white flash, no duplicate GET.
 ```
+
+---
+
+## 2b. sitemap.xml + robots.txt — DYNAMIC backend routes (proxied, not prerendered)
+
+Unlike page prerender files, **`/sitemap.xml`, `/sitemap-<n>.xml` and
+`/robots.txt` are dynamic Flask routes** generated per request from the published
+posts. Since **S50.2** they live in the cms plugin
+(`plugins/cms/src/seo_routes.py`, registered on `cms_bp` at root via
+`get_url_prefix("")`) — moved out of core (`vbwd/routes/seo.py` is gone). They are
+**not** written to `${VAR_DIR}/seo/` and the `try_files` prerender chain never
+serves them.
+
+**nginx must PROXY these paths to the backend (dev AND prod)** — otherwise they
+fall into `location /` and the SPA answers (a real browser gets the Vue-router
+404; a crawler/curl gets `index.html`). Add, alongside the `/api/` proxy:
+
+```nginx
+# dev (nginx.dev.conf):  $backend = http://host.docker.internal:5000
+location = /sitemap.xml       { proxy_pass $backend; proxy_set_header Host $host;
+                                proxy_set_header X-Real-IP $remote_addr;
+                                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
+location ~ ^/sitemap-\d+\.xml$ { proxy_pass $backend; … same headers … }
+location = /robots.txt        { proxy_pass $backend; … same headers … }
+# prod (nginx.prod.conf.template): proxy_pass http://$api_upstream;  (+ proxy_read_timeout 60s)
+```
+
+Verify: `curl -s http://localhost:8080/sitemap.xml` → `application/xml` with
+`<urlset>`; `/robots.txt` → `text/plain` `User-agent: *`. **If you get HTML
+(`<!DOCTYPE html>`), the proxy block is missing** and the SPA is answering.
+
+> **macOS gotcha:** `nginx.dev.conf` is a *single-file* bind mount. Editing it may
+> NOT reach the running container — Docker Desktop drops the mount when the editor
+> replaces the inode, so `nginx -t` / `nginx -s reload` keep seeing the stale
+> file. Run `docker restart vbwd-fe-user-nginx-1` to re-resolve the mount.
 
 ---
 
@@ -226,6 +262,7 @@ asset block, so a snippet change re-stamps cheaply without re-rendering content:
 | Aspect | dev (`nginx.dev.conf`) | prod (`nginx.prod.conf.template`) |
 |---|---|---|
 | `location /` | proxy → Vite dev server | static `root` + `try_files` prerender chain |
+| sitemap/robots | **proxied to backend** (§2b) | **proxied to backend** (§2b) |
 | `$vbwd_is_authed` map | declared (parity), unused | declared **and** used for cache-bypass |
 | `${VAR_DIR}/seo` mount | none (Vite serves) | `:ro` under `/usr/share/nginx/html/seo` |
 | Asset hashes | none (Vite, unhashed) | content-hashed → re-stamped on deploy |

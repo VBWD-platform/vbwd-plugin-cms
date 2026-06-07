@@ -2209,6 +2209,77 @@ def admin_cleanup_seo():
     return jsonify({"removed": count}), 200
 
 
+# The five admin-editable SEO settings (S56) stored in the cms config blob.
+_SEO_SETTINGS_DEFAULTS = {
+    "robots_txt": "",
+    "sitemap_include_pages": True,
+    "sitemap_excluded_slugs": [],
+    "sitemap_include_terms": [],
+    "sitemap_exclude_terms": [],
+}
+
+
+def _seo_settings_view(config: dict) -> dict:
+    """Project the five SEO settings out of the full cms config (with defaults)."""
+    return {
+        key: config.get(key, default) for key, default in _SEO_SETTINGS_DEFAULTS.items()
+    }
+
+
+def _coerce_str_list(value) -> list:
+    """Coerce a body value into a list of trimmed, non-empty strings."""
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _typed_seo_settings(body: dict) -> dict:
+    """Validate/type the five SEO keys from the request body (ignore unknowns)."""
+    typed: dict = {}
+    if "robots_txt" in body:
+        typed["robots_txt"] = str(body["robots_txt"] or "")
+    if "sitemap_include_pages" in body:
+        typed["sitemap_include_pages"] = bool(body["sitemap_include_pages"])
+    for key in (
+        "sitemap_excluded_slugs",
+        "sitemap_include_terms",
+        "sitemap_exclude_terms",
+    ):
+        if key in body:
+            typed[key] = _coerce_str_list(body[key])
+    return typed
+
+
+@cms_bp.route("/api/v1/admin/cms/seo/settings", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_get_seo_settings():
+    """GET /api/v1/admin/cms/seo/settings — the editable robots/sitemap config."""
+    return jsonify(_seo_settings_view(_cms_config())), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/seo/settings", methods=["PUT"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_update_seo_settings():
+    """PUT /api/v1/admin/cms/seo/settings — read-modify-write MERGE.
+
+    ``save_config`` REPLACES the whole cms blob, so the typed SEO keys are
+    merged into the FULL existing cms config (preserving ``seo_prerender_enabled``,
+    ``uploads_base_path`` etc.); unknown body keys are ignored.
+    """
+    config_store = getattr(current_app, "config_store", None)
+    if config_store is None:
+        return jsonify({"error": "config store unavailable"}), 500
+    body = request.get_json(silent=True) or {}
+    config = config_store.get_config("cms") or {}
+    config.update(_typed_seo_settings(body))
+    config_store.save_config("cms", config)
+    return jsonify(_seo_settings_view(config)), 200
+
+
 @cms_bp.route("/api/v1/admin/cms/posts/<post_id>/publish", methods=["POST"])
 @require_auth
 @require_admin

@@ -31,6 +31,19 @@ DEFAULT_CONFIG = {
     # SEO pipeline is still wired on enable — the toggle is read live per
     # content change, so flipping it takes effect without re-enabling.
     "seo_prerender_enabled": True,
+    # Admin-editable robots.txt body (S56). Empty ⇒ the default template the
+    # robots() route builds; a non-empty string is served verbatim. seo.mode=off
+    # still forces "Disallow: /" (safety wins).
+    "robots_txt": "",
+    # Sitemap.xml filtering (S56), all read live per request. When
+    # sitemap_include_pages is False, type=="page" posts are dropped;
+    # sitemap_excluded_slugs drops posts by slug; sitemap_include_terms (term
+    # slugs) — when non-empty — restricts to posts carrying ≥1; and
+    # sitemap_exclude_terms (term slugs) drops posts carrying any.
+    "sitemap_include_pages": True,
+    "sitemap_excluded_slugs": [],
+    "sitemap_include_terms": [],
+    "sitemap_exclude_terms": [],
     "debug_mode": False,
 }
 

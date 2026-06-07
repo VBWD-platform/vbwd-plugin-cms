@@ -37,18 +37,37 @@ class CmsSitemapProvider:
         self,
         post_loader,
         public_base_url_provider: Optional[Callable[[], str]] = None,
+        sitemap_config_provider: Optional[Callable[[], dict]] = None,
     ) -> None:
         self._post_loader = post_loader
         self._public_base_url_provider = public_base_url_provider or (lambda: "")
+        self._sitemap_config_provider = sitemap_config_provider or (lambda: {})
 
     def sitemap_entries(self) -> List[SitemapEntry]:
+        config = self._sitemap_config_provider() or {}
         entries: List[SitemapEntry] = []
         for post in self._post_loader.iter_candidate_posts():
             terms = self._post_loader.terms_for(post)
             if not page_is_search_visible(_ScopeView(post, terms)):
                 continue
+            if self._is_config_excluded(post, terms, config):
+                continue
             entries.append(self._entry_for(post))
         return entries
+
+    def _is_config_excluded(self, post, terms, config: dict) -> bool:
+        """Apply the admin sitemap filters (S56) by post type / slug / terms."""
+        if not config.get("sitemap_include_pages", True) and post.type == "page":
+            return True
+        if post.slug in set(config.get("sitemap_excluded_slugs") or []):
+            return True
+        term_slugs = {getattr(term, "slug", None) for term in (terms or [])}
+        include_terms = config.get("sitemap_include_terms") or []
+        if include_terms and term_slugs.isdisjoint(set(include_terms)):
+            return True
+        if not term_slugs.isdisjoint(set(config.get("sitemap_exclude_terms") or [])):
+            return True
+        return False
 
     def _public_base_url(self) -> str:
         return (self._public_base_url_provider() or "").rstrip("/")

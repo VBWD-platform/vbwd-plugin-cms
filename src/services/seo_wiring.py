@@ -60,6 +60,35 @@ def _public_base_url() -> str:
         return ""
 
 
+_SITEMAP_CONFIG_KEYS = (
+    "sitemap_include_pages",
+    "sitemap_excluded_slugs",
+    "sitemap_include_terms",
+    "sitemap_exclude_terms",
+)
+
+
+def _sitemap_config() -> dict:
+    """Resolve the cms sitemap filter keys from live config (lazy, per call).
+
+    Read per call (mirroring ``_public_base_url``) so an admin's saved sitemap
+    filters take effect without re-enabling the plugin. Returns an empty dict
+    when no app/config is available so the provider falls back to its
+    "no filter" defaults (preserving the pre-S56 behaviour).
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return {}
+        cfg = config_store.get_config("cms") or {}
+        return {key: cfg[key] for key in _SITEMAP_CONFIG_KEYS if key in cfg}
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] sitemap config lookup failed: %s", exc)
+        return {}
+
+
 def _seo_prerender_enabled() -> bool:
     """Resolve the cms ``seo_prerender_enabled`` toggle from live config (lazy).
 
@@ -223,6 +252,7 @@ def register_seo_pipeline() -> CmsSitemapProvider:
     _active_provider = CmsSitemapProvider(
         SeoPostLoader(_session()),
         public_base_url_provider=_public_base_url,
+        sitemap_config_provider=_sitemap_config,
     )
     register_sitemap_provider(_active_provider)
     return _active_provider

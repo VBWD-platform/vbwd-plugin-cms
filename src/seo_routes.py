@@ -29,6 +29,21 @@ def _seo_mode() -> str:
     return str(current_app.config.get("SEO_MODE", "on")).lower()
 
 
+def _custom_robots_txt() -> str:
+    """The admin-editable robots.txt override (S56), or ``""`` when unset.
+
+    Read lazily/defensively from the cms config store (the same blob as
+    ``seo_prerender_enabled``); any missing store/key yields ``""`` so the
+    route falls back to its default template.
+    """
+    config_store = getattr(current_app, "config_store", None)
+    if config_store is None:
+        return ""
+    cfg = config_store.get_config("cms") or {}
+    value = cfg.get("robots_txt", "")
+    return value if isinstance(value, str) else ""
+
+
 def _xml_response(body: str) -> Response:
     return Response(body, status=200, mimetype="application/xml")
 
@@ -112,6 +127,10 @@ def robots():
     if _seo_mode() == "off":
         body = "User-agent: *\nDisallow: /\n\n" + sitemap_line + "\n"
         return Response(body, status=200, mimetype="text/plain")
+
+    custom = _custom_robots_txt()
+    if custom:
+        return Response(custom, status=200, mimetype="text/plain")
 
     lines = ["User-agent: *"]
     lines.extend(f"Disallow: {surface}" for surface in _DISALLOWED_SURFACES)
