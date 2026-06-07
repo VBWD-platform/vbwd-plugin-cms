@@ -135,11 +135,15 @@ class TestPostsExchangerDelegation:
 
 
 class TestTermsExchangerDelegation:
-    def test_export_filters_by_selector_ids(self):
+    def test_export_delegates_selector_ids_to_service(self):
+        """The exchanger pushes the selector ids down to ``export_terms`` so the
+        service does id-or-slug matching at the model level (the admin list
+        sends primary ids, not slugs)."""
         service = MagicMock()
-        service.export_terms.return_value = {
-            "items": [{"slug": "news"}, {"slug": "tech"}]
-        }
+        service.export_terms.return_value = {"items": [{"slug": "news"}]}
         exchanger = CmsTermsExchanger(service)
-        envelope = exchanger.export(ExportSelector(ids=["news"]), include_pii=False)
+        envelope = exchanger.export(
+            ExportSelector(ids=["term-uuid-1"]), include_pii=False
+        )
+        service.export_terms.assert_called_once_with(ids=["term-uuid-1"])
         assert envelope.rows == [{"slug": "news"}]

@@ -182,10 +182,7 @@ class CmsTermsExchanger(EntityExchanger):
         self._service = term_import_export_service
 
     def export(self, selector: ExportSelector, *, include_pii: bool) -> Envelope:
-        rows = self._service.export_terms().get("items", [])
-        if selector.ids:
-            wanted = set(selector.ids)
-            rows = [row for row in rows if row.get("slug") in wanted]
+        rows = self._service.export_terms(ids=selector.ids).get("items", [])
         return Envelope(entity_key=self.entity_key, rows=rows)
 
     def import_(self, payload: dict, *, mode: str, dry_run: bool) -> ImportResult:
@@ -256,8 +253,12 @@ class CmsImagesExchanger(EntityExchanger):
     def export(self, selector: ExportSelector, *, include_pii: bool) -> Envelope:
         images = self._repo.find_all(page=1, per_page=100000).get("items", [])
         if selector.ids:
-            wanted = set(selector.ids)
-            images = [image for image in images if image.slug in wanted]
+            wanted = {str(value) for value in selector.ids}
+            images = [
+                image
+                for image in images
+                if str(image.id) in wanted or (image.slug and image.slug in wanted)
+            ]
         rows = [self._serialise(image) for image in images]
         return Envelope(entity_key=self.entity_key, rows=rows)
 

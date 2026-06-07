@@ -96,7 +96,11 @@ class PostImportExportService:
         ).get("items", [])
         if ids is not None:
             wanted = {str(i) for i in ids}
-            posts = [post for post in posts if str(post.id) in wanted]
+            posts = [
+                post
+                for post in posts
+                if str(post.id) in wanted or (post.slug and post.slug in wanted)
+            ]
         slug_by_post_id = {str(post.id): post.slug for post in posts}
         return {
             "version": ENVELOPE_VERSION,

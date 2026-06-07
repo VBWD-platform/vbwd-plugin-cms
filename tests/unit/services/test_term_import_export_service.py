@@ -112,6 +112,21 @@ class TestExport:
         items = service.export_terms(term_type="tag")["items"]
         assert [item["slug"] for item in items] == ["hot"]
 
+    def test_ids_filter_matches_primary_id(self):
+        """The admin "export selected" sends the term's primary id (UUID)."""
+        news = _term(slug="news", name="News")
+        tech = _term(slug="tech", name="Tech")
+        service, _, _ = _make_service(terms=[news, tech])
+        items = service.export_terms(ids=[str(news.id)])["items"]
+        assert [item["slug"] for item in items] == ["news"]
+
+    def test_ids_filter_matches_slug_fallback(self):
+        news = _term(slug="news", name="News")
+        tech = _term(slug="tech", name="Tech")
+        service, _, _ = _make_service(terms=[news, tech])
+        items = service.export_terms(ids=["tech"])["items"]
+        assert [item["slug"] for item in items] == ["tech"]
+
 
 class TestImport:
     def _payload(self, items):

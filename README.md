@@ -39,8 +39,6 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | GET / POST | `/api/v1/admin/cms/pages` | List / create pages |
 | GET / PUT / DELETE | `/api/v1/admin/cms/pages/<id>` | Page detail / update / delete |
 | POST | `/api/v1/admin/cms/pages/bulk` | Bulk operations |
-| POST | `/api/v1/admin/cms/pages/export` | Export pages as JSON |
-| POST | `/api/v1/admin/cms/pages/import` | Import pages from JSON |
 
 #### Categories
 | Method | Path | Description |
@@ -57,7 +55,6 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | POST | `/api/v1/admin/cms/images/<id>/resize` | Resize image |
 | DELETE | `/api/v1/admin/cms/images/<id>` | Delete image |
 | POST | `/api/v1/admin/cms/images/bulk` | Bulk delete |
-| GET | `/api/v1/admin/cms/images/export` | Export image list as JSON |
 
 #### Widgets
 | Method | Path | Description |
@@ -65,8 +62,6 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | GET / POST | `/api/v1/admin/cms/widgets` | List / create widgets |
 | GET / PUT / DELETE | `/api/v1/admin/cms/widgets/<id>` | Widget detail / update / delete |
 | POST | `/api/v1/admin/cms/widgets/bulk` | Bulk delete |
-| POST | `/api/v1/admin/cms/widgets/export` | Export selected widgets as JSON/ZIP |
-| POST | `/api/v1/admin/cms/widgets/import` | Import widget from JSON |
 
 #### Layouts
 | Method | Path | Description |
@@ -74,8 +69,6 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | GET / POST | `/api/v1/admin/cms/layouts` | List / create layouts |
 | GET / PUT / DELETE | `/api/v1/admin/cms/layouts/<id>` | Layout detail / update / delete |
 | POST | `/api/v1/admin/cms/layouts/bulk` | Bulk delete |
-| POST | `/api/v1/admin/cms/layouts/export` | Export selected layouts |
-| POST | `/api/v1/admin/cms/layouts/import` | Import layout from JSON |
 
 #### Styles
 | Method | Path | Description |
@@ -83,8 +76,6 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | GET / POST | `/api/v1/admin/cms/styles` | List / create styles |
 | GET / PUT / DELETE | `/api/v1/admin/cms/styles/<id>` | Style detail / update / delete |
 | POST | `/api/v1/admin/cms/styles/bulk` | Bulk delete |
-| POST | `/api/v1/admin/cms/styles/export` | Export selected styles |
-| POST | `/api/v1/admin/cms/styles/import` | Import style from JSON |
 
 #### Routing Rules
 | Method | Path | Description |
@@ -93,11 +84,9 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | GET / PUT / DELETE | `/api/v1/admin/cms/routing-rules/<id>` | Rule detail / update / delete |
 | POST | `/api/v1/admin/cms/routing-rules/reload` | Force nginx config reload |
 
-#### Import / Export (full CMS)
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/admin/cms/export` | Export selected sections as a ZIP archive |
-| POST | `/api/v1/admin/cms/import` | Import a ZIP archive with conflict strategy |
+> Import / export of CMS content is served by the unified data-exchange
+> framework at `/api/v1/admin/data-exchange/*`. The former bespoke CMS
+> export/import routes were retired.
 
 ---
 
@@ -213,58 +202,11 @@ EmailPlugin handler → send notification to recipient_email
 
 ## CMS Import / Export
 
-The full-CMS import/export endpoints allow transferring entire CMS configurations between environments as a ZIP archive.
-
-### Export — `POST /api/v1/admin/cms/export`
-
-**Body:**
-```json
-{ "sections": ["pages", "widgets", "categories", "layouts", "styles", "routing_rules", "images"] }
-```
-Pass `["everything"]` to export all sections.
-
-**Response:** `application/zip` binary (`cms-export.zip`)
-
-The ZIP contains:
-- `manifest.json` — export metadata (timestamp, version, section list)
-- `<section>.json` — array of all records for each section
-- `images/<slug>.<ext>` — binary image files (when stored locally)
-
-Pages export includes `category_slug`, `layout_slug`, and `style_slug` fields for FK resolution on import.
-Layouts export includes `widget_assignments` (list of `{widget_slug, area_name, sort_order}`) for slot resolution on import.
-
-### Import — `POST /api/v1/admin/cms/import`
-
-**Multipart form fields:**
-
-| Field | Description |
-|-------|-------------|
-| `file` | The ZIP file |
-| `strategy` | `add` \| `index` \| `drop_all` |
-
-**Strategies:**
-
-| Strategy | Behaviour on slug conflict |
-|----------|---------------------------|
-| `add` | Skip the incoming record — existing record is preserved |
-| `index` | Rename the incoming slug to `<slug>-2`, `-3`, … until free |
-| `drop_all` | Delete **all** CMS content first, then insert everything from the ZIP |
-
-**Response:**
-```json
-{
-  "imported": {
-    "categories": 3,
-    "widgets": 8,
-    "styles": 5,
-    "layouts": 4,
-    "pages": 12,
-    "routing_rules": 2,
-    "images": 6
-  },
-  "errors": []
-}
-```
+Transferring CMS content between environments is handled by the unified
+data-exchange framework (`/api/v1/admin/data-exchange/*`), which serialises
+CMS entities (pages, widgets, categories, layouts, styles, images, posts,
+terms) alongside every other plugin's entities into a single portable archive.
+The former bespoke CMS export/import routes have been retired.
 
 ---
 

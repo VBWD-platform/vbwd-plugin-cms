@@ -292,6 +292,21 @@ class TestExport:
         slugs = [i["slug"] for i in service.export_posts(post_type="post")["items"]]
         assert slugs == ["hello"]
 
+    def test_export_ids_filter_matches_primary_id(self):
+        """The admin "export selected" sends each post's primary id (UUID)."""
+        service, post_repo, _, _, _, _ = _make_service()
+        home = _new_post(post_repo, type="page", slug="home")
+        _new_post(post_repo, type="post", slug="hello")
+        slugs = [i["slug"] for i in service.export_posts(ids=[str(home.id)])["items"]]
+        assert slugs == ["home"]
+
+    def test_export_ids_filter_matches_slug_fallback(self):
+        service, post_repo, _, _, _, _ = _make_service()
+        _new_post(post_repo, type="page", slug="home")
+        _new_post(post_repo, type="post", slug="hello")
+        slugs = [i["slug"] for i in service.export_posts(ids=["hello"])["items"]]
+        assert slugs == ["hello"]
+
 
 class TestImport:
     def _payload(self, **overrides):

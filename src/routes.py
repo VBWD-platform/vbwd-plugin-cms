@@ -13,8 +13,6 @@ Admin endpoints (require_admin):
         PUT    /api/v1/admin/cms/pages/<id>
         DELETE /api/v1/admin/cms/pages/<id>
         POST   /api/v1/admin/cms/pages/bulk
-        POST   /api/v1/admin/cms/pages/export
-        POST   /api/v1/admin/cms/pages/import
 
     Categories:
         GET    /api/v1/admin/cms/categories
@@ -29,7 +27,6 @@ Admin endpoints (require_admin):
         POST   /api/v1/admin/cms/images/<id>/resize
         DELETE /api/v1/admin/cms/images/<id>
         POST   /api/v1/admin/cms/images/bulk
-        GET    /api/v1/admin/cms/images/export
 """
 import json
 import logging
@@ -92,7 +89,6 @@ from plugins.cms.src.services.contact_form_service import (
     RateLimitError,
     ValidationError,
 )
-from plugins.cms.src.services.cms_import_export_service import CmsImportExportService
 from plugins.cms.src.repositories.post_repository import PostRepository
 from plugins.cms.src.repositories.term_repository import TermRepository
 from plugins.cms.src.repositories.post_term_repository import PostTermRepository
@@ -116,10 +112,6 @@ from plugins.cms.src.services.term_service import (
     TermNotFoundError,
     TermSlugConflictError,
     UnknownTermTypeError,
-)
-from plugins.cms.src.services.term_import_export_service import (
-    TermImportExportService,
-    TermImportError,
 )
 from plugins.cms.src.services.rss_feed_service import RssFeedService
 from plugins.cms.src.services import post_type_registry, term_type_registry
@@ -290,10 +282,6 @@ def _term_service() -> TermService:
     return TermService(TermRepository(db.session))
 
 
-def _term_import_export_service() -> TermImportExportService:
-    return TermImportExportService(TermRepository(db.session))
-
-
 def _post_import_export_service() -> PostImportExportService:
     return PostImportExportService(
         post_repo=PostRepository(db.session),
@@ -405,30 +393,6 @@ def _style_service() -> CmsStyleService:
     return CmsStyleService(CmsStyleRepository(db.session))
 
 
-def _import_export_service() -> CmsImportExportService:
-    from plugins.cms.src.repositories.routing_rule_repository import (
-        CmsRoutingRuleRepository,
-    )
-
-    config = _cms_config()
-    storage = LocalFileStorage(
-        base_path=config.get("uploads_base_path", "/app/uploads"),
-        base_url=config.get("uploads_base_url", "/uploads"),
-    )
-    return CmsImportExportService(
-        CmsCategoryRepository(db.session),
-        CmsStyleRepository(db.session),
-        CmsWidgetRepository(db.session),
-        CmsLayoutRepository(db.session),
-        CmsPageRepository(db.session),
-        CmsRoutingRuleRepository(db.session),
-        CmsImageRepository(db.session),
-        CmsLayoutWidgetRepository(db.session),
-        storage,
-        pw_repo=_page_widget_repo(),
-    )
-
-
 def _cms_config() -> dict:
     config_store = getattr(current_app, "config_store", None)
     if config_store:
@@ -446,6 +410,25 @@ def _cms_config() -> dict:
 # ════════════════════════════════════════════════════════════════════════════
 # CONTACT FORM — public POST endpoint
 # ════════════════════════════════════════════════════════════════════════════
+
+# Default recipient handle when the widget config names none.
+_DEFAULT_MEINCHAT_RECIPIENTS = ["@admin"]
+
+
+def build_meinchat_payload_block(config: dict) -> dict:
+    """Project the widget's meinchat-delivery settings into the event block.
+
+    cms stays agnostic of meinchat — it only copies these config keys so the
+    (optional) meinchat plugin can read everything it needs straight off the
+    ``contact_form.received`` event. Recipients default to ``["@admin"]``.
+    """
+    recipients = config.get("meinchat_recipients") or list(_DEFAULT_MEINCHAT_RECIPIENTS)
+    return {
+        "enabled": bool(config.get("meinchat_enabled", False)),
+        "sender_email": (config.get("meinchat_sender_email") or "").strip(),
+        "sender_nickname": (config.get("meinchat_sender_nickname") or "").strip(),
+        "recipients": recipients,
+    }
 
 
 @cms_bp.route("/api/v1/contact", methods=["POST"])
@@ -499,6 +482,14 @@ def submit_contact_form():
         return jsonify({"error": "Too many requests. Please try again later."}), 429
     except ValidationError as exc:
         return jsonify({"error": str(exc)}), 422
+
+    # S60 — enrich the event with the widget's meinchat-delivery settings so
+    # the optional meinchat plugin can post the submission as a message. cms
+    # has no runtime coupling to meinchat; the bridge is the event payload.
+    payload["meinchat"] = build_meinchat_payload_block(config)
+    # Source page/host for the message body (best-effort; never required).
+    payload["source_url"] = request.headers.get("Referer", "")
+    payload["source_host"] = request.host or ""
 
     event_bus.publish("contact_form.received", payload)
     logger.info(
@@ -689,45 +680,6 @@ def admin_bulk_pages():
         return jsonify(result), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/export", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_export_pages():
-    """POST /api/v1/admin/cms/pages/export — export pages as JSON.
-
-    Body: {"ids": [...], "format": "json"}
-    """
-    from flask import Response
-
-    data = request.get_json() or {}
-    ids = data.get("ids", [])
-    fmt = data.get("format", "json")
-
-    payload = _page_service().export_pages(ids, fmt)
-    return Response(
-        payload,
-        mimetype="application/json",
-        headers={"Content-Disposition": "attachment; filename=cms-pages.json"},
-    )
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/import", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_import_pages():
-    """POST /api/v1/admin/cms/pages/import — import pages from JSON."""
-    raw = request.get_data()
-    if not raw:
-        return jsonify({"error": "Request body required"}), 400
-    try:
-        result = _page_service().import_pages(raw)
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({"error": f"Import failed: {e}"}), 400
 
 
 @cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["GET"])
@@ -938,27 +890,6 @@ def admin_upload_image():
     except Exception as e:
         logger.error("Image upload failed: %s", e)
         return jsonify({"error": str(e)}), 500
-
-
-@cms_bp.route("/api/v1/admin/cms/images/export", methods=["GET"])
-@require_auth
-@require_admin
-@require_permission("cms.images.view")
-def admin_export_images():
-    """GET /api/v1/admin/cms/images/export?ids=id1,id2 — export ZIP of selected images."""
-    from flask import Response
-
-    ids_param = request.args.get("ids", "")
-    ids = [i.strip() for i in ids_param.split(",") if i.strip()]
-    if not ids:
-        return jsonify({"error": "ids query parameter required"}), 400
-
-    payload = _image_service().export_zip(ids)
-    return Response(
-        payload,
-        mimetype="application/zip",
-        headers={"Content-Disposition": "attachment; filename=cms-images.zip"},
-    )
 
 
 @cms_bp.route("/api/v1/admin/cms/images/bulk", methods=["POST"])
@@ -1195,48 +1126,6 @@ def admin_bulk_layout_active():
     return jsonify(_layout_service().bulk_set_active(ids, bool(data["active"]))), 200
 
 
-@cms_bp.route("/api/v1/admin/cms/layouts/export", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.layouts.manage")
-def admin_export_layouts():
-    data = request.get_json() or {}
-    ids = data.get("ids", [])
-    if len(ids) == 1:
-        payload = _layout_service().export_layout(ids[0])
-        import json as _json
-
-        return Response(
-            _json.dumps(payload, ensure_ascii=False),
-            mimetype="application/json",
-            headers={"Content-Disposition": "attachment; filename=cms-layout.json"},
-        )
-    payload = _layout_service().export_layouts_zip(ids)
-    return Response(
-        payload,
-        mimetype="application/zip",
-        headers={"Content-Disposition": "attachment; filename=cms-layouts.zip"},
-    )
-
-
-@cms_bp.route("/api/v1/admin/cms/layouts/import", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.layouts.manage")
-def admin_import_layouts():
-    import json as _json
-
-    raw = request.get_data()
-    if not raw:
-        return jsonify({"error": "Request body required"}), 400
-    try:
-        payload = _json.loads(raw)
-        result = _layout_service().import_layout(payload)
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({"error": f"Import failed: {e}"}), 400
-
-
 @cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>", methods=["GET"])
 @require_auth
 @require_admin
@@ -1378,70 +1267,6 @@ def admin_bulk_widgets():
     return jsonify(result), 200
 
 
-@cms_bp.route("/api/v1/admin/cms/widgets/export", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.widgets.manage")
-def admin_export_widgets():
-    data = request.get_json() or {}
-    ids = data.get("ids", [])
-    if len(ids) == 1:
-        payload = _widget_service().export_widget(ids[0])
-        import json as _json
-
-        return Response(
-            _json.dumps(payload, ensure_ascii=False),
-            mimetype="application/json",
-            headers={"Content-Disposition": "attachment; filename=cms-widget.json"},
-        )
-    payload = _widget_service().export_widgets_zip(ids)
-    return Response(
-        payload,
-        mimetype="application/zip",
-        headers={"Content-Disposition": "attachment; filename=cms-widgets.zip"},
-    )
-
-
-@cms_bp.route("/api/v1/admin/cms/widgets/import", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.widgets.manage")
-def admin_import_widgets():
-    import json as _json
-
-    raw = request.get_data()
-    if not raw:
-        return jsonify({"error": "Request body required"}), 400
-    # Mode: "replace" (upsert by slug) or "copy" (default; bump slug to -2 on
-    # conflict). Accepted as ?mode= query param, or "mode" key in JSON body.
-    mode = (request.args.get("mode") or "").strip() or "copy"
-
-    # ZIP archives start with the "PK\x03\x04" local-file-header magic.
-    # A zip payload triggers bulk multi-file import.
-    if raw[:4] == b"PK\x03\x04":
-        try:
-            result = _widget_service().import_widgets_zip(raw, mode=mode)
-            return jsonify(result), 200
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-        except Exception as e:
-            return jsonify({"error": f"Import failed: {e}"}), 400
-
-    try:
-        payload = _json.loads(raw)
-        if (
-            isinstance(payload, dict)
-            and "mode" in payload
-            and not request.args.get("mode")
-        ):
-            mode = payload["mode"]
-        data = payload.get("data", payload) if isinstance(payload, dict) else payload
-        result = _widget_service().import_widget(data, mode=mode)
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({"error": f"Import failed: {e}"}), 400
-
-
 @cms_bp.route("/api/v1/admin/cms/widgets/<widget_id>", methods=["GET"])
 @require_auth
 @require_admin
@@ -1549,72 +1374,6 @@ def admin_bulk_styles():
         return jsonify({"error": "ids required"}), 400
     result = _style_service().bulk_delete(data["ids"])
     return jsonify(result), 200
-
-
-@cms_bp.route("/api/v1/admin/cms/styles/export", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.styles.manage")
-def admin_export_styles():
-    data = request.get_json() or {}
-    ids = data.get("ids", [])
-    if len(ids) == 1:
-        payload = _style_service().export_style(ids[0])
-        import json as _json
-
-        return Response(
-            _json.dumps(payload, ensure_ascii=False),
-            mimetype="application/json",
-            headers={"Content-Disposition": "attachment; filename=cms-style.json"},
-        )
-    payload = _style_service().export_styles_zip(ids)
-    return Response(
-        payload,
-        mimetype="application/zip",
-        headers={"Content-Disposition": "attachment; filename=cms-styles.zip"},
-    )
-
-
-@cms_bp.route("/api/v1/admin/cms/styles/import", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.styles.manage")
-def admin_import_styles():
-    import json as _json
-
-    raw = request.get_data()
-    if not raw:
-        return jsonify({"error": "Request body required"}), 400
-    # Mode: "replace" (upsert by slug) or "copy" (default; bump slug to -2 on
-    # conflict). Accepted as ?mode= query param, or "mode" key in JSON body.
-    mode = (request.args.get("mode") or "").strip() or "copy"
-
-    # ZIP archives start with the "PK\x03\x04" local-file-header magic.
-    # A zip payload triggers bulk multi-file import.
-    if raw[:4] == b"PK\x03\x04":
-        try:
-            result = _style_service().import_styles_zip(raw, mode=mode)
-            return jsonify(result), 200
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-        except Exception as e:
-            return jsonify({"error": f"Import failed: {e}"}), 400
-
-    try:
-        payload = _json.loads(raw)
-        if (
-            isinstance(payload, dict)
-            and "mode" in payload
-            and not request.args.get("mode")
-        ):
-            mode = payload["mode"]
-        data = payload.get("data", payload) if isinstance(payload, dict) else payload
-        result = _style_service().import_style(data, mode=mode)
-        return jsonify(result), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": f"Import failed: {e}"}), 400
 
 
 @cms_bp.route("/api/v1/admin/cms/styles/<style_id>", methods=["GET"])
@@ -1836,66 +1595,6 @@ def admin_delete_routing_rule(rule_id: str):
         return "", 204
     except CmsRoutingRuleNotFoundError:
         return jsonify({"error": "Routing rule not found"}), 404
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# CMS IMPORT / EXPORT
-# ════════════════════════════════════════════════════════════════════════════
-
-
-@cms_bp.route("/api/v1/admin/cms/export", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_cms_export():
-    """POST /api/v1/admin/cms/export — export CMS content as a ZIP.
-
-    Body (JSON):
-        sections  – list of section names, or ["everything"]
-                    e.g. ["pages", "widgets", "categories"]
-    Returns:
-        ZIP binary (application/zip)
-    """
-    data = request.get_json(silent=True) or {}
-    sections = data.get("sections", ["everything"])
-    try:
-        zip_bytes = _import_export_service().export(sections)
-    except Exception as e:
-        logger.exception("CMS export failed")
-        return jsonify({"error": str(e)}), 500
-    return Response(
-        zip_bytes,
-        status=200,
-        mimetype="application/zip",
-        headers={"Content-Disposition": "attachment; filename=cms-export.zip"},
-    )
-
-
-@cms_bp.route("/api/v1/admin/cms/import", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_cms_import():
-    """POST /api/v1/admin/cms/import — import CMS content from a ZIP.
-
-    Multipart form fields:
-        file      – the ZIP file
-        strategy  – "add" | "index" | "drop_all"
-    Returns:
-        JSON { imported: {...}, errors: [...] }
-    """
-    file = request.files.get("file")
-    if not file:
-        return jsonify({"error": "No file uploaded"}), 400
-    strategy = request.form.get("strategy", "add")
-    if strategy not in ("add", "index", "drop_all"):
-        return jsonify({"error": "Invalid strategy"}), 400
-    try:
-        result = _import_export_service().import_zip(file.read(), strategy)
-    except Exception as e:
-        logger.exception("CMS import failed")
-        return jsonify({"error": str(e)}), 500
-    return jsonify(result), 200
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -2399,47 +2098,6 @@ def admin_bulk_terms():
     if not isinstance(ids, list):
         return jsonify({"error": "ids array required"}), 400
     return jsonify(_term_service().bulk_delete(ids)), 200
-
-
-@cms_bp.route("/api/v1/admin/cms/terms/export", methods=["GET"])
-@require_auth
-@require_admin
-@require_permission("cms.manage")
-def admin_export_terms():
-    """GET /api/v1/admin/cms/terms/export?type= — taxonomy as VBWD-standard JSON.
-
-    Download-friendly: served as ``application/json`` with a ``Content-Disposition``
-    attachment. Optional ``type`` query param scopes the export to one term-type.
-    """
-    from flask import Response
-
-    term_type = request.args.get("type") or None
-    payload = _term_import_export_service().export_terms(term_type=term_type)
-    return Response(
-        json.dumps(payload, ensure_ascii=False),
-        mimetype="application/json",
-        headers={"Content-Disposition": "attachment; filename=cms-terms.json"},
-    )
-
-
-@cms_bp.route("/api/v1/admin/cms/terms/import", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.manage")
-def admin_import_terms():
-    """POST /api/v1/admin/cms/terms/import — upsert terms from a VBWD-standard JSON.
-
-    Body is the export envelope; returns ``{created, updated}``. Upsert is by the
-    natural key ``(term_type, slug)`` and is idempotent.
-    """
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-    try:
-        result = _term_import_export_service().import_terms(data)
-        return jsonify(result), 200
-    except TermImportError as e:
-        return jsonify({"error": str(e)}), 400
 
 
 @cms_bp.route("/api/v1/admin/cms/posts/export", methods=["GET"])

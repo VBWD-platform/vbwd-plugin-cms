@@ -46,15 +46,28 @@ class TermImportExportService:
 
     # ── export ───────────────────────────────────────────────────────────────
 
-    def export_terms(self, term_type: Optional[str] = None) -> Dict[str, Any]:
+    def export_terms(
+        self,
+        term_type: Optional[str] = None,
+        ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """Return the VBWD-standard envelope for all terms (or one type).
 
         ``parent_slug`` is the parent term's slug (parents are always within the
-        same ``term_type``), or ``None`` for a root / flat term.
+        same ``term_type``), or ``None`` for a root / flat term. When ``ids`` is
+        given, only terms whose primary id OR slug is requested are exported
+        ("export selected" — the admin list sends primary ids).
         """
         terms = (
             self._repo.find_by_type(term_type) if term_type else self._repo.find_all()
         )
+        if ids is not None:
+            wanted = {str(value) for value in ids}
+            terms = [
+                term
+                for term in terms
+                if str(term.id) in wanted or (term.slug and term.slug in wanted)
+            ]
         slug_by_id = {str(term.id): term.slug for term in terms}
         return {
             "version": ENVELOPE_VERSION,

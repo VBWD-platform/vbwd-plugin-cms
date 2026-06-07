@@ -205,6 +205,22 @@ class TestModelExchangersRoundTrip:
 
 
 class TestImagesRoundTrip:
+    def test_export_selected_by_primary_id(self, db):
+        """fe-admin "Export selected" sends the image's primary id (UUID)."""
+        slug = f"img-{uuid.uuid4().hex[:8]}"
+        file_path = f"images/{slug}.png"
+        storage = InMemoryFileStorage()
+        storage.save(b"x", file_path)
+        CmsImageRepository(db.session).save(
+            CmsImage(slug=slug, file_path=file_path, url_path=f"/uploads/{file_path}")
+        )
+        image_id = CmsImageRepository(db.session).find_by_slug(slug).id
+        exchanger = _exchangers(db.session, storage)["cms_images"]
+        rows = exchanger.export(
+            ExportSelector(ids=[str(image_id)]), include_pii=False
+        ).rows
+        assert [r["slug"] for r in rows] == [slug]
+
     def test_json_round_trip_carries_binary(self, db):
         slug = f"img-{uuid.uuid4().hex[:8]}"
         file_path = f"images/{slug}.png"
