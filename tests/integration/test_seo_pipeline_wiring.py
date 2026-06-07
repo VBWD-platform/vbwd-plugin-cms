@@ -24,10 +24,7 @@ from plugins.cms.src.services.post_type_registry import PostType
 from plugins.cms.src.services.post_service import PostService
 from plugins.cms.src.services.content_event_publisher import ContentEventPublisher
 from plugins.cms.src.services import seo_wiring
-from plugins.cms.src.services.seo_wiring import (
-    register_seo_pipeline,
-    unregister_seo_pipeline,
-)
+from plugins.cms.src.services.seo_wiring import register_seo_pipeline
 
 
 @pytest.fixture
@@ -46,15 +43,14 @@ def _prerender_enabled(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _registry_and_types():
+def _post_types():
+    # The shared integration conftest registers/cleans up the cms sitemap
+    # provider; this fixture only owns the post-type registry these tests need.
     post_type_registry.clear_post_types()
     post_type_registry.register_post_type(
         PostType(key="page", label="Page", routable=True, hierarchical=True)
     )
-    seo_registry.clear_sitemap_providers()
     yield
-    unregister_seo_pipeline()
-    seo_registry.clear_sitemap_providers()
     post_type_registry.clear_post_types()
 
 

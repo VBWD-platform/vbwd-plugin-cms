@@ -41,6 +41,9 @@ from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget  # noqa: E4
 from plugins.cms.src.models.cms_page import CmsPage  # noqa: E402
 from plugins.cms.src.models.cms_category import CmsCategory  # noqa: E402
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule  # noqa: E402
+from plugins.cms.src.bin.apply_style_alignment import (  # noqa: E402
+    apply_alignment_to_all_styles,
+)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1247,6 +1250,11 @@ def populate_cms() -> None:
     _apply_default_style(DEFAULT_STYLE_SLUG)
     db.session.commit()
     print(f"  Styles: {len(style_map)} imported; default='{DEFAULT_STYLE_SLUG}'")
+
+    # Ensure every seeded style carries the edge-alignment block so a fresh
+    # seed renders with header nav, breadcrumb and content on one vertical
+    # line. Idempotent — already-aligned styles are left untouched.
+    apply_alignment_to_all_styles(db.session)
 
     print("\n── Widgets ─────────────────────────────────────────────────────")
     widget_map: dict[str, "CmsWidget"] = {}

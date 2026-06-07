@@ -219,6 +219,35 @@ class CmsPlugin(BasePlugin):
                 "[cms] Failed to start scheduled-publish tick: %s", scheduler_error
             )
 
+    def _register_data_exchangers(self) -> None:
+        """Register the CMS entity exchangers into the core data-exchange seam.
+
+        Core declares none of these (it stays agnostic); the plugin adds them on
+        enable through the shared ``db.session`` + the gallery file storage, so
+        CMS entities appear on the generic Settings → Import/Export page and the
+        per-list controls — coexisting with the bespoke ``/admin/cms/*`` routes.
+        Clear-safe: re-registering replaces by key (per-test app re-enable).
+        """
+        import logging
+
+        try:
+            from vbwd.extensions import db
+            from plugins.cms.src.services.file_storage import LocalFileStorage
+            from plugins.cms.src.services.data_exchange.cms_exchangers import (
+                register_cms_exchangers,
+            )
+
+            cfg = self._config or {}
+            storage = LocalFileStorage(
+                base_path=cfg.get("uploads_base_path", "/app/uploads"),
+                base_url=cfg.get("uploads_base_url", "/uploads"),
+            )
+            register_cms_exchangers(db.session, file_storage=storage)
+        except Exception as exchanger_error:
+            logging.getLogger(__name__).warning(
+                "[cms] Failed to register data exchangers: %s", exchanger_error
+            )
+
     def on_enable(self) -> None:
         import logging
         import os
@@ -228,6 +257,7 @@ class CmsPlugin(BasePlugin):
         self._register_cli_commands()
         self._start_scheduled_publish_tick()
         self._register_seo_pipeline()
+        self._register_data_exchangers()
 
         # Register the access-level content provider (S01). This lets core's
         # /admin/access/user-levels/<id>/content route discover CMS-restricted

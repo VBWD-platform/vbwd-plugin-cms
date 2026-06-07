@@ -135,6 +135,77 @@ class _FakePostTermRepo:
         return links
 
 
+class _FakeContentBlockRepo:
+    """In-memory ``cms_post_content_block`` store keyed by post id."""
+
+    def __init__(self):
+        self._by_post = {}
+
+    def find_by_post(self, post_id):
+        return self._by_post.get(str(post_id), [])
+
+    def replace_for_post(self, post_id, blocks):
+        stored = []
+        for block_data in blocks:
+            block = MagicMock()
+            block.post_id = post_id
+            block.area_name = block_data["area_name"]
+            block.content_html = block_data.get("content_html")
+            block.content_json = block_data.get("content_json")
+            block.source_css = block_data.get("source_css")
+            block.sort_order = block_data.get("sort_order", 0)
+            stored.append(block)
+        self._by_post[str(post_id)] = stored
+        return stored
+
+
+class _FakePostWidgetRepo:
+    """In-memory ``cms_post_widget`` store keyed by post id."""
+
+    def __init__(self):
+        self._by_post = {}
+
+    def find_by_post(self, post_id):
+        return self._by_post.get(str(post_id), [])
+
+    def replace_for_post(self, post_id, assignments):
+        stored = []
+        for assignment in assignments:
+            widget = MagicMock()
+            widget.post_id = post_id
+            widget.widget_id = assignment["widget_id"]
+            widget.area_name = assignment["area_name"]
+            widget.sort_order = assignment.get("sort_order", 0)
+            widget.required_access_level_ids = assignment.get(
+                "required_access_level_ids", []
+            )
+            stored.append(widget)
+        self._by_post[str(post_id)] = stored
+        return stored
+
+
+class _FakeWidgetRepo:
+    """Slug↔id store for widgets (mirrors _FakeRefRepo's contract)."""
+
+    def __init__(self):
+        self._by_id = {}
+        self._by_slug = {}
+
+    def add(self, slug):
+        obj = MagicMock()
+        obj.id = uuid4()
+        obj.slug = slug
+        self._by_id[str(obj.id)] = obj
+        self._by_slug[slug] = obj
+        return obj
+
+    def find_by_id(self, obj_id):
+        return self._by_id.get(str(obj_id))
+
+    def find_by_slug(self, slug):
+        return self._by_slug.get(slug)
+
+
 def _new_post(post_repo, **kwargs):
     post = CmsPost()
     post.id = uuid4()
@@ -394,3 +465,123 @@ class TestImport:
         assert str(reimported.layout_id) == str(
             target_layouts.find_by_slug("magazine").id
         )
+
+
+def _make_service_with_areas():
+    """Build a service wired with the optional S55 content-block + widget repos."""
+    post_repo = _FakePostRepo()
+    layout_repo = _FakeRefRepo()
+    style_repo = _FakeRefRepo()
+    term_repo = _FakeTermRepo()
+    post_term_repo = _FakePostTermRepo()
+    content_block_repo = _FakeContentBlockRepo()
+    post_widget_repo = _FakePostWidgetRepo()
+    widget_repo = _FakeWidgetRepo()
+    service = PostImportExportService(
+        post_repo=post_repo,
+        layout_repo=layout_repo,
+        style_repo=style_repo,
+        term_repo=term_repo,
+        post_term_repo=post_term_repo,
+        content_block_repo=content_block_repo,
+        post_widget_repo=post_widget_repo,
+        widget_repo=widget_repo,
+    )
+    return {
+        "service": service,
+        "post_repo": post_repo,
+        "content_block_repo": content_block_repo,
+        "post_widget_repo": post_widget_repo,
+        "widget_repo": widget_repo,
+    }
+
+
+class TestContentBlocksAndPageAssignments:
+    """S55: the post envelope carries additional content areas + post widgets."""
+
+    def test_export_includes_content_blocks_and_page_assignments(self):
+        env = _make_service_with_areas()
+        widget = env["widget_repo"].add("hero-banner")
+        post = _new_post(env["post_repo"], type="page", slug="home", title="Home")
+        env["content_block_repo"].replace_for_post(
+            str(post.id),
+            [{"area_name": "sidebar", "content_html": "<p>aside</p>", "sort_order": 1}],
+        )
+        env["post_widget_repo"].replace_for_post(
+            str(post.id),
+            [{"widget_id": str(widget.id), "area_name": "header", "sort_order": 0}],
+        )
+
+        item = env["service"].export_posts()["items"][0]
+        assert item["content_blocks"] == [
+            {
+                "area_name": "sidebar",
+                "content_html": "<p>aside</p>",
+                "content_json": None,
+                "source_css": None,
+                "sort_order": 1,
+            }
+        ]
+        assert item["page_assignments"] == [
+            {
+                "widget_slug": "hero-banner",
+                "area_name": "header",
+                "sort_order": 0,
+                "required_access_level_ids": [],
+            }
+        ]
+
+    def test_round_trip_reproduces_content_blocks_and_page_assignments(self):
+        source = _make_service_with_areas()
+        widget = source["widget_repo"].add("hero-banner")
+        post = _new_post(source["post_repo"], type="page", slug="home", title="Home")
+        source["content_block_repo"].replace_for_post(
+            str(post.id),
+            [{"area_name": "sidebar", "content_html": "<p>aside</p>", "sort_order": 1}],
+        )
+        source["post_widget_repo"].replace_for_post(
+            str(post.id),
+            [{"widget_id": str(widget.id), "area_name": "header", "sort_order": 0}],
+        )
+        exported = source["service"].export_posts()
+
+        target = _make_service_with_areas()
+        target_widget = target["widget_repo"].add("hero-banner")
+        target["service"].import_posts(exported)
+
+        imported = target["post_repo"].find_by_type_and_slug("page", "home")
+        blocks = target["content_block_repo"].find_by_post(str(imported.id))
+        assert [b.area_name for b in blocks] == ["sidebar"]
+        assert blocks[0].content_html == "<p>aside</p>"
+        assignments = target["post_widget_repo"].find_by_post(str(imported.id))
+        assert len(assignments) == 1
+        assert str(assignments[0].widget_id) == str(target_widget.id)
+        assert assignments[0].area_name == "header"
+
+    def test_import_skips_unknown_widget_slug(self):
+        target = _make_service_with_areas()
+        payload = {
+            "version": ENVELOPE_VERSION,
+            "entity": ENVELOPE_ENTITY,
+            "items": [
+                {
+                    "type": "page",
+                    "slug": "home",
+                    "title": "Home",
+                    "page_assignments": [
+                        {"widget_slug": "ghost", "area_name": "header"}
+                    ],
+                }
+            ],
+        }
+        target["service"].import_posts(payload)
+        imported = target["post_repo"].find_by_type_and_slug("page", "home")
+        assert target["post_widget_repo"].find_by_post(str(imported.id)) == []
+
+    def test_service_without_area_repos_omits_keys(self):
+        """A service wired without the optional repos keeps the lean envelope."""
+        service, post_repo, _, _, _, _ = _make_service()
+        _new_post(post_repo, type="page", slug="home", title="Home")
+        item = service.export_posts()["items"][0]
+        assert "content_blocks" not in item
+        assert "page_assignments" not in item

@@ -25,7 +25,8 @@ OUT = Path(__file__).parent / "theme-styles.json"
 
 # ── Shared base (typography + widget primitives) ────────────────────────────
 
-BASE_CSS = dedent("""\
+BASE_CSS = dedent(
+    """\
     *, *::before, *::after { box-sizing: border-box; }
     body {
       margin: 0;
@@ -116,7 +117,8 @@ BASE_CSS = dedent("""\
     .cms-widget--header-nav,
     .cms-widget--footer-nav,
     .cms-widget--vue,
-    .cms-breadcrumb {
+    .cms-breadcrumb,
+    .cms-area--content .container {
       max-width: var(--container-max) !important;
       width: 100% !important;
       margin-left: auto !important;
@@ -134,11 +136,14 @@ BASE_CSS = dedent("""\
       padding-left: 0 !important;
       margin-left: 0 !important;
     }
-    /* All menu items share the default .cms-menu__link padding so the
-     * first one lines up visually with its siblings. Previously the first
-     * link was pinned to padding-left:0 to make it flush with the hero /
-     * cta-band outer edge, but that made item #1 stick out to the left of
-     * items #2..N. Visual consistency inside the menu wins. */
+    /* The first menu link is pinned to padding-left:0 so its label sits flush
+     * with the wrapper's inner-left edge — the same vertical line as the
+     * hero / cta-band outer edge, the breadcrumb's first crumb, and the main
+     * content. Edge alignment across the whole page wins over per-menu
+     * visual symmetry. */
+    .cms-widget--header-nav .cms-menu > .cms-menu__item:first-child > .cms-menu__link {
+      padding-left: 0 !important;
+    }
     .cms-widget--header-nav .cms-burger {
       margin-left: -6px;   /* neutralise the button's own 6px inner padding */
     }
@@ -366,10 +371,12 @@ BASE_CSS = dedent("""\
       .hero { margin-left: 0; margin-right: 0; border-radius: 14px; }
       .cta-band { margin-left: 0; margin-right: 0; border-radius: 12px; }
     }
-""")
+"""
+)
 
 
 # ── Colour palettes ─────────────────────────────────────────────────────────
+
 
 def tokens(**kv):
     lines = ["/* palette */", ":root {"]
@@ -383,91 +390,145 @@ COLORS = {
     "light-clean": {
         "name": "Light — Clean",
         "tokens": dict(
-            **{"color-accent": "#2563eb", "color-accent-soft": "#dbeafe",
-               "color-accent-dark": "#1d4ed8", "color-accent-fg": "#ffffff",
-               "color-contrast-bg": "#0f172a", "color-contrast-fg": "#f8fafc",
-               "color-contrast-hover-bg": "#1e293b",
-               "color-link": "#1d4ed8", "color-link-hover": "#1e40af",
-               "color-bg": "#ffffff", "color-surface": "#ffffff",
-               "color-surface-soft": "#f8fafc", "color-border": "#e2e8f0",
-               "color-text": "#0f172a", "color-text-muted": "#475569",
-               "color-heading": "#0b1220",
-               "color-gradient": "linear-gradient(135deg, #1d4ed8 0%, #5b21b6 100%)"}
+            **{
+                "color-accent": "#2563eb",
+                "color-accent-soft": "#dbeafe",
+                "color-accent-dark": "#1d4ed8",
+                "color-accent-fg": "#ffffff",
+                "color-contrast-bg": "#0f172a",
+                "color-contrast-fg": "#f8fafc",
+                "color-contrast-hover-bg": "#1e293b",
+                "color-link": "#1d4ed8",
+                "color-link-hover": "#1e40af",
+                "color-bg": "#ffffff",
+                "color-surface": "#ffffff",
+                "color-surface-soft": "#f8fafc",
+                "color-border": "#e2e8f0",
+                "color-text": "#0f172a",
+                "color-text-muted": "#475569",
+                "color-heading": "#0b1220",
+                "color-gradient": "linear-gradient(135deg, #1d4ed8 0%, #5b21b6 100%)",
+            }
         ),
     },
     "light-warm": {
         "name": "Light — Warm",
         "tokens": dict(
-            **{"color-accent": "#b45309", "color-accent-soft": "#fef3c7",
-               "color-accent-dark": "#78350f", "color-accent-fg": "#ffffff",
-               "color-contrast-bg": "#1c1917", "color-contrast-fg": "#fafaf9",
-               "color-contrast-hover-bg": "#292524",
-               "color-link": "#b45309", "color-link-hover": "#92400e",
-               "color-bg": "#fffbf5", "color-surface": "#ffffff",
-               "color-surface-soft": "#fef8ef", "color-border": "#f1e9db",
-               "color-text": "#1c1917", "color-text-muted": "#78716c",
-               "color-heading": "#1c1210",
-               "color-gradient": "linear-gradient(135deg, #b45309 0%, #991b1b 100%)"}
+            **{
+                "color-accent": "#b45309",
+                "color-accent-soft": "#fef3c7",
+                "color-accent-dark": "#78350f",
+                "color-accent-fg": "#ffffff",
+                "color-contrast-bg": "#1c1917",
+                "color-contrast-fg": "#fafaf9",
+                "color-contrast-hover-bg": "#292524",
+                "color-link": "#b45309",
+                "color-link-hover": "#92400e",
+                "color-bg": "#fffbf5",
+                "color-surface": "#ffffff",
+                "color-surface-soft": "#fef8ef",
+                "color-border": "#f1e9db",
+                "color-text": "#1c1917",
+                "color-text-muted": "#78716c",
+                "color-heading": "#1c1210",
+                "color-gradient": "linear-gradient(135deg, #b45309 0%, #991b1b 100%)",
+            }
         ),
     },
     "light-cool": {
         "name": "Light — Cool",
         "tokens": dict(
-            **{"color-accent": "#155e75", "color-accent-soft": "#cffafe",
-               "color-accent-dark": "#0c4a6e", "color-accent-fg": "#ffffff",
-               "color-contrast-bg": "#0c4a6e", "color-contrast-fg": "#f0f9ff",
-               "color-contrast-hover-bg": "#075985",
-               "color-link": "#0e7490", "color-link-hover": "#155e75",
-               "color-bg": "#f8fafc", "color-surface": "#ffffff",
-               "color-surface-soft": "#f1f5f9", "color-border": "#dbe4ec",
-               "color-text": "#0f172a", "color-text-muted": "#475569",
-               "color-heading": "#0c1929",
-               "color-gradient": "linear-gradient(135deg, #0e7490 0%, #1d4ed8 100%)"}
+            **{
+                "color-accent": "#155e75",
+                "color-accent-soft": "#cffafe",
+                "color-accent-dark": "#0c4a6e",
+                "color-accent-fg": "#ffffff",
+                "color-contrast-bg": "#0c4a6e",
+                "color-contrast-fg": "#f0f9ff",
+                "color-contrast-hover-bg": "#075985",
+                "color-link": "#0e7490",
+                "color-link-hover": "#155e75",
+                "color-bg": "#f8fafc",
+                "color-surface": "#ffffff",
+                "color-surface-soft": "#f1f5f9",
+                "color-border": "#dbe4ec",
+                "color-text": "#0f172a",
+                "color-text-muted": "#475569",
+                "color-heading": "#0c1929",
+                "color-gradient": "linear-gradient(135deg, #0e7490 0%, #1d4ed8 100%)",
+            }
         ),
     },
     "dark-ocean": {
         "name": "Dark — Ocean",
         "tokens": dict(
-            **{"color-accent": "#22d3ee", "color-accent-soft": "#0e7490",
-               "color-accent-dark": "#06b6d4", "color-accent-fg": "#021c2a",
-               "color-contrast-bg": "#f0f9ff", "color-contrast-fg": "#021c2a",
-               "color-contrast-hover-bg": "#e0f2fe",
-               "color-link": "#67e8f9", "color-link-hover": "#a5f3fc",
-               "color-bg": "#031625", "color-surface": "#0a2540",
-               "color-surface-soft": "#0f2e4d", "color-border": "#164160",
-               "color-text": "#e2e8f0", "color-text-muted": "#94a3b8",
-               "color-heading": "#f1f5f9",
-               "color-gradient": "linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)"}
+            **{
+                "color-accent": "#22d3ee",
+                "color-accent-soft": "#0e7490",
+                "color-accent-dark": "#06b6d4",
+                "color-accent-fg": "#021c2a",
+                "color-contrast-bg": "#f0f9ff",
+                "color-contrast-fg": "#021c2a",
+                "color-contrast-hover-bg": "#e0f2fe",
+                "color-link": "#67e8f9",
+                "color-link-hover": "#a5f3fc",
+                "color-bg": "#031625",
+                "color-surface": "#0a2540",
+                "color-surface-soft": "#0f2e4d",
+                "color-border": "#164160",
+                "color-text": "#e2e8f0",
+                "color-text-muted": "#94a3b8",
+                "color-heading": "#f1f5f9",
+                "color-gradient": "linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)",
+            }
         ),
     },
     "dark-forest": {
         "name": "Dark — Forest",
         "tokens": dict(
-            **{"color-accent": "#34d399", "color-accent-soft": "#065f46",
-               "color-accent-dark": "#10b981", "color-accent-fg": "#022c1a",
-               "color-contrast-bg": "#ecfdf5", "color-contrast-fg": "#022c1a",
-               "color-contrast-hover-bg": "#d1fae5",
-               "color-link": "#6ee7b7", "color-link-hover": "#a7f3d0",
-               "color-bg": "#0a1f17", "color-surface": "#0f2e22",
-               "color-surface-soft": "#143a2b", "color-border": "#1e513c",
-               "color-text": "#e6ede8", "color-text-muted": "#8ea89a",
-               "color-heading": "#f0f4f1",
-               "color-gradient": "linear-gradient(135deg, #10b981 0%, #14b8a6 100%)"}
+            **{
+                "color-accent": "#34d399",
+                "color-accent-soft": "#065f46",
+                "color-accent-dark": "#10b981",
+                "color-accent-fg": "#022c1a",
+                "color-contrast-bg": "#ecfdf5",
+                "color-contrast-fg": "#022c1a",
+                "color-contrast-hover-bg": "#d1fae5",
+                "color-link": "#6ee7b7",
+                "color-link-hover": "#a7f3d0",
+                "color-bg": "#0a1f17",
+                "color-surface": "#0f2e22",
+                "color-surface-soft": "#143a2b",
+                "color-border": "#1e513c",
+                "color-text": "#e6ede8",
+                "color-text-muted": "#8ea89a",
+                "color-heading": "#f0f4f1",
+                "color-gradient": "linear-gradient(135deg, #10b981 0%, #14b8a6 100%)",
+            }
         ),
     },
     "dark-purple": {
         "name": "Dark — Purple",
         "tokens": dict(
-            **{"color-accent": "#c084fc", "color-accent-soft": "#6b21a8",
-               "color-accent-dark": "#a855f7", "color-accent-fg": "#1a0a2e",
-               "color-contrast-bg": "#faf5ff", "color-contrast-fg": "#1a0a2e",
-               "color-contrast-hover-bg": "#f3e8ff",
-               "color-link": "#d8b4fe", "color-link-hover": "#e9d5ff",
-               "color-bg": "#120726", "color-surface": "#1e1038",
-               "color-surface-soft": "#27174a", "color-border": "#3f2766",
-               "color-text": "#e9e4f2", "color-text-muted": "#a196b9",
-               "color-heading": "#f3ecff",
-               "color-gradient": "linear-gradient(135deg, #a855f7 0%, #ec4899 100%)"}
+            **{
+                "color-accent": "#c084fc",
+                "color-accent-soft": "#6b21a8",
+                "color-accent-dark": "#a855f7",
+                "color-accent-fg": "#1a0a2e",
+                "color-contrast-bg": "#faf5ff",
+                "color-contrast-fg": "#1a0a2e",
+                "color-contrast-hover-bg": "#f3e8ff",
+                "color-link": "#d8b4fe",
+                "color-link-hover": "#e9d5ff",
+                "color-bg": "#120726",
+                "color-surface": "#1e1038",
+                "color-surface-soft": "#27174a",
+                "color-border": "#3f2766",
+                "color-text": "#e9e4f2",
+                "color-text-muted": "#a196b9",
+                "color-heading": "#f3ecff",
+                "color-gradient": "linear-gradient(135deg, #a855f7 0%, #ec4899 100%)",
+            }
         ),
     },
     # OXID eSales-inspired: near-black accent on warm white. Enterprise tone,
@@ -475,16 +536,25 @@ COLORS = {
     "enterprise-slate": {
         "name": "Enterprise — Slate",
         "tokens": dict(
-            **{"color-accent": "#111827", "color-accent-soft": "#e5e7eb",
-               "color-accent-dark": "#030712", "color-accent-fg": "#ffffff",
-               "color-contrast-bg": "#c2410c", "color-contrast-fg": "#ffffff",
-               "color-contrast-hover-bg": "#9a3412",
-               "color-link": "#111827", "color-link-hover": "#030712",
-               "color-bg": "#fafafa", "color-surface": "#ffffff",
-               "color-surface-soft": "#f3f4f6", "color-border": "#d1d5db",
-               "color-text": "#1f2937", "color-text-muted": "#4b5563",
-               "color-heading": "#030712",
-               "color-gradient": "linear-gradient(135deg, #111827 0%, #374151 100%)"}
+            **{
+                "color-accent": "#111827",
+                "color-accent-soft": "#e5e7eb",
+                "color-accent-dark": "#030712",
+                "color-accent-fg": "#ffffff",
+                "color-contrast-bg": "#c2410c",
+                "color-contrast-fg": "#ffffff",
+                "color-contrast-hover-bg": "#9a3412",
+                "color-link": "#111827",
+                "color-link-hover": "#030712",
+                "color-bg": "#fafafa",
+                "color-surface": "#ffffff",
+                "color-surface-soft": "#f3f4f6",
+                "color-border": "#d1d5db",
+                "color-text": "#1f2937",
+                "color-text-muted": "#4b5563",
+                "color-heading": "#030712",
+                "color-gradient": "linear-gradient(135deg, #111827 0%, #374151 100%)",
+            }
         ),
     },
 }
@@ -493,9 +563,9 @@ COLORS = {
 # ── Widths ───────────────────────────────────────────────────────────────────
 
 WIDTHS = {
-    "narrow":    {"label": "Narrow",     "max": "1100px", "sort_offset": 0},
-    "1200":      {"label": "1200",       "max": "1200px", "sort_offset": 1},
-    "fullwidth": {"label": "Full-width", "max": "100%",   "sort_offset": 2},
+    "narrow": {"label": "Narrow", "max": "1100px", "sort_offset": 0},
+    "1200": {"label": "1200", "max": "1200px", "sort_offset": 1},
+    "fullwidth": {"label": "Full-width", "max": "100%", "sort_offset": 2},
 }
 
 
@@ -575,12 +645,17 @@ _MENU_RULES_HORIZONTAL = """\
 
 
 def _menu_rules_for(width_slug: str) -> str:
-    return _MENU_RULES_FULLWIDTH if width_slug == "fullwidth" else _MENU_RULES_HORIZONTAL
+    return (
+        _MENU_RULES_FULLWIDTH if width_slug == "fullwidth" else _MENU_RULES_HORIZONTAL
+    )
 
 
 # ── Emit ─────────────────────────────────────────────────────────────────────
 
-def build_one(color_slug: str, color: dict, width_slug: str, width: dict, sort_order: int) -> dict:
+
+def build_one(
+    color_slug: str, color: dict, width_slug: str, width: dict, sort_order: int
+) -> dict:
     slug = f"{color_slug}-{width_slug}"
     # Fullwidth themes have --container-max: 100%, so the natural
     # (viewport - container-max) / 2 margin is zero — widgets would kiss
@@ -649,7 +724,9 @@ def main() -> None:
     for color_slug, color in COLORS.items():
         for width_slug, width in WIDTHS.items():
             order += 1
-            themes.append(build_one(color_slug, color, width_slug, width, sort_order=order))
+            themes.append(
+                build_one(color_slug, color, width_slug, width, sort_order=order)
+            )
 
     generated_slugs = {t["slug"] for t in themes}
     extras = _load_extras(order, generated_slugs)

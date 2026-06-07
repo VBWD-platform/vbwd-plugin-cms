@@ -63,12 +63,22 @@ class PostImportExportService:
         style_repo,
         term_repo,
         post_term_repo,
+        content_block_repo=None,
+        post_widget_repo=None,
+        widget_repo=None,
     ) -> None:
         self._post_repo = post_repo
         self._layout_repo = layout_repo
         self._style_repo = style_repo
         self._term_repo = term_repo
         self._post_term_repo = post_term_repo
+        # S55 optional repos. When wired, the envelope additionally carries the
+        # post's extra content areas (``content_blocks``) and post-level widget
+        # assignments (``page_assignments``); when absent the lean envelope is
+        # produced unchanged (back-compat with existing callers/exports).
+        self._content_block_repo = content_block_repo
+        self._post_widget_repo = post_widget_repo
+        self._widget_repo = widget_repo
 
     # ── export ───────────────────────────────────────────────────────────────
 
@@ -104,7 +114,47 @@ class PostImportExportService:
         parent_id = str(post.parent_id) if post.parent_id else None
         item["parent_slug"] = slug_by_post_id.get(parent_id) if parent_id else None
         item["terms"] = self._terms_of(post)
+        if self._content_block_repo is not None:
+            item["content_blocks"] = self._content_blocks_of(post)
+        if self._post_widget_repo is not None:
+            item["page_assignments"] = self._page_assignments_of(post)
         return item
+
+    def _content_blocks_of(self, post: CmsPost) -> List[Dict[str, Any]]:
+        """The post's additional content areas, id-free (S55)."""
+        blocks: List[Dict[str, Any]] = []
+        for block in self._content_block_repo.find_by_post(str(post.id)):
+            blocks.append(
+                {
+                    "area_name": block.area_name,
+                    "content_html": block.content_html,
+                    "content_json": block.content_json,
+                    "source_css": block.source_css,
+                    "sort_order": block.sort_order,
+                }
+            )
+        return blocks
+
+    def _page_assignments_of(self, post: CmsPost) -> List[Dict[str, Any]]:
+        """The post's widget assignments, with widget refs by slug (S55)."""
+        assignments: List[Dict[str, Any]] = []
+        for assignment in self._post_widget_repo.find_by_post(str(post.id)):
+            widget = (
+                self._widget_repo.find_by_id(str(assignment.widget_id))
+                if self._widget_repo is not None
+                else None
+            )
+            assignments.append(
+                {
+                    "widget_slug": widget.slug if widget else None,
+                    "area_name": assignment.area_name,
+                    "sort_order": assignment.sort_order,
+                    "required_access_level_ids": (
+                        assignment.required_access_level_ids or []
+                    ),
+                }
+            )
+        return assignments
 
     def _slug_of(self, repo, obj_id) -> Optional[str]:
         if not obj_id:
@@ -235,6 +285,46 @@ class PostImportExportService:
                 continue
             self._link_parent(post, item)
             self._link_terms(post, item)
+            self._link_content_blocks(post, item)
+            self._link_page_assignments(post, item)
+
+    def _link_content_blocks(self, post: CmsPost, item: Dict[str, Any]) -> None:
+        if self._content_block_repo is None:
+            return
+        blocks = item.get("content_blocks")
+        if not isinstance(blocks, list) or not blocks:
+            return
+        normalized = [block for block in blocks if block.get("area_name")]
+        if normalized:
+            self._content_block_repo.replace_for_post(str(post.id), normalized)
+
+    def _link_page_assignments(self, post: CmsPost, item: Dict[str, Any]) -> None:
+        if self._post_widget_repo is None:
+            return
+        page_assignments = item.get("page_assignments")
+        if not isinstance(page_assignments, list) or not page_assignments:
+            return
+        resolved: List[Dict[str, Any]] = []
+        for assignment in page_assignments:
+            widget = (
+                self._widget_repo.find_by_slug(assignment.get("widget_slug"))
+                if self._widget_repo is not None and assignment.get("widget_slug")
+                else None
+            )
+            if widget is None:
+                continue
+            resolved.append(
+                {
+                    "widget_id": str(widget.id),
+                    "area_name": assignment.get("area_name"),
+                    "sort_order": assignment.get("sort_order", 0),
+                    "required_access_level_ids": assignment.get(
+                        "required_access_level_ids", []
+                    ),
+                }
+            )
+        if resolved:
+            self._post_widget_repo.replace_for_post(str(post.id), resolved)
 
     def _link_parent(self, post: CmsPost, item: Dict[str, Any]) -> None:
         parent_slug = item.get("parent_slug")

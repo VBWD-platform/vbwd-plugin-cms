@@ -34,11 +34,6 @@ from plugins.cms.src.services.term_service import TermService
 from plugins.cms.src.services import post_type_registry, term_type_registry
 from plugins.cms.src.services.post_type_registry import PostType
 from plugins.cms.src.services.term_type_registry import TermType
-from plugins.cms.src.services import seo_registry
-from plugins.cms.src.services.seo_wiring import (
-    register_seo_pipeline,
-    unregister_seo_pipeline,
-)
 
 
 SETTINGS_URL = "/api/v1/admin/cms/seo/settings"
@@ -60,30 +55,6 @@ def _registries():
     yield
     post_type_registry.clear_post_types()
     term_type_registry.clear_term_types()
-
-
-@pytest.fixture(autouse=True)
-def _restore_cms_config(db):
-    """Snapshot + restore the cms config blob so tests stay independent."""
-    store = current_app.config_store
-    saved = dict(store.get_config("cms") or {})
-    yield
-    store.save_config("cms", saved)
-
-
-@pytest.fixture(autouse=True)
-def _live_sitemap_provider(db):
-    """Register the cms sitemap provider for the duration of each test.
-
-    Sibling SEO suites' autouse fixtures unregister the boot-registered
-    production provider on teardown, so register it here against the live
-    session (the same wiring ``on_enable`` uses) and clean up afterwards.
-    """
-    seo_registry.clear_sitemap_providers()
-    register_seo_pipeline()
-    yield
-    unregister_seo_pipeline()
-    seo_registry.clear_sitemap_providers()
 
 
 @pytest.fixture

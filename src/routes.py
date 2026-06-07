@@ -301,6 +301,9 @@ def _post_import_export_service() -> PostImportExportService:
         style_repo=CmsStyleRepository(db.session),
         term_repo=TermRepository(db.session),
         post_term_repo=PostTermRepository(db.session),
+        content_block_repo=_post_content_block_repo(),
+        post_widget_repo=_post_widget_repo(),
+        widget_repo=CmsWidgetRepository(db.session),
     )
 
 

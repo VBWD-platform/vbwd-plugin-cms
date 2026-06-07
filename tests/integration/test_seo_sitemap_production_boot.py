@@ -40,10 +40,6 @@ from plugins.cms.src.services import post_type_registry
 from plugins.cms.src.services.post_type_registry import PostType
 from plugins.cms.src.services.post_service import PostService
 from plugins.cms.src.services.content_event_publisher import ContentEventPublisher
-from plugins.cms.src.services.seo_wiring import (
-    register_seo_pipeline,
-    unregister_seo_pipeline,
-)
 
 
 @pytest.fixture
@@ -53,24 +49,19 @@ def seo_var_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _booted_pipeline():
-    """Re-establish the production SEO wiring for each test.
+def _post_type_present():
+    """Ensure the ``post`` type exists for create.
 
-    The registries are module-global singletons; a sibling test's teardown can
-    unregister the boot-time pipeline, so we re-run the SAME production entry
-    point (``register_seo_pipeline``) here. Because the fix makes registration
-    idempotent, this never duplicates providers — it just guarantees the
-    production wiring is present regardless of test order.
+    The shared integration conftest re-establishes the production SEO wiring
+    (sitemap provider + ``content.changed`` subscriber) for every SEO test, so
+    this fixture only guards the post-type registry, which a sibling test's
+    teardown can clear.
     """
-    # The app boot registers built-in types, but a sibling test clears the
-    # registry in teardown; make sure ``post`` exists for create.
     if post_type_registry.get_post_type("post") is None:
         post_type_registry.register_post_type(
             PostType(key="post", label="Post", routable=True, hierarchical=False)
         )
-    register_seo_pipeline()
     yield
-    unregister_seo_pipeline()
 
 
 def _service(db):
