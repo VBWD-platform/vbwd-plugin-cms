@@ -16,7 +16,9 @@ Engineering requirements (binding, restated): TDD-first; DevOps-first (cold
 local + CI); SOLID/DI/DRY (delegates to the existing services); Liskov; no
 overengineering. Quality guard: ``bin/pre-commit-check.sh --plugin cms --full``.
 """
+import io
 import uuid
+import zipfile
 
 import pytest
 
@@ -246,6 +248,74 @@ class TestImagesRoundTrip:
         exchanger.import_(payload, mode="upsert", dry_run=False)
         rebuilt = CmsImageRepository(db.session).find_by_slug(slug)
         assert rebuilt is not None
+        assert storage.read(file_path) == raw
+
+    def test_export_zip_emits_real_archive_with_asset_file(self, db):
+        """The route's zip path (``export_zip`` → ``build_envelope`` →
+        ``build_bundle``) yields a VALID zip whose ``assets/`` carries the raw
+        image bytes (not base64) — the bug was that no zip branch existed and a
+        JSON envelope was saved as ``.zip``."""
+        slug = f"realzip-{uuid.uuid4().hex[:8]}"
+        file_path = f"images/{slug}.png"
+        raw = b"\x89PNG\r\n\x1a\nreal-archive-bytes"
+        storage = InMemoryFileStorage()
+        storage.save(raw, file_path)
+        CmsImageRepository(db.session).save(
+            CmsImage(slug=slug, file_path=file_path, url_path=f"/uploads/{file_path}")
+        )
+
+        exchanger = _exchangers(db.session, storage)["cms_images"]
+        zip_export = exchanger.export_zip(ExportSelector(ids=[slug]), include_pii=False)
+        envelope = build_envelope("cms_images", zip_export.rows, instance="test")
+        bundle = build_bundle(
+            [BundleEntry("cms_images", "json", envelope)],
+            instance="test",
+            assets=zip_export.assets,
+        )
+
+        # The bytes are a genuine, openable zip — the regression assertion.
+        archive = zipfile.ZipFile(io.BytesIO(bundle))
+        names = archive.namelist()
+        assert "manifest.json" in names
+        assert "cms_images.json" in names
+        asset_names = [name for name in names if name.startswith("assets/")]
+        assert asset_names, "the bundle must contain a real image file under assets/"
+        assert archive.read(asset_names[0]) == raw
+        # The entity file references the asset by filename, not base64.
+        rows = exchanger and zip_export.rows
+        assert rows[0]["asset_file"] and "data" not in rows[0]
+
+    def test_zip_export_round_trips_through_route_path(self, db):
+        """Re-importing the asset-backed bundle (``read_bundle`` →
+        ``attach_assets`` → ``import_``) recreates the row AND the binary."""
+        slug = f"rt-{uuid.uuid4().hex[:8]}"
+        file_path = f"images/{slug}.png"
+        raw = b"round-trip-image-bytes"
+        storage = InMemoryFileStorage()
+        storage.save(raw, file_path)
+        CmsImageRepository(db.session).save(
+            CmsImage(slug=slug, file_path=file_path, url_path=f"/uploads/{file_path}")
+        )
+
+        exchanger = _exchangers(db.session, storage)["cms_images"]
+        zip_export = exchanger.export_zip(ExportSelector(ids=[slug]), include_pii=False)
+        envelope = build_envelope("cms_images", zip_export.rows, instance="test")
+        bundle = build_bundle(
+            [BundleEntry("cms_images", "json", envelope)],
+            instance="test",
+            assets=zip_export.assets,
+        )
+
+        CmsImageRepository(db.session).bulk_delete(
+            [str(CmsImageRepository(db.session).find_by_slug(slug).id)]
+        )
+        db.session.commit()
+        storage.delete(file_path)
+
+        _manifest, entries, assets = read_bundle(bundle)
+        payload = exchanger.attach_assets(entries["cms_images"], assets)
+        exchanger.import_(payload, mode="upsert", dry_run=False)
+        assert CmsImageRepository(db.session).find_by_slug(slug) is not None
         assert storage.read(file_path) == raw
 
     def test_zip_bundle_round_trip(self, db):

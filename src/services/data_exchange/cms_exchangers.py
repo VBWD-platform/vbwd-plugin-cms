@@ -38,6 +38,7 @@ from vbwd.services.data_exchange.port import (
     Envelope,
     ExportSelector,
     ImportResult,
+    ZipExport,
 )
 from vbwd.services.data_exchange.registry import data_exchange_registry
 
@@ -272,11 +273,59 @@ class CmsImagesExchanger(EntityExchanger):
     def _read_binary(self, file_path: Optional[str]) -> Optional[str]:
         if not file_path:
             return None
-        try:
-            raw = self._storage.read(file_path)
-        except (FileNotFoundError, OSError, ValueError):
+        raw = self._read_raw(file_path)
+        if raw is None:
             return None
         return base64.b64encode(raw).decode("ascii")
+
+    def _read_raw(self, file_path: Optional[str]) -> Optional[bytes]:
+        if not file_path:
+            return None
+        try:
+            return self._storage.read(file_path)
+        except (FileNotFoundError, OSError, ValueError):
+            return None
+
+    def export_zip(self, selector: ExportSelector, *, include_pii: bool) -> ZipExport:
+        """Export image rows referencing their binary as an ``assets/`` file.
+
+        Unlike :meth:`export` (which inlines the bytes as base64 ``data`` so the
+        JSON download is self-contained), the zip path puts the raw bytes in the
+        bundle's ``assets/`` directory and the row references them by an
+        ``asset_file`` filename — so the archive contains real image files.
+        """
+        envelope_rows = self.export(selector, include_pii=include_pii).rows
+        rows: List[dict] = []
+        assets: dict = {}
+        for row in envelope_rows:
+            asset_row = {key: value for key, value in row.items() if key != "data"}
+            raw = self._read_raw(row.get("file_path"))
+            if raw is not None:
+                asset_file = self._asset_filename(row)
+                asset_row["asset_file"] = asset_file
+                assets[asset_file] = raw
+            rows.append(asset_row)
+        return ZipExport(rows=rows, assets=assets)
+
+    def attach_assets(self, envelope: dict, assets: dict) -> dict:
+        """Re-inline ``asset_file`` bytes as base64 ``data`` so ``import_`` works.
+
+        The reverse of :meth:`export_zip`: the existing base64 ``import_`` path is
+        the single home for writing the binary back, so the bundle import maps the
+        asset bytes onto ``data`` and removes the now-redundant ``asset_file``.
+        """
+        rows = validate_envelope(envelope, self.entity_key)
+        for row in rows:
+            asset_file = row.pop("asset_file", None)
+            if asset_file and asset_file in assets:
+                row["data"] = base64.b64encode(assets[asset_file]).decode("ascii")
+        return envelope
+
+    def _asset_filename(self, row: dict) -> str:
+        slug = row.get("slug") or "image"
+        file_path = row.get("file_path") or ""
+        _, _, extension = file_path.rpartition(".")
+        return f"{slug}.{extension}" if extension and extension != file_path else slug
 
     def import_(self, payload: dict, *, mode: str, dry_run: bool) -> ImportResult:
         from plugins.cms.src.models.cms_image import CmsImage

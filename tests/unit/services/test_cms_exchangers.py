@@ -10,14 +10,17 @@ images exchanger emits a richer envelope without breaking the base contract);
 no overengineering. Quality guard: ``bin/pre-commit-check.sh --plugin cms
 --full``.
 """
+import base64
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from vbwd.services.data_exchange.port import ExportSelector
+from vbwd.services.data_exchange.port import ExportSelector, ZipExport
 from vbwd.services.data_exchange.registry import DataExchangeRegistry
 from plugins.cms.src.services.data_exchange.cms_exchangers import (
     CMS_CLUSTER,
+    CmsImagesExchanger,
     CmsPostsExchanger,
     CmsTermsExchanger,
     build_cms_exchangers,
@@ -132,6 +135,61 @@ class TestPostsExchangerDelegation:
         assert result.dry_run is True
         assert result.created == 1
         service.import_posts.assert_not_called()
+
+
+class TestImagesZipAssetContract:
+    """``export_zip`` carries the binary as a real asset file (not base64), and
+    ``attach_assets`` reverses it so the base64 ``import_`` path round-trips."""
+
+    def _exchanger(self, raw: bytes):
+        image = SimpleNamespace(
+            id="uuid-1",
+            slug="hero",
+            caption=None,
+            file_path="images/hero.png",
+            url_path="/uploads/images/hero.png",
+            mime_type="image/png",
+            file_size_bytes=len(raw),
+            width_px=None,
+            height_px=None,
+            alt_text=None,
+            og_image_url=None,
+            robots=None,
+            schema_json=None,
+        )
+        repo = MagicMock()
+        repo.find_all.return_value = {"items": [image]}
+        storage = MagicMock()
+        storage.read.return_value = raw
+        return CmsImagesExchanger(MagicMock(), repo, storage)
+
+    def test_export_zip_returns_asset_bytes_and_asset_file_ref(self):
+        raw = b"\x89PNG real-bytes"
+        exchanger = self._exchanger(raw)
+        zip_export = exchanger.export_zip(ExportSelector(all=True), include_pii=False)
+        assert isinstance(zip_export, ZipExport)
+        row = zip_export.rows[0]
+        # The binary is referenced by an asset filename, not inlined as base64.
+        assert "data" not in row
+        asset_file = row["asset_file"]
+        assert asset_file
+        assert zip_export.assets[asset_file] == raw
+
+    def test_attach_assets_reverses_into_base64_data(self):
+        raw = b"\x89PNG real-bytes"
+        exchanger = self._exchanger(raw)
+        zip_export = exchanger.export_zip(ExportSelector(all=True), include_pii=False)
+        envelope = {"cms_images": list(zip_export.rows)}
+        rebuilt = exchanger.attach_assets(envelope, zip_export.assets)
+        row = rebuilt["cms_images"][0]
+        assert base64.b64decode(row["data"]) == raw
+
+    def test_attach_assets_without_matching_asset_leaves_row(self):
+        raw = b"bytes"
+        exchanger = self._exchanger(raw)
+        envelope = {"cms_images": [{"slug": "x", "asset_file": "missing.png"}]}
+        rebuilt = exchanger.attach_assets(envelope, {})
+        assert rebuilt["cms_images"][0].get("data") is None
 
 
 class TestTermsExchangerDelegation:
