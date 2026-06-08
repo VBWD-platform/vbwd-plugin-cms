@@ -19,7 +19,9 @@ The document is ``<head>`` (meta-builder) + ``<body><div id="app">{content}</div
 import json
 import logging
 import os
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
+
+from vbwd.services.filesystem.local import LocalFilesystemManager
 
 from plugins.cms.src.services.seo_asset_stamp import (
     SeoAssetStamper,
@@ -36,6 +38,12 @@ from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED
 
 logger = logging.getLogger(__name__)
 
+# The prerendered HTML lives under the ``seo`` namespace of the unified
+# FilesystemManager (Sprint 58.2). Routing every write through it makes the
+# write atomic (temp+fsync+replace — no torn reads) and path-confined (the slug
+# becomes a confined relative path; ``..``/absolute/traversal is rejected).
+SEO_NAMESPACE = "seo"
+
 
 class SeoPrerenderWriter:
     """Writes/removes prerender files on content.changed.
@@ -43,6 +51,11 @@ class SeoPrerenderWriter:
     ``post_loader.load(post_id)`` must return ``(post, terms, siblings)`` or
     ``None`` (the post was hard-deleted). ``canonical_rewrite_checker(slug)``
     (optional) returns True when a routing rewrite shadows the canonical slug.
+
+    File IO is routed through the core ``FilesystemManager``'s ``seo`` namespace
+    (atomic writes, slug confinement). When no manager is injected one is built
+    over ``var_dir`` so the ``seo`` namespace root is ``<var_dir>/seo`` — the
+    exact on-disk location used before the 58.2 migration.
     """
 
     def __init__(
@@ -52,8 +65,11 @@ class SeoPrerenderWriter:
         canonical_rewrite_checker: Optional[Callable[[str], bool]] = None,
         asset_stamper: Optional[SeoAssetStamper] = None,
         style_css_resolver: Optional[Callable[[object], str]] = None,
+        filesystem_manager: Optional[Any] = None,
     ) -> None:
-        self._seo_dir = os.path.join(var_dir, "seo")
+        self._filesystem_manager = filesystem_manager or LocalFilesystemManager(
+            var_root=var_dir
+        )
         self._post_loader = post_loader
         self._rewrite_checker = canonical_rewrite_checker
         self._asset_stamper = asset_stamper or SeoAssetStamper(
@@ -107,20 +123,21 @@ class SeoPrerenderWriter:
         head_tags, json_ld = build_meta(renderable)
         document = self._render_document(post, head_tags, json_ld, robots_override)
 
-        target = self._path_for(post.slug)
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w", encoding="utf-8") as handle:
-            handle.write(document)
+        # The slug becomes a confined relative path within the ``seo``
+        # namespace; the manager rejects ``..``/absolute/traversal rather than
+        # trusting the slug, and writes atomically (no torn reads).
+        self._filesystem_manager.write_text(
+            SEO_NAMESPACE, self._relative_path_for(post.slug), document
+        )
 
     def _remove(self, slug: Optional[str]) -> None:
         if not slug:
             return
-        target = self._path_for(slug)
-        if os.path.exists(target):
-            os.remove(target)
+        self._filesystem_manager.delete(SEO_NAMESPACE, self._relative_path_for(slug))
 
-    def _path_for(self, slug: str) -> str:
-        return os.path.join(self._seo_dir, f"{slug}.html")
+    @staticmethod
+    def _relative_path_for(slug: str) -> str:
+        return f"{slug}.html"
 
     # ── document template ────────────────────────────────────────────────
 

@@ -9,9 +9,10 @@ provider stay session-agnostic and unit-testable with doubles.
 """
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from vbwd.events.bus import event_bus
+from vbwd.services.filesystem.local import LocalFilesystemManager
 
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
 from plugins.cms.src.services.seo_registry import (
@@ -19,7 +20,10 @@ from plugins.cms.src.services.seo_registry import (
     unregister_sitemap_provider,
 )
 from plugins.cms.src.services.post_service import CONTENT_CHANGED_EVENT
-from plugins.cms.src.services.seo_asset_stamp import SeoAssetStamper
+from plugins.cms.src.services.seo_asset_stamp import (
+    SeoAssetStamper,
+    iter_seo_html_relative_paths,
+)
 from plugins.cms.src.services.seo_post_loader import SeoPostLoader
 from plugins.cms.src.services.seo_prerender import SeoPrerenderWriter
 from plugins.cms.src.services.seo_sitemap_provider import CmsSitemapProvider
@@ -28,9 +32,27 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_VAR_DIR = "/app/var"
 
+# Prerendered HTML lives under the ``seo`` namespace of the unified
+# FilesystemManager (Sprint 58.2).
+SEO_NAMESPACE = "seo"
+
 
 def _var_dir() -> str:
     return os.environ.get("VBWD_VAR_DIR", _DEFAULT_VAR_DIR)
+
+
+def _filesystem_manager() -> Any:
+    """Resolve the core ``FilesystemManager`` for the SEO file IO.
+
+    Rooted at the live ``VBWD_VAR_DIR`` (read per call, mirroring ``_session``)
+    so the ``seo`` namespace resolves to the same ``<var>/seo`` directory used
+    before the 58.2 migration. Reading the var dir live — rather than the
+    container singleton, whose ``var_root`` is bound once at app boot —
+    preserves the pre-existing contract that an updated ``VBWD_VAR_DIR`` takes
+    effect without rebuilding the app. The manager is the core agnostic service
+    (``vbwd.services.filesystem``); no new env var, no path change.
+    """
+    return LocalFilesystemManager(var_root=_var_dir())
 
 
 def _session():
@@ -164,12 +186,16 @@ def _resolve_post_css(post) -> str:
 
 
 def _build_writer() -> SeoPrerenderWriter:
+    filesystem_manager = _filesystem_manager()
     return SeoPrerenderWriter(
         var_dir=_var_dir(),
         post_loader=SeoPostLoader(_session()),
         canonical_rewrite_checker=_canonical_is_rewritten,
-        asset_stamper=SeoAssetStamper(_fe_dist_dir()),
+        asset_stamper=SeoAssetStamper(
+            _fe_dist_dir(), filesystem_manager=filesystem_manager
+        ),
         style_css_resolver=_resolve_post_css,
+        filesystem_manager=filesystem_manager,
     )
 
 
@@ -181,7 +207,9 @@ def restamp_prerendered_assets() -> int:
     either way. Returns the number of files rewritten.
     """
     seo_dir = os.path.join(_var_dir(), "seo")
-    rewritten = SeoAssetStamper(_fe_dist_dir()).restamp_all(seo_dir)
+    rewritten = SeoAssetStamper(
+        _fe_dist_dir(), filesystem_manager=_filesystem_manager()
+    ).restamp_all(seo_dir)
     logger.info(
         "[cms.seo] Re-stamped %d prerendered file(s) in '%s'.", rewritten, seo_dir
     )
@@ -197,16 +225,12 @@ def purge_prerendered() -> int:
     nested slugs write ``seo/<a>/<b>.html``) so traffic falls through to the
     SPA. Non-``.html`` files are left untouched. Returns the number removed.
     """
-    seo_dir = os.path.join(_var_dir(), "seo")
-    if not os.path.isdir(seo_dir):
-        return 0
+    filesystem_manager = _filesystem_manager()
     removed = 0
-    for root, _dirs, files in os.walk(seo_dir):
-        for name in files:
-            if name.endswith(".html"):
-                os.remove(os.path.join(root, name))
-                removed += 1
-    logger.info("[cms.seo] Purged %d prerendered file(s) from '%s'.", removed, seo_dir)
+    for relative_path in iter_seo_html_relative_paths(filesystem_manager):
+        filesystem_manager.delete(SEO_NAMESPACE, relative_path)
+        removed += 1
+    logger.info("[cms.seo] Purged %d prerendered file(s).", removed)
     return removed
 
 

@@ -5,7 +5,7 @@ import zipfile
 import os
 from typing import List, Dict, Any, Optional, cast
 from plugins.cms.src.repositories.cms_image_repository import CmsImageRepository
-from plugins.cms.src.services.file_storage import IFileStorage, InMemoryFileStorage
+from vbwd.interfaces.file_storage import IFileStorage, InMemoryFileStorage
 from plugins.cms.src.models.cms_image import CmsImage
 
 

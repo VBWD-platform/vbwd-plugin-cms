@@ -46,7 +46,7 @@ from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetReposito
 from plugins.cms.src.repositories.post_repository import PostRepository
 from plugins.cms.src.repositories.term_repository import TermRepository
 from plugins.cms.src.services.data_exchange.cms_exchangers import build_cms_exchangers
-from plugins.cms.src.services.file_storage import InMemoryFileStorage
+from vbwd.interfaces.file_storage import InMemoryFileStorage
 from plugins.cms.src.services.post_service import PostService
 from plugins.cms.src.services.post_type_registry import PostType
 from plugins.cms.src.services.term_type_registry import TermType

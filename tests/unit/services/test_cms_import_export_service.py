@@ -12,7 +12,7 @@ from uuid import uuid4
 import datetime
 
 from plugins.cms.src.services.cms_import_export_service import CmsImportExportService
-from plugins.cms.src.services.file_storage import InMemoryFileStorage
+from vbwd.interfaces.file_storage import InMemoryFileStorage
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

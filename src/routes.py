@@ -82,7 +82,7 @@ from plugins.cms.src.services.cms_style_service import (
     CmsStyleNotFoundError,
     CmsStyleSlugConflictError,
 )
-from plugins.cms.src.services.file_storage import LocalFileStorage
+from vbwd.interfaces.file_storage import ManagerBackedFileStorage
 from plugins.cms.src.services.contact_form_service import (
     ContactFormService,
     HoneypotError,
@@ -339,11 +339,7 @@ def _is_authenticated_request() -> bool:
 
 
 def _image_service() -> CmsImageService:
-    config = _cms_config()
-    storage = LocalFileStorage(
-        base_path=config.get("uploads_base_path", "/app/uploads"),
-        base_url=config.get("uploads_base_url", "/uploads"),
-    )
+    storage = ManagerBackedFileStorage(current_app.container.filesystem_manager())
     return CmsImageService(CmsImageRepository(db.session), storage)
 
 

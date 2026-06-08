@@ -18,7 +18,7 @@ from plugins.cms.src.services.cms_import_export_service import (
     CmsImportExportService,
     UNIFIED_FORMAT_VERSION,
 )
-from plugins.cms.src.services.file_storage import InMemoryFileStorage
+from vbwd.interfaces.file_storage import InMemoryFileStorage
 
 
 def _make_post(slug="hello", post_type="page", status="published"):

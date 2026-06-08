@@ -231,16 +231,15 @@ class CmsPlugin(BasePlugin):
         import logging
 
         try:
+            from flask import current_app
             from vbwd.extensions import db
-            from plugins.cms.src.services.file_storage import LocalFileStorage
+            from vbwd.interfaces.file_storage import ManagerBackedFileStorage
             from plugins.cms.src.services.data_exchange.cms_exchangers import (
                 register_cms_exchangers,
             )
 
-            cfg = self._config or {}
-            storage = LocalFileStorage(
-                base_path=cfg.get("uploads_base_path", "/app/uploads"),
-                base_url=cfg.get("uploads_base_url", "/uploads"),
+            storage = ManagerBackedFileStorage(
+                current_app.container.filesystem_manager()
             )
             register_cms_exchangers(db.session, file_storage=storage)
         except Exception as exchanger_error:

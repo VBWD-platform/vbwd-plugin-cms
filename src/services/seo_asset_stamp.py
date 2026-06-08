@@ -24,9 +24,16 @@ import json
 import logging
 import os
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
+
+from vbwd.services.filesystem.local import LocalFilesystemManager
 
 logger = logging.getLogger(__name__)
+
+# The prerendered HTML re-stamped here lives under the ``seo`` namespace of the
+# unified FilesystemManager (Sprint 58.2): reads + the atomic write-back both go
+# through it so a concurrent re-prerender never observes a torn file.
+SEO_NAMESPACE = "seo"
 
 # Stable markers delimit the stamped entry-tag block so ``restamp_all`` can find
 # and replace it without re-rendering the content body.
@@ -72,10 +79,20 @@ def _as_absolute_asset_url(path: str) -> str:
 
 
 class SeoAssetStamper:
-    """Sources + re-stamps the deployed build's hashed entry tags."""
+    """Sources + re-stamps the deployed build's hashed entry tags.
 
-    def __init__(self, dist_dir: Optional[str]) -> None:
+    Re-stamping reads + writes the prerendered files through the core
+    ``FilesystemManager``'s ``seo`` namespace (atomic write-back). When no
+    manager is injected one is built per ``restamp_all`` call over the parent of
+    the passed ``seo_dir`` so the ``seo`` namespace root equals ``seo_dir`` — the
+    exact files re-stamped before the 58.2 migration.
+    """
+
+    def __init__(
+        self, dist_dir: Optional[str], filesystem_manager: Optional[Any] = None
+    ) -> None:
         self._dist_dir = dist_dir
+        self._filesystem_manager = filesystem_manager
 
     # ── sourcing the current tags ────────────────────────────────────────
 
@@ -160,26 +177,36 @@ class SeoAssetStamper:
 
         Returns the number of files actually rewritten. Files without the
         ``ASSETS_*`` markers are skipped untouched; the operation is idempotent.
+        Reads + writes flow through the ``seo`` namespace so the write-back is
+        atomic (no torn read against a concurrent re-prerender).
         """
         if not os.path.isdir(seo_dir):
             return 0
 
+        filesystem_manager = self._resolve_manager(seo_dir)
         entry_tags = self.current_entry_tags()
         rewritten = 0
-        for root, _dirs, files in os.walk(seo_dir):
-            for name in files:
-                if not name.endswith(".html"):
-                    continue
-                if self._restamp_file(os.path.join(root, name), entry_tags):
-                    rewritten += 1
+        for relative_path in iter_seo_html_relative_paths(filesystem_manager):
+            if self._restamp_file(filesystem_manager, relative_path, entry_tags):
+                rewritten += 1
         return rewritten
 
-    def _restamp_file(self, path: str, entry_tags: str) -> bool:
+    def _resolve_manager(self, seo_dir: str) -> Any:
+        if self._filesystem_manager is not None:
+            return self._filesystem_manager
+        # ``seo_dir`` is ``<var_root>/seo``; rooting the manager at its parent
+        # makes the ``seo`` namespace resolve to exactly ``seo_dir``.
+        return LocalFilesystemManager(var_root=os.path.dirname(seo_dir))
+
+    def _restamp_file(
+        self, filesystem_manager: Any, relative_path: str, entry_tags: str
+    ) -> bool:
         try:
-            with open(path, encoding="utf-8") as handle:
-                html = handle.read()
+            html = filesystem_manager.read_text(SEO_NAMESPACE, relative_path)
         except OSError as error:
-            logger.warning("[cms.seo] Unreadable prerender file '%s': %s", path, error)
+            logger.warning(
+                "[cms.seo] Unreadable prerender file '%s': %s", relative_path, error
+            )
             return False
 
         replaced = render_asset_block(entry_tags)
@@ -188,14 +215,38 @@ class SeoAssetStamper:
             return False
 
         try:
-            with open(path, "w", encoding="utf-8") as handle:
-                handle.write(new_html)
+            filesystem_manager.write_text(SEO_NAMESPACE, relative_path, new_html)
         except OSError as error:
             logger.warning(
-                "[cms.seo] Could not rewrite prerender file '%s': %s", path, error
+                "[cms.seo] Could not rewrite prerender file '%s': %s",
+                relative_path,
+                error,
             )
             return False
         return True
+
+
+def iter_seo_html_relative_paths(filesystem_manager: Any) -> List[str]:
+    """Every ``*.html`` rel-path under the ``seo`` namespace (recursive).
+
+    ``listdir`` is non-recursive, so nested slug dirs (``de/preise.html``) are
+    discovered by descending one level at a time. A child is a directory when
+    its confined absolute path is a directory (``resolve`` never escapes the
+    namespace), else it is a file. Shared by the re-stamper and the purge so the
+    "which files are managed" rule has a single home (DRY).
+    """
+    html_paths: List[str] = []
+    pending = [""]
+    while pending:
+        current = pending.pop()
+        for name in filesystem_manager.listdir(SEO_NAMESPACE, current):
+            child = f"{current}/{name}" if current else name
+            absolute = filesystem_manager.resolve(SEO_NAMESPACE, child)
+            if os.path.isdir(absolute):
+                pending.append(child)
+            elif name.endswith(".html"):
+                html_paths.append(child)
+    return html_paths
 
 
 def render_asset_block(entry_tags: str) -> str:

@@ -29,7 +29,7 @@ from plugins.cms.src.repositories.routing_rule_repository import (
 )
 from plugins.cms.src.services.cms_backfill_service import CmsBackfillService
 from plugins.cms.src.services.cms_import_export_service import CmsImportExportService
-from plugins.cms.src.services.file_storage import InMemoryFileStorage
+from vbwd.interfaces.file_storage import InMemoryFileStorage
 
 _IMPORTS_PAGES_DIR = os.path.join(
     os.path.dirname(__file__),

@@ -7,7 +7,7 @@ from plugins.cms.src.services.cms_image_service import (
     CmsImageService,
     CmsImageNotFoundError,
 )
-from plugins.cms.src.services.file_storage import InMemoryFileStorage
+from vbwd.interfaces.file_storage import InMemoryFileStorage
 from plugins.cms.src.models.cms_image import CmsImage
 
 
