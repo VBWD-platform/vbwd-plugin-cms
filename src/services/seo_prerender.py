@@ -27,6 +27,7 @@ from plugins.cms.src.services.seo_asset_stamp import (
     SeoAssetStamper,
     render_asset_block,
 )
+from plugins.cms.src.services.seo_full_page_renderer import IFullPageRenderer
 from plugins.cms.src.services.seo_meta_builder import build_meta
 from plugins.cms.src.services.seo_renderable_post import (
     NOINDEX_ROBOTS,
@@ -66,6 +67,7 @@ class SeoPrerenderWriter:
         asset_stamper: Optional[SeoAssetStamper] = None,
         style_css_resolver: Optional[Callable[[object], str]] = None,
         filesystem_manager: Optional[Any] = None,
+        full_page_renderer: Optional[IFullPageRenderer] = None,
     ) -> None:
         self._filesystem_manager = filesystem_manager or LocalFilesystemManager(
             var_root=var_dir
@@ -79,6 +81,10 @@ class SeoPrerenderWriter:
         # the page's own ``source_css``) so the static page is styled pre-
         # hydration. Injected (DI) — absent ⇒ no <style> emitted.
         self._style_css_resolver = style_css_resolver
+        # Optional external renderer that returns the COMPLETE page HTML
+        # (layout + content) captured from the live SPA. When it yields a page
+        # we write it as-is; absent/None ⇒ the content-only document is used.
+        self._full_page_renderer = full_page_renderer
 
     # ── event entry point ────────────────────────────────────────────────
 
@@ -112,6 +118,24 @@ class SeoPrerenderWriter:
     # ── file ops ─────────────────────────────────────────────────────────
 
     def _write(self, post, terms, siblings) -> None:
+        # Prefer the COMPLETE page HTML from the external renderer when one is
+        # configured. The rendered HTML is captured from the live SPA and is
+        # self-contained (already carries head meta + the hashed asset tags),
+        # so it is written as-is; the content-only document below remains the
+        # fallback when the renderer is absent/disabled/failed.
+        rendered = (
+            self._full_page_renderer.render_full_page(
+                post.slug, getattr(post, "language", None)
+            )
+            if self._full_page_renderer
+            else None
+        )
+        if isinstance(rendered, str) and rendered:
+            self._filesystem_manager.write_text(
+                SEO_NAMESPACE, self._relative_path_for(post.slug), rendered
+            )
+            return
+
         searchable = page_is_search_visible(_ScopeView(post, terms))
         robots_override = None if searchable else NOINDEX_ROBOTS
 

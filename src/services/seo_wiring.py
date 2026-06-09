@@ -24,6 +24,9 @@ from plugins.cms.src.services.seo_asset_stamp import (
     SeoAssetStamper,
     iter_seo_html_relative_paths,
 )
+from plugins.cms.src.services.seo_full_page_renderer import (
+    HttpFullPageRenderer,
+)
 from plugins.cms.src.services.seo_post_loader import SeoPostLoader
 from plugins.cms.src.services.seo_prerender import SeoPrerenderWriter
 from plugins.cms.src.services.seo_sitemap_provider import CmsSitemapProvider
@@ -79,6 +82,28 @@ def _public_base_url() -> str:
         return cfg.get("public_base_url", "") or ""
     except Exception as exc:  # pragma: no cover - defensive (no app context)
         logger.warning("[cms.seo] public_base_url lookup failed: %s", exc)
+        return ""
+
+
+def _prerender_service_url() -> str:
+    """Resolve the cms ``prerender_service_url`` from the live config (lazy).
+
+    Read per call (mirroring ``_public_base_url``). When set, the prerender
+    writer asks this external service for the COMPLETE page HTML (layout +
+    content) and saves that; empty ⇒ the renderer is off and the writer keeps
+    its content-only document (current behaviour). Returns ``""`` when no
+    app/config is available.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return ""
+        cfg = config_store.get_config("cms") or {}
+        return cfg.get("prerender_service_url", "") or ""
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] prerender_service_url lookup failed: %s", exc)
         return ""
 
 
@@ -198,6 +223,9 @@ def _build_writer() -> SeoPrerenderWriter:
         ),
         style_css_resolver=_resolve_post_css,
         filesystem_manager=filesystem_manager,
+        full_page_renderer=HttpFullPageRenderer(
+            prerender_service_url=_prerender_service_url()
+        ),
     )
 
 

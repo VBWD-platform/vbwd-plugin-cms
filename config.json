@@ -54,6 +54,11 @@
     "default": true,
     "description": "Switch on prerendered SEO generation (SPA only if switched off)"
   },
+  "prerender_service_url": {
+    "type": "string",
+    "default": "",
+    "description": "Base URL of an external full-page renderer; when set, the COMPLETE page HTML (layout + content) is saved. Empty = content-only document (default)."
+  },
   "debug_mode": {
     "type": "boolean",
     "default": false,

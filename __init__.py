@@ -31,6 +31,11 @@ DEFAULT_CONFIG = {
     # SEO pipeline is still wired on enable — the toggle is read live per
     # content change, so flipping it takes effect without re-enabling.
     "seo_prerender_enabled": True,
+    # Base URL of an external full-page renderer. When set, the prerender
+    # writer POSTs {slug, language} to "<url>/prerender" and saves the
+    # COMPLETE page HTML (layout + content) it returns; empty ⇒ off (the
+    # writer keeps its content-only document — current behaviour).
+    "prerender_service_url": "",
     # Admin-editable robots.txt body (S56). Empty ⇒ the default template the
     # robots() route builds; a non-empty string is served verbatim. seo.mode=off
     # still forces "Disallow: /" (safety wins).

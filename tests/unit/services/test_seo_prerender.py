@@ -240,6 +240,62 @@ def test_prerender_head_has_no_snippet_block(tmp_path):
     assert "Content-Security-Policy" not in html
 
 
+class _StubFullPageRenderer:
+    """Test double for IFullPageRenderer: records calls, returns canned HTML."""
+
+    def __init__(self, result):
+        self._result = result
+        self.calls = []
+
+    def render_full_page(self, slug, language):
+        self.calls.append((slug, language))
+        return self._result
+
+
+_FULL_PAGE_HTML = (
+    '<!doctype html><html lang="en"><head><title>Pricing</title></head>'
+    '<body><header class="site-nav">NAV</header>'
+    "<main><p>Plans</p></main><footer>FOOT</footer></body></html>"
+)
+
+
+def test_full_page_renderer_output_is_written_verbatim(tmp_path):
+    post = _Post()
+    renderer = _StubFullPageRenderer(_FULL_PAGE_HTML)
+    writer = _writer(tmp_path, [post], full_page_renderer=renderer)
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    # The complete rendered page is written as-is (layout incl.) ...
+    assert html == _FULL_PAGE_HTML
+    # ... not the content-only document.
+    assert 'id="__POST__"' not in html
+    assert '<div id="app"><p>Plans</p></div>' not in html
+    # The renderer was asked for the canonical slug + language.
+    assert renderer.calls == [("pricing", "en")]
+
+
+def test_falls_back_to_content_document_when_renderer_returns_none(tmp_path):
+    post = _Post()
+    renderer = _StubFullPageRenderer(None)
+    writer = _writer(tmp_path, [post], full_page_renderer=renderer)
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert '<div id="app"><p>Plans</p></div>' in html
+    assert 'id="__POST__"' in html
+
+
+def test_content_document_unchanged_when_no_renderer_injected(tmp_path):
+    post = _Post()
+    writer = _writer(tmp_path, [post])  # full_page_renderer defaults to None
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert '<div id="app"><p>Plans</p></div>' in html
+    assert 'id="__POST__"' in html
+
+
 def test_missing_post_is_a_noop(tmp_path):
     writer = _writer(tmp_path, [])
     # Event references a post the loader can't find (e.g. hard-deleted).
