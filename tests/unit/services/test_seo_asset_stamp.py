@@ -11,6 +11,7 @@ comment markers) in every ``${VAR_DIR}/seo/*.html`` for the deploy hook. It is a
 cheap string substitution and idempotent.
 """
 import logging
+from unittest.mock import MagicMock, patch
 
 from plugins.cms.src.services.seo_asset_stamp import (
     ASSETS_BEGIN_MARKER,
@@ -18,6 +19,26 @@ from plugins.cms.src.services.seo_asset_stamp import (
     FALLBACK_ENTRY_TAGS,
     SeoAssetStamper,
 )
+
+
+_LIVE_INDEX_HTML = (
+    "<!DOCTYPE html>\n"
+    '<html lang="en">\n'
+    "  <head>\n"
+    '    <meta charset="utf-8" />\n'
+    '    <script type="module" crossorigin src="/assets/index-HTTP.js"></script>\n'
+    '    <link rel="stylesheet" crossorigin href="/assets/index-HTTP.css" />\n'
+    "  </head>\n"
+    '  <body><div id="app"></div></body>\n'
+    "</html>\n"
+)
+
+
+def _http_response(status_code=200, text=_LIVE_INDEX_HTML):
+    response = MagicMock()
+    response.status_code = status_code
+    response.text = text
+    return response
 
 
 def _write_index_html(dist_dir, script_src, css_href):
@@ -92,6 +113,146 @@ def test_current_entry_tags_safe_fallback_when_absent(tmp_path, caplog):
 def test_no_dist_dir_configured_returns_fallback():
     stamper = SeoAssetStamper(None)
     assert stamper.current_entry_tags() == FALLBACK_ENTRY_TAGS
+
+
+# ── HTTP source (third tier, before the fallback) ─────────────────────────────
+
+
+def test_tags_from_http_parses_live_index_html():
+    stamper = SeoAssetStamper(None, public_base_url="https://vbwd.cc")
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        return_value=_http_response(),
+    ) as mock_get:
+        tags = stamper.current_entry_tags()
+
+    assert "/assets/index-HTTP.js" in tags
+    assert "/assets/index-HTTP.css" in tags
+    assert '<script type="module"' in tags
+    assert '<link rel="stylesheet"' in tags
+    mock_get.assert_called_once_with("https://vbwd.cc/", timeout=5)
+
+
+def test_http_used_when_local_sources_absent(tmp_path):
+    # A dist dir that exists but has neither manifest nor index.html.
+    dist = tmp_path / "empty-dist"
+    dist.mkdir(parents=True)
+    stamper = SeoAssetStamper(str(dist), public_base_url="https://vbwd.cc")
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        return_value=_http_response(),
+    ):
+        tags = stamper.current_entry_tags()
+    assert "/assets/index-HTTP.js" in tags
+
+
+def test_http_non_200_falls_back(caplog):
+    stamper = SeoAssetStamper(None, public_base_url="https://vbwd.cc")
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        return_value=_http_response(status_code=404),
+    ):
+        with caplog.at_level(logging.WARNING):
+            tags = stamper.current_entry_tags()
+    assert tags == FALLBACK_ENTRY_TAGS
+
+
+def test_http_exception_falls_back(caplog):
+    stamper = SeoAssetStamper(None, public_base_url="https://vbwd.cc")
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        side_effect=RuntimeError("boom"),
+    ):
+        with caplog.at_level(logging.WARNING):
+            tags = stamper.current_entry_tags()
+    assert tags == FALLBACK_ENTRY_TAGS
+
+
+def test_http_no_module_script_falls_back():
+    stamper = SeoAssetStamper(None, public_base_url="https://vbwd.cc")
+    body = "<html><head><title>no script</title></head><body></body></html>"
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        return_value=_http_response(text=body),
+    ):
+        assert stamper.current_entry_tags() == FALLBACK_ENTRY_TAGS
+
+
+def test_no_public_base_url_skips_http():
+    stamper = SeoAssetStamper(None, public_base_url=None)
+    with patch("plugins.cms.src.services.seo_asset_stamp.requests.get") as mock_get:
+        assert stamper.current_entry_tags() == FALLBACK_ENTRY_TAGS
+    mock_get.assert_not_called()
+
+
+def test_manifest_takes_precedence_over_http(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir(parents=True)
+    (dist / ".vite").mkdir(parents=True)
+    (dist / ".vite" / "manifest.json").write_text(
+        '{"index.html": {"isEntry": true,'
+        ' "file": "assets/index-MANIFEST.js",'
+        ' "css": ["assets/index-MANIFEST.css"]}}'
+    )
+    stamper = SeoAssetStamper(str(dist), public_base_url="https://vbwd.cc")
+    with patch("plugins.cms.src.services.seo_asset_stamp.requests.get") as mock_get:
+        tags = stamper.current_entry_tags()
+    assert "/assets/index-MANIFEST.js" in tags
+    mock_get.assert_not_called()
+
+
+def test_local_index_html_takes_precedence_over_http(tmp_path):
+    dist = tmp_path / "dist"
+    _write_index_html(dist, "/assets/index-LOCAL.js", "/assets/index-LOCAL.css")
+    stamper = SeoAssetStamper(str(dist), public_base_url="https://vbwd.cc")
+    with patch("plugins.cms.src.services.seo_asset_stamp.requests.get") as mock_get:
+        tags = stamper.current_entry_tags()
+    assert "/assets/index-LOCAL.js" in tags
+    mock_get.assert_not_called()
+
+
+def test_http_result_is_cached_across_calls():
+    stamper = SeoAssetStamper(None, public_base_url="https://vbwd.cc")
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        return_value=_http_response(),
+    ) as mock_get:
+        first = stamper.current_entry_tags()
+        second = stamper.current_entry_tags()
+    assert first == second
+    mock_get.assert_called_once()
+
+
+def test_http_none_result_is_cached():
+    stamper = SeoAssetStamper(None, public_base_url="https://vbwd.cc")
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        return_value=_http_response(status_code=500),
+    ) as mock_get:
+        stamper.current_entry_tags()
+        stamper.current_entry_tags()
+    mock_get.assert_called_once()
+
+
+def test_restamp_all_fetches_http_once_across_files(tmp_path):
+    seo_dir = tmp_path / "seo"
+    seo_dir.mkdir()
+    (seo_dir / "a.html").write_text(
+        _seo_doc('<script type="module" src="/assets/index-OLD.js"></script>')
+    )
+    (seo_dir / "b.html").write_text(
+        _seo_doc('<script type="module" src="/assets/index-OLD.js"></script>')
+    )
+    stamper = SeoAssetStamper(None, public_base_url="https://vbwd.cc")
+    with patch(
+        "plugins.cms.src.services.seo_asset_stamp.requests.get",
+        return_value=_http_response(),
+    ) as mock_get:
+        rewritten = stamper.restamp_all(str(seo_dir))
+    assert rewritten == 2
+    for name in ("a.html", "b.html"):
+        assert "/assets/index-HTTP.js" in (seo_dir / name).read_text()
+    mock_get.assert_called_once()
 
 
 # ── restamp_all ──────────────────────────────────────────────────────────────

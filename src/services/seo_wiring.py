@@ -192,7 +192,9 @@ def _build_writer() -> SeoPrerenderWriter:
         post_loader=SeoPostLoader(_session()),
         canonical_rewrite_checker=_canonical_is_rewritten,
         asset_stamper=SeoAssetStamper(
-            _fe_dist_dir(), filesystem_manager=filesystem_manager
+            _fe_dist_dir(),
+            filesystem_manager=filesystem_manager,
+            public_base_url=_public_base_url(),
         ),
         style_css_resolver=_resolve_post_css,
         filesystem_manager=filesystem_manager,
@@ -208,7 +210,9 @@ def restamp_prerendered_assets() -> int:
     """
     seo_dir = os.path.join(_var_dir(), "seo")
     rewritten = SeoAssetStamper(
-        _fe_dist_dir(), filesystem_manager=_filesystem_manager()
+        _fe_dist_dir(),
+        filesystem_manager=_filesystem_manager(),
+        public_base_url=_public_base_url(),
     ).restamp_all(seo_dir)
     logger.info(
         "[cms.seo] Re-stamped %d prerendered file(s) in '%s'.", rewritten, seo_dir

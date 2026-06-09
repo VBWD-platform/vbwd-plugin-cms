@@ -26,6 +26,8 @@ import os
 import re
 from typing import Any, List, Optional
 
+import requests
+
 from vbwd.services.filesystem.local import LocalFilesystemManager
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,15 @@ _MANIFEST_RELATIVE_PATHS = (
     "manifest.json",
 )
 
+# Best-effort fetch of the live fe-user ``index.html`` when no local build dir is
+# readable (prod, where ``VBWD_FE_DIST_DIR`` is unset). Short timeout so the
+# prerender writer never blocks; failures degrade to the documented fallback.
+_HTTP_FETCH_TIMEOUT_SECONDS = 5
+
+# Sentinel distinguishing "HTTP not yet attempted" from a cached ``None`` result
+# (HTTP attempted but produced no usable tags) so the fetch happens at most once.
+_HTTP_TAGS_UNSET = object()
+
 _SCRIPT_SRC_PATTERN = re.compile(
     r'<script[^>]*\btype=["\']module["\'][^>]*\bsrc=["\']([^"\']+)["\']',
     re.IGNORECASE,
@@ -69,6 +80,23 @@ def _script_tag(src: str) -> str:
 
 def _stylesheet_tag(href: str) -> str:
     return f'<link rel="stylesheet" href="{href}" />'
+
+
+def _parse_html_tags(html: str) -> Optional[str]:
+    """Build entry tags from an HTML document's module script + stylesheets.
+
+    Single home (DRY) for parsing both the local ``index.html`` and the live
+    HTTP one: returns ``None`` when no module ``<script>`` is present, else the
+    ``_script_tag`` plus every matching ``_stylesheet_tag``, joined as the writer
+    expects.
+    """
+    script_match = _SCRIPT_SRC_PATTERN.search(html)
+    if not script_match:
+        return None
+    tags: List[str] = [_script_tag(script_match.group(1))]
+    for css_match in _STYLESHEET_HREF_PATTERN.finditer(html):
+        tags.append(_stylesheet_tag(css_match.group(1)))
+    return "\n    ".join(tags)
 
 
 def _as_absolute_asset_url(path: str) -> str:
@@ -89,29 +117,38 @@ class SeoAssetStamper:
     """
 
     def __init__(
-        self, dist_dir: Optional[str], filesystem_manager: Optional[Any] = None
+        self,
+        dist_dir: Optional[str],
+        filesystem_manager: Optional[Any] = None,
+        public_base_url: Optional[str] = None,
     ) -> None:
         self._dist_dir = dist_dir
         self._filesystem_manager = filesystem_manager
+        self._public_base_url = public_base_url
+        self._http_tags_cache: Any = _HTTP_TAGS_UNSET
 
     # ── sourcing the current tags ────────────────────────────────────────
 
     def current_entry_tags(self) -> str:
         """Return the current build's entry ``<script>`` + CSS ``<link>`` tags.
 
-        Best-effort: a Vite ``manifest.json`` is preferred (authoritative);
-        otherwise the deployed ``index.html`` is parsed. Falls back to
-        ``FALLBACK_ENTRY_TAGS`` (and logs) when neither is readable.
+        Best-effort, in precedence order: a Vite ``manifest.json`` (preferred,
+        authoritative), then the deployed ``index.html``, then the live fe-user
+        ``index.html`` fetched over HTTP (prod, where no local build dir is
+        readable). Falls back to ``FALLBACK_ENTRY_TAGS`` (and logs) when none of
+        the three sources yields tags.
         """
-        if not self._dist_dir:
-            return FALLBACK_ENTRY_TAGS
-
-        tags = self._tags_from_manifest() or self._tags_from_index_html()
+        tags = (
+            self._tags_from_manifest()
+            or self._tags_from_index_html()
+            or self._tags_from_http()
+        )
         if tags is None:
             logger.warning(
                 "[cms.seo] No fe-user build asset manifest/index.html under "
-                "'%s'; using fallback entry tags. The SPA will boot only after "
-                "the deploy re-stamp writes the hashed tags.",
+                "'%s' and no HTTP source resolved; using fallback entry tags. "
+                "The SPA will boot only after the deploy re-stamp writes the "
+                "hashed tags.",
                 self._dist_dir,
             )
             return FALLBACK_ENTRY_TAGS
@@ -162,13 +199,43 @@ class SeoAssetStamper:
             )
             return None
 
-        script_match = _SCRIPT_SRC_PATTERN.search(html)
-        if not script_match:
+        return _parse_html_tags(html)
+
+    def _tags_from_http(self) -> Optional[str]:
+        """Parse the live fe-user ``index.html`` over HTTP (best-effort).
+
+        Used only when no local build dir is readable (prod, ``VBWD_FE_DIST_DIR``
+        unset). The result (the parsed tags, or ``None``) is cached on the
+        instance so ``restamp_all``'s per-file loop fetches at most once. Never
+        raises: a missing ``public_base_url``, a non-200, or any request error
+        degrades to ``None`` so the caller uses the documented fallback.
+        """
+        if self._http_tags_cache is not _HTTP_TAGS_UNSET:
+            return self._http_tags_cache  # type: ignore[no-any-return]
+
+        self._http_tags_cache = self._fetch_http_tags()
+        return self._http_tags_cache  # type: ignore[no-any-return]
+
+    def _fetch_http_tags(self) -> Optional[str]:
+        if not self._public_base_url:
             return None
-        tags: List[str] = [_script_tag(script_match.group(1))]
-        for css_match in _STYLESHEET_HREF_PATTERN.finditer(html):
-            tags.append(_stylesheet_tag(css_match.group(1)))
-        return "\n    ".join(tags)
+        url = self._public_base_url.rstrip("/") + "/"
+        try:
+            response = requests.get(url, timeout=_HTTP_FETCH_TIMEOUT_SECONDS)
+        except Exception as error:  # best-effort: HTTP source must never raise
+            logger.warning(
+                "[cms.seo] Could not fetch live index.html '%s': %s", url, error
+            )
+            return None
+        if response.status_code != 200:
+            logger.warning(
+                "[cms.seo] Live index.html '%s' returned HTTP %s; "
+                "using fallback entry tags.",
+                url,
+                response.status_code,
+            )
+            return None
+        return _parse_html_tags(response.text)
 
     # ── re-stamping existing prerender files (deploy hook) ───────────────
 
