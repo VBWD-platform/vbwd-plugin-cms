@@ -232,9 +232,7 @@ class PostService:
             raise PostNotFoundError(f"Post '{post_id}' not found")
         # Back-fill a preview token for posts that predate the column so the
         # editor always has a shareable preview URL.
-        if not post.preview_token:
-            post.preview_token = uuid4().hex
-            self._repo.save(post)
+        self._backfill_preview_token(post)
         return self._with_term_ids(self._with_resolved_style(post.to_dict()), post.id)
 
     def list_posts(
@@ -662,7 +660,19 @@ class PostService:
             raise InvalidLayoutOrStyleError(f"Unknown {label}_id '{value}'")
         return value
 
+    def _backfill_preview_token(self, post: CmsPost) -> None:
+        """Persist a preview token for a post that predates the column.
+
+        Mirrors get_post's back-fill so imported/old posts surfaced by the
+        admin lists always carry a shareable preview token.
+        """
+        if not post.preview_token:
+            post.preview_token = uuid4().hex
+            self._repo.save(post)
+
     def _serialize_page(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        for item in result.get("items", []):
+            self._backfill_preview_token(item)
         return {
             "items": [
                 self._with_term_ids(item.to_dict(), item.id)

@@ -105,6 +105,23 @@ class CmsPlugin(BasePlugin):
             {"key": "cms.manage", "label": "Manage content", "group": "CMS"},
         ]
 
+    @property
+    def api_scopes(self):
+        """API-key scopes this plugin's endpoints require (S52).
+
+        Read by the core ``api_scope_registry`` (never imported by core).
+        ``user_grantable`` lets a user self-grant this scope on the Manage-API
+        page; admins may grant any registered scope.
+        """
+        return [
+            {
+                "key": "cms:posts:create",
+                "label": "Create CMS posts/pages",
+                "description": "Create a post or page via the content-ingestion API.",
+                "user_grantable": True,
+            }
+        ]
+
     def _register_built_in_types(self) -> None:
         """Register the built-in post-types and term-types (S47.0).
 

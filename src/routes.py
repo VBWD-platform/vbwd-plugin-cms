@@ -42,6 +42,7 @@ from flask import (
 
 from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
+from vbwd.middleware.api_key_auth import require_api_key
 
 from plugins.cms.src.repositories.cms_page_repository import CmsPageRepository
 from plugins.cms.src.repositories.cms_category_repository import CmsCategoryRepository
@@ -114,6 +115,7 @@ from plugins.cms.src.services.term_service import (
     UnknownTermTypeError,
 )
 from plugins.cms.src.services.rss_feed_service import RssFeedService
+from plugins.cms.src.services.content_ingest_service import ContentIngestService
 from plugins.cms.src.services import post_type_registry, term_type_registry
 from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED, POST_STATUS_PRIVATE
 
@@ -282,6 +284,18 @@ def _term_service() -> TermService:
     return TermService(TermRepository(db.session))
 
 
+def _content_ingest_service() -> ContentIngestService:
+    """Compose the existing cms services for the API content-ingestion path.
+
+    Owns no persistence; reuses PostService / TermService / CmsImageService.
+    """
+    return ContentIngestService(
+        post_service=_post_service(),
+        term_service=_term_service(),
+        image_service=_image_service(),
+    )
+
+
 def _post_import_export_service() -> PostImportExportService:
     return PostImportExportService(
         post_repo=PostRepository(db.session),
@@ -308,6 +322,32 @@ def _rss_feed_service() -> RssFeedService:
         public_base_url=config.get("public_base_url", ""),
         item_limit=config.get("rss_item_limit", 20),
     )
+
+
+# ── API content ingestion (S52) ─────────────────────────────────────────────
+
+
+@cms_bp.route("/api/v1/cms/api/posts", methods=["POST"])
+@require_api_key("cms:posts:create")
+def ingest_post():
+    """Create a post/page from an API-key holder's payload.
+
+    Protected by the CORE ``require_api_key`` guard — the key's user becomes the
+    author (``g.user_id``). Bad payloads / unknown post types / undecodable
+    images answer 400.
+    """
+    from flask import g
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = _content_ingest_service().ingest(payload, user_id=g.user_id)
+    except UnknownPostTypeError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except PostSlugConflictError as exc:
+        return jsonify({"error": str(exc)}), 409
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result), 201
 
 
 def _post_is_publicly_visible(post: dict) -> bool:

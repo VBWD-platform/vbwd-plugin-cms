@@ -33,6 +33,19 @@ class TermService:
             raise TermNotFoundError(f"Term '{term_id}' not found")
         return term.to_dict()
 
+    def find_or_create(self, term_type: str, name: str) -> Dict[str, Any]:
+        """Resolve a term by name within a taxonomy, creating it if absent.
+
+        The slug is derived from the name (same rule ``create_term`` uses), so
+        repeated names map to the one term — no duplicates. Single home for
+        term resolution, reused by the API content-ingestion path.
+        """
+        slug = slugify((name or "").strip())
+        existing = self._repo.find_by_type_and_slug(term_type, slug)
+        if existing:
+            return existing.to_dict()
+        return self.create_term({"term_type": term_type, "name": name})
+
     def create_term(self, data: Dict[str, Any]) -> Dict[str, Any]:
         term_type = (data.get("term_type") or "").strip()
         if not term_type_registry.is_registered(term_type):

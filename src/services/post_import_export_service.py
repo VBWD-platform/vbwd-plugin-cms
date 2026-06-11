@@ -15,6 +15,7 @@ Single responsibility: only export/import. Post CRUD stays in ``PostService``.
 """
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from plugins.cms.src.models.cms_post import CmsPost
 from plugins.cms.src.services import post_type_registry
@@ -244,6 +245,11 @@ class PostImportExportService:
         # Parents are linked in pass 2 so item order is irrelevant.
         if existing is None:
             post.parent_id = None
+            # New posts need a preview token so the admin can build a working
+            # ?preview_token= URL (mirrors PostService.create_post). An
+            # existing row keeps its token.
+            if not post.preview_token:
+                post.preview_token = uuid4().hex
         self._post_repo.save(post)
         return post, existing is None
 

@@ -423,6 +423,56 @@ class TestListSearch:
         assert kwargs["language"] is None
         assert kwargs["layout_id"] is None
 
+    def test_list_posts_backfills_missing_preview_token(self):
+        # Imported/old posts have a NULL preview_token; the list path must
+        # back-fill + persist one (mirrors get_post) so the admin can build a
+        # working preview URL.
+        post = _post()
+        post.preview_token = None
+        service, repo, _, _ = _make_service(posts=[post])
+        repo.find_paginated.return_value = {
+            "items": [post],
+            "total": 1,
+            "page": 1,
+            "per_page": 20,
+            "pages": 1,
+        }
+        result = service.list_posts(post_type="post")
+        assert post.preview_token
+        assert result["items"][0]["preview_token"] == post.preview_token
+        repo.save.assert_called_once_with(post)
+
+    def test_list_posts_keeps_existing_preview_token(self):
+        post = _post()
+        post.preview_token = "fixed-token"
+        service, repo, _, _ = _make_service(posts=[post])
+        repo.find_paginated.return_value = {
+            "items": [post],
+            "total": 1,
+            "page": 1,
+            "per_page": 20,
+            "pages": 1,
+        }
+        result = service.list_posts(post_type="post")
+        assert result["items"][0]["preview_token"] == "fixed-token"
+        repo.save.assert_not_called()
+
+    def test_list_posts_dict_exposes_slug_status_token(self):
+        post = _post(slug="my-post", status="draft")
+        post.preview_token = "tok"
+        service, repo, _, _ = _make_service(posts=[post])
+        repo.find_paginated.return_value = {
+            "items": [post],
+            "total": 1,
+            "page": 1,
+            "per_page": 20,
+            "pages": 1,
+        }
+        row = service.list_posts(post_type="post")["items"][0]
+        assert row["slug"] == "my-post"
+        assert row["status"] == "draft"
+        assert row["preview_token"] == "tok"
+
 
 class TestHierarchy:
     def test_parent_rejected_for_non_hierarchical_type(self):

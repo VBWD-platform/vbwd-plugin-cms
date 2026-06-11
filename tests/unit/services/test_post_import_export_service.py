@@ -335,6 +335,26 @@ class TestImport:
         second = service.import_posts(self._payload())
         assert second == {"created": 0, "updated": 1}
 
+    def test_import_new_post_gets_preview_token(self):
+        # A freshly imported post must carry a non-null hex preview_token so the
+        # admin can build a working ?preview_token= preview URL.
+        service, post_repo, _, _, _, _ = _make_service()
+        service.import_posts(self._payload())
+        post = post_repo.find_by_type_and_slug("post", "hello")
+        assert post.preview_token
+        assert len(post.preview_token) >= 16
+        int(post.preview_token, 16)  # hex token
+
+    def test_reimport_keeps_existing_preview_token(self):
+        # Updating an existing post on re-import must not churn its token.
+        service, post_repo, _, _, _, _ = _make_service()
+        existing = _new_post(post_repo, type="post", slug="hello", title="Hello")
+        existing.preview_token = "fixed-token"
+        service.import_posts(self._payload())
+        assert post_repo.find_by_type_and_slug("post", "hello").preview_token == (
+            "fixed-token"
+        )
+
     def test_import_accepts_single_object_not_wrapped(self):
         # A one-item export (no envelope) imports as readily as a bundle.
         service, post_repo, _, _, _, _ = _make_service()
