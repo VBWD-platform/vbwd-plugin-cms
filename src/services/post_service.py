@@ -26,7 +26,7 @@ from plugins.cms.src.models.cms_post import (
     POST_STATUS_PRIVATE,
     POST_STATUS_TRASH,
 )
-from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE
+from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE, TAG_TERM_TYPE
 from plugins.cms.src.services import post_type_registry
 from plugins.cms.src.services._slug import slugify
 
@@ -140,6 +140,7 @@ class PostService:
         layout_repo=None,
         style_repo=None,
         content_block_repo=None,
+        layout_widget_repo=None,
     ) -> None:
         self._repo = repo
         self._term_repo = term_repo
@@ -158,6 +159,12 @@ class PostService:
         # the admin-designated default (find_default) applied on PUBLIC reads.
         self._layout_repo = layout_repo
         self._style_repo = style_repo
+        # Optional layout-widget (placement) repo. When present, an explicit
+        # layout with ZERO widget placements ("not seeded") is treated as
+        # unusable on PUBLIC reads and falls back to the default layout, so the
+        # page renders chrome + body instead of blank. Absent → an explicit
+        # layout is always honoured (the disabled-feature path).
+        self._layout_widget_repo = layout_widget_repo
 
     # ── reads ────────────────────────────────────────────────────────────
 
@@ -194,7 +201,10 @@ class PostService:
 
         Mirrors _with_resolved_style — the default is the cms_layout row
         flagged ``is_default`` (via layout_repo.find_default), not a config:
-          - Explicit layout_id wins (source='explicit').
+          - An explicit layout_id wins (source='explicit') *only when it is
+            seeded* — i.e. it has ≥1 widget placement. An explicit layout with
+            ZERO placements is unusable (it would render blank) and falls
+            through to the default below.
           - Otherwise an active default layout is used (source='default').
           - Otherwise both fields resolve to None / 'none'.
 
@@ -204,7 +214,7 @@ class PostService:
         public renderer can rely on their presence.
         """
         layout_id = dto.get("layout_id")
-        if layout_id:
+        if layout_id and self._layout_is_seeded(layout_id):
             dto["resolved_layout_id"] = str(layout_id)
             dto["resolved_layout_source"] = "explicit"
             return dto
@@ -219,11 +229,38 @@ class PostService:
             dto["resolved_layout_source"] = "none"
         return dto
 
+    def _layout_is_seeded(self, layout_id: Any) -> bool:
+        """True when the layout has ≥1 widget placement (cms_layout_widget row).
+
+        A layout with zero placements is "not seeded" — it has no chrome and no
+        content area, so a page using it renders blank; the public resolver
+        treats it as unusable and falls back to the default layout. When no
+        placement repo is wired we cannot tell, so we conservatively treat the
+        explicit layout as usable (the disabled-feature path).
+        """
+        if self._layout_widget_repo is None:
+            return True
+        placements = self._layout_widget_repo.find_by_layout(str(layout_id))
+        return bool(placements)
+
     def _with_term_ids(self, dto: Dict[str, Any], post_id: Any) -> Dict[str, Any]:
         """Attach the post's linked term ids so editors/lists can show the
         selected categories + tags (cms_post.to_dict has no term info)."""
         links = self._post_term_repo.find_by_post(str(post_id))
         dto["term_ids"] = [str(link.term_id) for link in links]
+        return dto
+
+    def _with_terms(self, dto: Dict[str, Any], post_id: Any) -> Dict[str, Any]:
+        """Attach the post's linked terms as FULL term dicts (categories + tags)
+        so the public renderer can show a tag cloud. A link whose term no longer
+        exists is skipped. Empty list when the post has no terms."""
+        links = self._post_term_repo.find_by_post(str(post_id))
+        terms: List[Dict[str, Any]] = []
+        for link in links:
+            term = self._term_repo.find_by_id(str(link.term_id))
+            if term is not None:
+                terms.append(term.to_dict())
+        dto["terms"] = terms
         return dto
 
     def get_post(self, post_id: str) -> Dict[str, Any]:
@@ -280,15 +317,28 @@ class PostService:
         per_page: int = 20,
         newest_first: bool = False,
     ) -> Dict[str, Any]:
-        result = self._repo.find_by_term_slug(
-            term_type=term_type,
-            term_slug=term_slug,
-            post_type=post_type,
-            status=status,
-            page=page,
-            per_page=per_page,
-            newest_first=newest_first,
-        )
+        # Tags moved to the core catalog (D7): a ``tag`` filter resolves posts
+        # via the core ``vbwd_entity_tag`` reverse index, not cms_post_term.
+        # Categories (and any other term type) stay on the cms_term taxonomy.
+        if term_type == TAG_TERM_TYPE:
+            result = self._repo.find_by_tag_slug(
+                tag_slug=term_slug,
+                post_type=post_type,
+                status=status,
+                page=page,
+                per_page=per_page,
+                newest_first=newest_first,
+            )
+        else:
+            result = self._repo.find_by_term_slug(
+                term_type=term_type,
+                term_slug=term_slug,
+                post_type=post_type,
+                status=status,
+                page=page,
+                per_page=per_page,
+                newest_first=newest_first,
+            )
         return self._serialize_page(result)
 
     def resolve_published_path(
@@ -303,7 +353,10 @@ class PostService:
         post = self._repo.find_by_type_and_slug(post_type, normalized)
         if not post:
             return None
-        return self._with_resolved_layout(self._with_resolved_style(post.to_dict()))
+        return self._with_terms(
+            self._with_resolved_layout(self._with_resolved_style(post.to_dict())),
+            post.id,
+        )
 
     def _apply_content_blocks(self, post_id: Any, data: Dict[str, Any]) -> None:
         """Upsert any additional content areas carried in the payload (S55).

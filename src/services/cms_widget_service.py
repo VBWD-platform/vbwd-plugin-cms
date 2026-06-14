@@ -4,11 +4,9 @@ import json
 import zipfile
 import io
 from typing import List, Dict, Any, Optional, cast
+from sqlalchemy.exc import IntegrityError
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.repositories.cms_menu_item_repository import CmsMenuItemRepository
-from plugins.cms.src.repositories.cms_layout_widget_repository import (
-    CmsLayoutWidgetRepository,
-)
 from plugins.cms.src.models.cms_widget import CmsWidget, WIDGET_TYPES
 from plugins.cms.src.services._slug import unique_slug
 
@@ -30,9 +28,11 @@ class CmsWidgetSlugConflictError(Exception):
 
 
 class CmsWidgetInUseError(Exception):
-    """Raised when trying to delete a widget that is assigned to a layout."""
+    """Raised when deleting a widget that is assigned to a layout, page or post."""
 
-    pass
+    def __init__(self, message: str, usage: Optional[Dict[str, int]] = None) -> None:
+        super().__init__(message)
+        self.usage: Dict[str, int] = usage or {}
 
 
 class CmsWidgetService:
@@ -41,12 +41,10 @@ class CmsWidgetService:
         widget_repo: CmsWidgetRepository,
         menu_item_repo: CmsMenuItemRepository,
         image_repo,
-        layout_widget_repo: CmsLayoutWidgetRepository,
     ) -> None:
         self._repo = widget_repo
         self._menu_repo = menu_item_repo
         self._image_repo = image_repo
-        self._lw_repo = layout_widget_repo
 
     def list_widgets(self, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         params = params or {}
@@ -104,18 +102,60 @@ class CmsWidgetService:
         self._repo.save(obj)
         return self._to_dto(obj)
 
-    def delete_widget(self, widget_id: str) -> None:
-        in_use = self._lw_repo.find_by_widget(widget_id)
-        if in_use:
+    def delete_widget(self, widget_id: str, force: bool = False) -> None:
+        usage = self._repo.widget_usage(widget_id)
+        if any(usage.values()) and not force:
             raise CmsWidgetInUseError(
-                f"Widget {widget_id} is assigned to {len(in_use)} layout(s)"
+                self._in_use_message(widget_id, usage), usage=usage
             )
-        if not self._repo.delete(widget_id):
+        try:
+            deleted = self._repo.delete(widget_id, detach_assignments=force)
+        except IntegrityError:
+            # Backstop: an assignment created between the usage check and the
+            # delete still hits the RESTRICT FK — roll back so the session
+            # stays usable and surface the 409-mapped error, never a 500.
+            self._repo.rollback()
+            raise CmsWidgetInUseError(
+                f"Widget {widget_id} is still referenced and cannot be deleted"
+            )
+        if not deleted:
             raise CmsWidgetNotFoundError(f"Widget {widget_id} not found")
 
-    def bulk_delete(self, ids: List[str]) -> Dict[str, Any]:
-        count = self._repo.bulk_delete(ids)
-        return {"deleted": count}
+    def bulk_delete(self, ids: List[str], force: bool = False) -> Dict[str, Any]:
+        results = [self._delete_for_bulk(widget_id, force) for widget_id in ids]
+        deleted_count = sum(1 for entry in results if entry["status"] == "deleted")
+        return {"deleted": deleted_count, "results": results}
+
+    def _delete_for_bulk(self, widget_id: str, force: bool) -> Dict[str, Any]:
+        """Apply the single-delete guard/force logic to one id, never raising
+        for an in-use widget — the bulk caller gets a per-id outcome instead."""
+        usage = self._repo.widget_usage(widget_id)
+        if any(usage.values()) and not force:
+            return {
+                "id": widget_id,
+                "status": "blocked",
+                "reason": self._in_use_message(widget_id, usage),
+                "usage": usage,
+            }
+        try:
+            deleted = self._repo.delete(widget_id, detach_assignments=force)
+        except IntegrityError:
+            self._repo.rollback()
+            return {
+                "id": widget_id,
+                "status": "blocked",
+                "reason": f"Widget {widget_id} is still referenced",
+            }
+        if not deleted:
+            return {"id": widget_id, "status": "not_found"}
+        return {"id": widget_id, "status": "deleted"}
+
+    @staticmethod
+    def _in_use_message(widget_id: str, usage: Dict[str, int]) -> str:
+        return (
+            f"Widget {widget_id} is in use by {usage['layouts']} layout(s), "
+            f"{usage['pages']} page(s), {usage['posts']} post(s)"
+        )
 
     def replace_menu_tree(
         self, widget_id: str, items: List[Dict[str, Any]]

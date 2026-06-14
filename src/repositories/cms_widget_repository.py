@@ -1,6 +1,18 @@
 """CmsWidget repository."""
 from typing import Optional, List, Dict, Any
+from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget
+from plugins.cms.src.models.cms_page_widget import CmsPageWidget
+from plugins.cms.src.models.cms_post_widget import CmsPostWidget
 from plugins.cms.src.models.cms_widget import CmsWidget
+
+# The three assignment tables whose FK to cms_widget.id is ondelete=RESTRICT
+# (cms_menu_item is CASCADE and needs no handling here). One source of truth
+# for both the usage counts and the force-delete detach (S68 Bug B).
+_ASSIGNMENT_MODELS = {
+    "layouts": CmsLayoutWidget,
+    "pages": CmsPageWidget,
+    "posts": CmsPostWidget,
+}
 
 
 class CmsWidgetRepository:
@@ -49,14 +61,32 @@ class CmsWidgetRepository:
         self.session.commit()
         return widget
 
-    def delete(self, widget_id: str) -> bool:
+    def widget_usage(self, widget_id: str) -> Dict[str, int]:
+        """Count the widget's assignment rows per kind (layouts/pages/posts)."""
+        return {
+            kind: self.session.query(model).filter(model.widget_id == widget_id).count()
+            for kind, model in _ASSIGNMENT_MODELS.items()
+        }
+
+    def delete(self, widget_id: str, detach_assignments: bool = False) -> bool:
+        """Delete a widget; with ``detach_assignments`` first remove its
+        layout/page/post assignment rows in the same transaction (force
+        delete). ``cms_menu_item`` rows cascade at the DB level."""
         obj = self.find_by_id(widget_id)
-        if obj:
-            self.session.delete(obj)
-            self.session.flush()
-            self.session.commit()
-            return True
-        return False
+        if not obj:
+            return False
+        if detach_assignments:
+            for model in _ASSIGNMENT_MODELS.values():
+                self.session.query(model).filter(model.widget_id == widget_id).delete(
+                    synchronize_session="fetch"
+                )
+        self.session.delete(obj)
+        self.session.flush()
+        self.session.commit()
+        return True
+
+    def rollback(self) -> None:
+        self.session.rollback()
 
     def bulk_delete(self, ids: List[str]) -> int:
         deleted = (

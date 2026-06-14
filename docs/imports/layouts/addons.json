@@ -1,0 +1,36 @@
+{
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
+    {
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "",
+          "name": "breadcrumbs",
+          "type": "vue"
+        },
+        {
+          "label": "Add-ons",
+          "name": "addons",
+          "type": "vue"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Public 'Add-ons' vertical landing: header, breadcrumbs, the AddonCatalog Vue component, footer.",
+      "is_active": true,
+      "is_default": false,
+      "name": "Addons Landing (Header + Add-on Catalog + Footer)",
+      "slug": "addons",
+      "sort_order": 17
+    }
+  ]
+}

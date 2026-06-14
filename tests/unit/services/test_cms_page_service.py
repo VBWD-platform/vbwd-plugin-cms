@@ -240,3 +240,204 @@ class TestResolvedStyle:
         result = svc.get_page("p")
         assert result["resolved_style_id"] is None
         assert result["resolved_style_source"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Default-LAYOUT fallback on the public page read (Part 1 — the functional fix)
+#
+# A published page with NO explicit layout_id must resolve to the active
+# default layout (the cms_layout row flagged is_default) so the public
+# renderer shows that layout's chrome instead of a bare page. Mirrors
+# PostService._with_resolved_layout / the resolved-style pattern.
+#
+# Engineering requirements (binding, restated): TDD-first; DI (layout_repo
+# injected, default keyed on find_default); Liskov (missing/inactive default
+# → fields present with source 'none', never a failure); DRY (same shape as
+# the style resolver); no overengineering. Quality guard:
+# bin/pre-commit-check.sh --plugin cms --full.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+_LAYOUT_WIDGET_REPO_UNSET = object()
+
+
+def _make_service_with_layout_repo(
+    pages=None,
+    default_layout=None,
+    default_style=None,
+    layout_widget_repo=_LAYOUT_WIDGET_REPO_UNSET,
+):
+    """Build a CmsPageService with mock repos + a layout_repo stub whose
+    find_default() returns the provided default layout object.
+
+    By default the wired layout-widget repo reports every layout as "seeded"
+    (≥1 placement) so the explicit/default semantics of the existing tests are
+    unchanged. Pass ``layout_widget_repo`` to exercise the not-seeded fallback,
+    or ``None`` to drop the repo entirely (the disabled-feature path)."""
+    svc, page_repo, cat_repo = _make_service(pages=pages)
+    style_repo = MagicMock()
+    style_repo.find_default.return_value = default_style
+    svc._style_repo = style_repo
+    layout_repo = MagicMock()
+    layout_repo.find_default.return_value = default_layout
+    svc._layout_repo = layout_repo
+    if layout_widget_repo is _LAYOUT_WIDGET_REPO_UNSET:
+        seeded_repo = MagicMock()
+        seeded_repo.find_by_layout.return_value = [object()]
+        svc._layout_widget_repo = seeded_repo
+    else:
+        svc._layout_widget_repo = layout_widget_repo
+    return svc, page_repo, cat_repo, layout_repo
+
+
+def _layout(slug="default", is_default=True, is_active=True):
+    from uuid import uuid4
+    from plugins.cms.src.models.cms_layout import CmsLayout
+    import datetime
+
+    layout = CmsLayout()
+    layout.id = uuid4()
+    layout.slug = slug
+    layout.name = slug.title()
+    layout.is_active = is_active
+    layout.is_default = is_default
+    layout.created_at = layout.updated_at = datetime.datetime.utcnow()
+    return layout
+
+
+class TestResolvedLayout:
+    def test_explicit_page_layout_is_preserved(self):
+        from uuid import uuid4
+
+        page = _page("p")
+        explicit_id = uuid4()
+        page.layout_id = explicit_id
+        default = _layout()
+        svc, *_ = _make_service_with_layout_repo(pages=[page], default_layout=default)
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] == str(explicit_id)
+        assert result["resolved_layout_source"] == "explicit"
+
+    def test_default_layout_fills_in_when_page_layout_is_null(self):
+        page = _page("p")
+        page.layout_id = None
+        default = _layout(slug="defaultchrome", is_default=True, is_active=True)
+        svc, *_ = _make_service_with_layout_repo(pages=[page], default_layout=default)
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] == str(default.id)
+        assert result["resolved_layout_source"] == "default"
+
+    def test_no_default_and_no_page_layout_yields_none(self):
+        page = _page("p")
+        page.layout_id = None
+        svc, *_ = _make_service_with_layout_repo(pages=[page], default_layout=None)
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] is None
+        assert result["resolved_layout_source"] == "none"
+
+    def test_inactive_default_layout_is_ignored_at_resolve_time(self):
+        page = _page("p")
+        page.layout_id = None
+        default = _layout(slug="inactive", is_default=True, is_active=False)
+        svc, *_ = _make_service_with_layout_repo(pages=[page], default_layout=default)
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] is None
+        assert result["resolved_layout_source"] == "none"
+
+    def test_preview_path_also_resolves_default_layout(self):
+        # The preview path (published_only=False) feeds the same fe renderer,
+        # so a layout-less draft must resolve the default layout too.
+        page = _page("p", published=False)
+        page.layout_id = None
+        default = _layout(slug="defaultchrome", is_default=True, is_active=True)
+        svc, *_ = _make_service_with_layout_repo(pages=[page], default_layout=default)
+
+        result = svc.get_page("p", published_only=False)
+        assert result["resolved_layout_id"] == str(default.id)
+        assert result["resolved_layout_source"] == "default"
+
+    def test_missing_layout_repo_yields_none_not_a_crash(self):
+        # Liskov / disabled-feature path: a service wired without a layout_repo
+        # still returns the fields (source 'none'), never raises.
+        page = _page("p")
+        page.layout_id = None
+        svc, *_ = _make_service(pages=[page])
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] is None
+        assert result["resolved_layout_source"] == "none"
+
+
+def _placement_repo(placement_count):
+    """A layout-widget repo stub whose find_by_layout returns ``placement_count``
+    cms_layout_widget rows (how "seeded" a layout is)."""
+    repo = MagicMock()
+    repo.find_by_layout.return_value = [object() for _ in range(placement_count)]
+    return repo
+
+
+class TestUnseededExplicitLayoutFallsBackToDefault:
+    """NEW: an explicit layout with ZERO widget placements ("not seeded") is
+    unusable — fall back to the active default so the page renders chrome +
+    body instead of a blank page."""
+
+    def test_explicit_layout_with_placements_is_used(self):
+        from uuid import uuid4
+
+        page = _page("p")
+        explicit_id = uuid4()
+        page.layout_id = explicit_id
+        default = _layout()
+        svc, *_ = _make_service_with_layout_repo(
+            pages=[page], default_layout=default, layout_widget_repo=_placement_repo(2)
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] == str(explicit_id)
+        assert result["resolved_layout_source"] == "explicit"
+
+    def test_explicit_unseeded_layout_falls_back_to_active_default(self):
+        from uuid import uuid4
+
+        page = _page("p")
+        page.layout_id = uuid4()
+        default = _layout(slug="defaultchrome", is_default=True, is_active=True)
+        svc, *_ = _make_service_with_layout_repo(
+            pages=[page], default_layout=default, layout_widget_repo=_placement_repo(0)
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] == str(default.id)
+        assert result["resolved_layout_source"] == "default"
+
+    def test_explicit_unseeded_layout_no_default_yields_none(self):
+        from uuid import uuid4
+
+        page = _page("p")
+        page.layout_id = uuid4()
+        svc, *_ = _make_service_with_layout_repo(
+            pages=[page], default_layout=None, layout_widget_repo=_placement_repo(0)
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] is None
+        assert result["resolved_layout_source"] == "none"
+
+    def test_no_placement_repo_treats_explicit_as_usable(self):
+        from uuid import uuid4
+
+        page = _page("p")
+        explicit_id = uuid4()
+        page.layout_id = explicit_id
+        default = _layout()
+        svc, *_ = _make_service_with_layout_repo(
+            pages=[page], default_layout=default, layout_widget_repo=None
+        )
+
+        result = svc.get_page("p")
+        assert result["resolved_layout_id"] == str(explicit_id)
+        assert result["resolved_layout_source"] == "explicit"

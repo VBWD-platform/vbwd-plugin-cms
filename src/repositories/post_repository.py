@@ -9,8 +9,14 @@ from plugins.cms.src.models.cms_post import (
     POST_STATUS_SCHEDULED,
     POST_STATUS_PUBLISHED,
 )
+from vbwd.models.entity_tag import EntityTag
+
 from plugins.cms.src.models.cms_term import CmsTerm
 from plugins.cms.src.models.cms_post_term import CmsPostTerm
+
+# The core entity_type CMS posts are tagged under (D7) — tags live in the core
+# vbwd_entity_tag table, no longer in cms_post_term/cms_term('tag').
+POST_TAG_ENTITY_TYPE = "cms_post"
 
 
 class PostRepository:
@@ -105,6 +111,50 @@ class PostRepository:
             .join(CmsPostTerm, CmsPostTerm.post_id == CmsPost.id)
             .join(CmsTerm, CmsTerm.id == CmsPostTerm.term_id)
             .filter(CmsTerm.term_type == term_type, CmsTerm.slug == term_slug)
+        )
+        if post_type:
+            query = query.filter(CmsPost.type == post_type)
+        if status:
+            query = query.filter(CmsPost.status == status)
+
+        total = query.count()
+        items = (
+            self._apply_ordering(query, newest_first)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": max(1, (total + per_page - 1) // per_page),
+        }
+
+    def find_by_tag_slug(
+        self,
+        tag_slug: str,
+        post_type: Optional[str] = None,
+        status: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20,
+        newest_first: bool = False,
+    ) -> Dict[str, Any]:
+        """Posts carrying a core tag (entity_type ``cms_post``) — D7.
+
+        The bounded reverse-index lookup D5 allows for the small CMS post set
+        (NOT the 1M-SKU catalog-filter path): join cms_post against the core
+        ``vbwd_entity_tag`` reverse index ``(tag_slug, entity_type, entity_id)``.
+        """
+        query = (
+            self.session.query(CmsPost)
+            .join(
+                EntityTag,
+                (EntityTag.entity_id == CmsPost.id)
+                & (EntityTag.entity_type == POST_TAG_ENTITY_TYPE),
+            )
+            .filter(EntityTag.tag_slug == tag_slug)
         )
         if post_type:
             query = query.filter(CmsPost.type == post_type)

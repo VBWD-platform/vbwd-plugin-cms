@@ -42,21 +42,47 @@ _IMPORTS_PAGES_DIR = os.path.join(
 
 
 def _load_real_fixture_pages():
-    """Load the real docs/imports/pages/*.json seed pages as legacy records."""
+    """Load the real docs/imports/pages/*.json seed pages as legacy records.
+
+    The fixture files now ship as the VBWD-standard data-exchange envelope
+    (``{"cms_posts": [<row>]}``) using cms_post field names (``title``,
+    ``status``). This loader unwraps the envelope and maps those fields back
+    onto the legacy page-record shape (``name``, ``is_published``) the legacy
+    importer under test consumes — parity is about slug/canonical/content.
+    """
     records = []
     for name in sorted(os.listdir(_IMPORTS_PAGES_DIR)):
         if not name.endswith(".json"):
             continue
         with open(os.path.join(_IMPORTS_PAGES_DIR, name)) as handle:
-            record = json.load(handle)
+            record = _legacy_record_of(json.load(handle))
         # Strip layout/style/category cross-references the legacy page importer
         # would try to resolve — parity is about slug/canonical/content, not FK.
         record.pop("layout_slug", None)
         record.pop("style_slug", None)
         record.pop("category_slug", None)
         record.pop("page_widget_assignments", None)
+        record.pop("terms", None)
+        record.pop("page_assignments", None)
         records.append(record)
     return records
+
+
+def _legacy_record_of(data):
+    """Unwrap a cms_posts envelope into a legacy page record.
+
+    Accepts either the new envelope (``{"cms_posts": [<row>]}``) or a bare
+    legacy object, and maps the cms_post field names (``title``/``status``)
+    onto the legacy ones (``name``/``is_published``) so the rest of the test
+    is unchanged.
+    """
+    rows = data.get("cms_posts") if isinstance(data, dict) else None
+    record = dict(rows[0]) if isinstance(rows, list) and rows else dict(data)
+    if "name" not in record and "title" in record:
+        record["name"] = record["title"]
+    if "is_published" not in record and "status" in record:
+        record["is_published"] = record["status"] == "published"
+    return record
 
 
 def _legacy_zip(pages):

@@ -1,0 +1,18 @@
+{
+  "vbwd_export": "cms_widgets",
+  "version": 1,
+  "cms_widgets": [
+    {
+      "config": null,
+      "content_json": {
+        "content": "PCEtLSBHb29nbGUgdGFnIChndGFnLmpzKSAtLT4KPHNjcmlwdCBhc3luYyBzcmM9Imh0dHBzOi8vd3d3Lmdvb2dsZXRhZ21hbmFnZXIuY29tL2d0YWcvanM/aWQ9Ry05TlhHMEhRR0I3Ij48L3NjcmlwdD4KPHNjcmlwdD4KICB3aW5kb3cuZGF0YUxheWVyID0gd2luZG93LmRhdGFMYXllciB8fCBbXTsKICBmdW5jdGlvbiBndGFnKCl7ZGF0YUxheWVyLnB1c2goYXJndW1lbnRzKTt9CiAgZ3RhZygnanMnLCBuZXcgRGF0ZSgpKTsKCiAgZ3RhZygnY29uZmlnJywgJ0ctOU5YRzBIUUdCNycpOwo8L3NjcmlwdD4="
+      },
+      "is_active": true,
+      "name": "google-analytics",
+      "slug": "google-analytics",
+      "sort_order": 0,
+      "source_css": "",
+      "widget_type": "html"
+    }
+  ]
+}

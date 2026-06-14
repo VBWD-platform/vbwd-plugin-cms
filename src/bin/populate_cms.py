@@ -77,6 +77,22 @@ _THEMES_PATH = (
 )
 
 
+def _unwrap_envelope(doc: dict, entity_key: str) -> list[dict]:
+    """Return the rows of an S46 export envelope (``{"vbwd_export": <key>,
+    "version": N, "<key>": [rows]}``), tolerating an already-bare list/dict.
+
+    The demo import files are S46 envelopes; the seeder reads them directly
+    (it does not go through the import service), so it unwraps here. DRY: one
+    home for the unwrap used by every loader below.
+    """
+    if isinstance(doc, dict) and entity_key in doc:
+        rows = doc.get(entity_key)
+        return rows if isinstance(rows, list) else []
+    if isinstance(doc, list):
+        return doc
+    return []
+
+
 def _load_theme_styles() -> tuple[list[dict], str | None]:
     if not _THEMES_PATH.exists():
         print(
@@ -84,7 +100,9 @@ def _load_theme_styles() -> tuple[list[dict], str | None]:
         )
         return [], None
     doc = _json.loads(_THEMES_PATH.read_text())
-    return doc.get("themes", []), doc.get("default_slug")
+    # S46 envelope: rows live under "cms_styles" (legacy bare shape used "themes").
+    rows = _unwrap_envelope(doc, "cms_styles") or doc.get("themes", [])
+    return rows, doc.get("default_slug")
 
 
 STYLES, DEFAULT_STYLE_SLUG = _load_theme_styles()
@@ -805,12 +823,182 @@ STANDARD_CONTENT_JSON = {
     ],
 }
 
+# ─── Standalone vue-component widgets ───────────────────────────────────────────
+# These widgets are registered in fe-user (vueComponentRegistry) and have
+# fe-admin editor descriptors, but had no seeded RECORD — so they never showed
+# up in the admin widget picker (which lists widget records from the DB). Each
+# is seeded as a standalone vue-component widget; appearing in the picker is
+# enough (they need not be placed on a layout). Single source of truth: the
+# seeder iterates this list. The ``config`` blocks mirror the fe-admin editor
+# defaults (plugins/cms-admin/src/widgets/index.ts).
+_STANDALONE_VUE_WIDGETS = [
+    {
+        "slug": "code-snippet",
+        "name": "Code Snippet (HTML/JS)",
+        "widget_type": "vue-component",
+        "content_json": {"component": "CustomCode"},
+        "config": {
+            "component_name": "CustomCode",
+            "code": "<!-- paste analytics / counter <script> here -->",
+        },
+    },
+    {
+        "slug": "category",
+        "name": "Category (Term Post List)",
+        "widget_type": "vue-component",
+        "content_json": {"component": "Category"},
+        "config": {
+            "component_name": "Category",
+            "type": "post",
+            "term_type": "category",
+            "term_slug": "",
+            "mode": "titles",
+            "limit": 10,
+            "paginate": False,
+        },
+    },
+    {
+        "slug": "search",
+        "name": "Search Box",
+        "widget_type": "vue-component",
+        "content_json": {"component": "Search"},
+        "config": {
+            "component_name": "Search",
+            "placeholder": "Search…",
+            "target_path": "",
+        },
+    },
+    {
+        "slug": "search-results",
+        "name": "Search Results",
+        "widget_type": "vue-component",
+        "content_json": {"component": "SearchResults"},
+        "config": {
+            "component_name": "SearchResults",
+            "type": "post",
+            "mode": "titles",
+            "per_page": 10,
+        },
+    },
+]
+
+
 # ─── Layouts ───────────────────────────────────────────────────────────────────
 
 # Layouts are authored as JSON in docs/imports/layouts/ — re-imported on each
 # populator run. Edit those files, not this script.
 _LAYOUTS_DIR = _THEMES_PATH.parent / "layouts"
 _PAGES_DIR = _THEMES_PATH.parent / "pages"
+
+# Default layout → widget placements, keyed by layout slug then ``area_name``.
+# The S46 ``cms_layouts`` envelope only carries the layout's own columns (slug,
+# name, areas, …) — the layout↔widget PLACEMENT is a separate join table
+# (cms_layout_widget) the envelope cannot carry, and it is a *seeder* concern
+# (which demo widget lands in which default-layout area). Each value is
+# (area_name, widget_slug); order is the seeded sort_order.
+_LAYOUT_WIDGET_PLACEMENTS: dict[str, list[tuple[str, str]]] = {
+    "contact-form": [
+        ("header", "header-nav"),
+        ("contact form", "contact-form"),
+        ("footer", "footer-nav"),
+    ],
+    "content-page": [
+        ("header", "header-nav"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("footer", "footer-nav"),
+    ],
+    "ghrm-software-catalogue": [
+        ("header", "header-nav"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("ghrm-categories", "ghrm-categories"),
+        ("footer", "footer-nav"),
+    ],
+    "ghrm-software-detail": [
+        ("header", "header-nav"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("ghrm-software-detail", "ghrm-software-detail"),
+        ("footer", "footer-nav"),
+    ],
+    "home-v1": [
+        ("header", "header-nav"),
+        ("hero", "hero-home1"),
+        ("features", "features-3col"),
+        ("cta", "cta-primary"),
+        ("footer", "footer-nav"),
+    ],
+    "home-v2": [
+        ("header", "header-nav"),
+        ("hero", "hero-home2"),
+        ("pricing", "pricing-2col"),
+        ("testimonials", "testimonials"),
+        ("footer", "footer-nav"),
+    ],
+    "landing": [
+        ("header", "header-nav"),
+        ("hero", "hero-home1"),
+        ("features", "features-3col"),
+        ("cta", "cta-primary"),
+        ("social-proof", "testimonials"),
+        ("footer", "footer-nav"),
+    ],
+    "native-pricing-page": [
+        ("header", "header-nav"),
+        ("main", "pricing-native-plans"),
+        ("footer", "footer-nav"),
+    ],
+    # Public vertical landing pages: /tarifs reuses the existing
+    # `native-pricing-page` layout and /soft reuses `ghrm-software-catalogue`
+    # (same precedent as the `category` page) — no duplicate layouts. Only
+    # /addons needs a new layout, hosting the new AddonCatalog widget.
+    "addons": [
+        ("header", "header-nav"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("addons", "addon-catalog"),
+        ("footer", "footer-nav"),
+    ],
+    "tag-archive": [
+        ("header", "header-nav"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("archive", "tag-archive"),
+        ("footer", "footer-nav"),
+    ],
+}
+
+
+def _translate_layout_row(row: dict) -> dict:
+    """Attach the seeder-owned widget placements to an S46 ``cms_layouts`` row.
+
+    The envelope row already carries the layout columns; ``_get_or_create_layout``
+    additionally reads ``widget_assignments`` (a list of (area, widget_slug)),
+    sourced here from the placement constant.
+    """
+    translated = dict(row)
+    translated["widget_assignments"] = _LAYOUT_WIDGET_PLACEMENTS.get(
+        row.get("slug", ""), []
+    )
+    return translated
+
+
+def _translate_page_row(row: dict) -> dict:
+    """Translate an S46 ``cms_posts`` (page) row back into the field names the
+    seeder's page helpers expect: title→name, status→is_published,
+    terms→category_slug, page_assignments→page_widget_assignments.
+    """
+    translated = dict(row)
+    translated["name"] = row.get("name") or row.get("title", "")
+    status = row.get("status")
+    if status is not None:
+        translated["is_published"] = status == "published"
+    if "category_slug" not in translated:
+        categories = [
+            term.get("slug")
+            for term in row.get("terms", [])
+            if term.get("term_type") == "category" and term.get("slug")
+        ]
+        translated["category_slug"] = categories[0] if categories else None
+    if "page_widget_assignments" not in translated:
+        translated["page_widget_assignments"] = row.get("page_assignments", [])
+    return translated
 
 
 def _load_layouts() -> list[dict]:
@@ -819,7 +1007,9 @@ def _load_layouts() -> list[dict]:
         return []
     items: list[dict] = []
     for p in sorted(_LAYOUTS_DIR.glob("*.json")):
-        items.append(_json.loads(p.read_text()))
+        doc = _json.loads(p.read_text())
+        for row in _unwrap_envelope(doc, "cms_layouts") or [doc]:
+            items.append(_translate_layout_row(row))
     return items
 
 
@@ -829,7 +1019,9 @@ def _load_pages() -> list[dict]:
         return []
     items: list[dict] = []
     for p in sorted(_PAGES_DIR.glob("*.json")):
-        items.append(_json.loads(p.read_text()))
+        doc = _json.loads(p.read_text())
+        for row in _unwrap_envelope(doc, "cms_posts") or [doc]:
+            items.append(_translate_page_row(row))
     return items
 
 
@@ -1122,11 +1314,11 @@ def _set_page_widgets(
 # Seeds cms_post / cms_term THROUGH the services (never raw SQL); idempotent —
 # a re-run hits the slug-uniqueness guard and creates nothing new. Cold-CI-safe.
 
+# Categories live on the cms_term taxonomy; tags live in the core tag catalog
+# (D7) and are seeded onto hello-world via the tags port (see below).
 _UNIFIED_TERMS = [
     {"term_type": "category", "slug": "news", "name": "News", "sort_order": 0},
     {"term_type": "category", "slug": "guides", "name": "Guides", "sort_order": 1},
-    {"term_type": "tag", "slug": "release", "name": "Release", "sort_order": 0},
-    {"term_type": "tag", "slug": "tutorial", "name": "Tutorial", "sort_order": 1},
 ]
 
 _UNIFIED_POSTS = [
@@ -1165,12 +1357,15 @@ _UNIFIED_POSTS = [
 ]
 
 
-def seed_unified_content(post_service, term_service) -> dict:
+def seed_unified_content(post_service, term_service, tags_port) -> dict:
     """Idempotently seed the unified cms_post / cms_term model via services.
 
-    Returns a ``{"posts_created", "terms_created"}`` summary. A slug that
+    Returns a ``{"posts_created", "terms_created", "tags_linked"}`` summary.
+    A slug that
     already exists raises a *SlugConflictError from the service, which we treat
     as "already seeded" — so the seeder is safe to re-run on every deploy.
+    Categories go through ``TermService``; tags go through the core tags port
+    (D7).
     """
     from plugins.cms.src.services.post_service import PostSlugConflictError
     from plugins.cms.src.services.term_service import TermSlugConflictError
@@ -1191,7 +1386,36 @@ def seed_unified_content(post_service, term_service) -> dict:
         except PostSlugConflictError:
             continue
 
-    return {"posts_created": posts_created, "terms_created": terms_created}
+    # Tag the published `hello-world` post via the core catalog so the tag cloud
+    # (on the post) and the tag archive (listing the post) both have data.
+    # Idempotent: ``set_tags`` replaces the entity's full tag set.
+    tags_linked = _link_hello_world_tags(post_service, tags_port)
+
+    return {
+        "posts_created": posts_created,
+        "terms_created": terms_created,
+        "tags_linked": tags_linked,
+    }
+
+
+_HELLO_WORLD_TAG_SLUGS = ["release", "tutorial"]
+_TAG_ENTITY_TYPE = "cms_post"
+
+
+def _link_hello_world_tags(post_service, tags_port) -> int:
+    """Tag the `hello-world` post with `release`/`tutorial` via the core port.
+
+    Resolves the post id through the public service surface
+    (``resolve_published_path``) then writes the tags to the single core catalog
+    (``set_tags`` auto-creates the catalog rows). Returns the number of tags
+    set (0 when the post is absent, e.g. on a partially-seeded DB). Safe to
+    re-run — ``set_tags`` replaces the entity's tag set deterministically.
+    """
+    post = post_service.resolve_published_path("post", "hello-world")
+    if not post:
+        return 0
+    tags_port.set_tags(_TAG_ENTITY_TYPE, post["id"], list(_HELLO_WORLD_TAG_SLUGS))
+    return len(_HELLO_WORLD_TAG_SLUGS)
 
 
 def _seed_unified_via_services() -> None:
@@ -1221,10 +1445,8 @@ def _seed_unified_via_services() -> None:
         term_type_registry.register_term_type(
             TermType(key="category", label="Category", hierarchical=True)
         )
-    if not term_type_registry.is_registered("tag"):
-        term_type_registry.register_term_type(
-            TermType(key="tag", label="Tag", hierarchical=False)
-        )
+    # ``tag`` is no longer a cms_term taxonomy (D7) — tags live in the core
+    # catalog and are seeded via the tags port below.
 
     post_service = PostService(
         repo=PostRepository(db.session),
@@ -1232,10 +1454,15 @@ def _seed_unified_via_services() -> None:
         post_term_repo=PostTermRepository(db.session),
     )
     term_service = TermService(TermRepository(db.session))
-    summary = seed_unified_content(post_service, term_service)
+    from vbwd.services.tags_and_custom_fields import resolve_tags_and_custom_fields
+
+    summary = seed_unified_content(
+        post_service, term_service, resolve_tags_and_custom_fields()
+    )
     print(
         f"  Unified     : +{summary['posts_created']} posts, "
-        f"+{summary['terms_created']} terms"
+        f"+{summary['terms_created']} terms, "
+        f"{summary['tags_linked']} hello-world tags"
     )
 
 
@@ -1414,6 +1641,30 @@ def populate_cms() -> None:
         "vue-component",
         content_json={"component": "GhrmPackageDetail", "items_per_page": 12},
     )
+    widget_map["tag-archive"] = _get_or_create_widget(
+        "tag-archive",
+        "Tag Archive",
+        "vue-component",
+        content_json={"component": "TagArchive"},
+        config={"type": "post", "term_type": "tag", "mode": "excerpt"},
+    )
+    widget_map["addon-catalog"] = _get_or_create_widget(
+        "addon-catalog",
+        "Addon Catalog",
+        "vue-component",
+        content_json={"component": "AddonCatalog"},
+    )
+
+    # Standalone vue-component widgets (CustomCode / Category / Search /
+    # SearchResults) — seeded so they appear in the admin widget picker.
+    for standalone in _STANDALONE_VUE_WIDGETS:
+        widget_map[standalone["slug"]] = _get_or_create_widget(
+            standalone["slug"],
+            standalone["name"],
+            standalone["widget_type"],
+            content_json=standalone["content_json"],
+            config=standalone.get("config"),
+        )
 
     db.session.commit()
     print(f"  Widgets: {len(widget_map)} total")

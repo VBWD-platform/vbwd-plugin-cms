@@ -192,6 +192,79 @@ class TestImagesZipAssetContract:
         assert rebuilt["cms_images"][0].get("data") is None
 
 
+class TestLayoutsExchangerExportShape:
+    """``cms_layouts`` attaches its widget PLACEMENTS as ``widget_assignments``
+    by widget slug — no per-instance ``widget_id`` / ``required_access_level_ids``."""
+
+    def _exchanger(self, layout_widget_repo, widget_repo):
+        by_key = {
+            exchanger.entity_key: exchanger
+            for exchanger in build_cms_exchangers(MagicMock(), file_storage=MagicMock())
+        }
+        exchanger = by_key["cms_layouts"]
+        exchanger._layout_widget_repository = layout_widget_repo
+        exchanger._widget_repository = widget_repo
+        return exchanger
+
+    def test_export_emits_widget_assignments_by_slug(self):
+        layout = SimpleNamespace(
+            id="layout-uuid",
+            slug="home",
+            name="Home",
+            description=None,
+            areas=[{"name": "header"}, {"name": "footer"}],
+            sort_order=0,
+            is_active=True,
+            is_default=True,
+        )
+        placements = [
+            SimpleNamespace(area_name="footer", widget_id="w2", sort_order=0),
+            SimpleNamespace(area_name="header", widget_id="w1", sort_order=1),
+        ]
+        layout_widget_repo = MagicMock()
+        layout_widget_repo.find_by_layout.return_value = placements
+        widget_repo = MagicMock()
+        widget_repo.find_by_id.side_effect = lambda wid: {
+            "w1": SimpleNamespace(id="w1", slug="nav-widget"),
+            "w2": SimpleNamespace(id="w2", slug="footer-widget"),
+        }[wid]
+
+        exchanger = self._exchanger(layout_widget_repo, widget_repo)
+        row = exchanger._serialise_row(layout, include_pii=False)
+
+        assignments = row["widget_assignments"]
+        # Deterministic order: by (area_name, sort_order).
+        assert assignments == [
+            {"area_name": "footer", "widget_slug": "footer-widget", "sort_order": 0},
+            {"area_name": "header", "widget_slug": "nav-widget", "sort_order": 1},
+        ]
+        for assignment in assignments:
+            assert "widget_id" not in assignment
+            assert "required_access_level_ids" not in assignment
+
+    def test_export_skips_placement_for_missing_widget(self):
+        layout = SimpleNamespace(
+            id="layout-uuid",
+            slug="home",
+            name="Home",
+            description=None,
+            areas=[],
+            sort_order=0,
+            is_active=True,
+            is_default=False,
+        )
+        layout_widget_repo = MagicMock()
+        layout_widget_repo.find_by_layout.return_value = [
+            SimpleNamespace(area_name="header", widget_id="gone", sort_order=0),
+        ]
+        widget_repo = MagicMock()
+        widget_repo.find_by_id.return_value = None
+
+        exchanger = self._exchanger(layout_widget_repo, widget_repo)
+        row = exchanger._serialise_row(layout, include_pii=False)
+        assert row["widget_assignments"] == []
+
+
 class TestTermsExchangerDelegation:
     def test_export_delegates_selector_ids_to_service(self):
         """The exchanger pushes the selector ids down to ``export_terms`` so the

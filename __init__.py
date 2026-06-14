@@ -147,7 +147,11 @@ class CmsPlugin(BasePlugin):
         register_term_type(
             TermType(key="category", label="Category", hierarchical=True)
         )
-        register_term_type(TermType(key="tag", label="Tag", hierarchical=False))
+        # Tags are no longer a cms_term taxonomy (D7): they live in the single
+        # core tag catalog (``vbwd_tag``), managed under Settings → Custom
+        # Fields → Global tags. So the ``tag`` term type is deliberately NOT
+        # registered — TermManager.vue (tabs come from this registry) loses its
+        # "Tag" tab automatically, leaving category management intact.
 
     def _register_unified_repositories(self) -> None:
         """Register the S47.0 repos as DI providers on the container.
@@ -269,6 +273,41 @@ class CmsPlugin(BasePlugin):
                 "[cms] Failed to register data exchangers: %s", exchanger_error
             )
 
+    def _register_demo_seed_hooks(self) -> None:
+        """Contribute CMS seed + backfill to ``flask reset-demo`` (S88).
+
+        ``seed_catalog`` runs with the other catalog seeders; ``run_backfill``
+        runs as a post-seed hook so it folds EVERY plugin's seeded pages into
+        the unified model after they all exist. Core imports no cms model.
+        """
+        from vbwd.services.demo_data_registry import (
+            register_catalog_seeder,
+            register_post_seed_hook,
+        )
+        from plugins.cms.src.demo_seed import run_backfill, seed_catalog
+
+        register_catalog_seeder(seed_catalog)
+        register_post_seed_hook(run_backfill)
+
+    def _register_entity_types(self) -> None:
+        """Register cms_page / cms_post as taggable/custom-field-able (S77).
+
+        The unified ``cms_post`` table holds both pages (``type=page``) and posts
+        (``type=post``); the new core tags/custom-fields blocks are keyed off
+        that discriminator (page → ``cms_page``, post → ``cms_post``) and live
+        ALONGSIDE the existing CMS ``terms`` taxonomy (categories + legacy tag
+        terms), which is untouched (the D7 tag migration is a later slice).
+        """
+        from vbwd.services.entity_type_registry import (
+            EntityTypeRegistration,
+            register_entity_type,
+        )
+
+        register_entity_type(
+            EntityTypeRegistration("cms_page", "Page", "cms.pages.manage")
+        )
+        register_entity_type(EntityTypeRegistration("cms_post", "Post", "cms.manage"))
+
     def on_enable(self) -> None:
         import logging
         import os
@@ -279,6 +318,8 @@ class CmsPlugin(BasePlugin):
         self._start_scheduled_publish_tick()
         self._register_seo_pipeline()
         self._register_data_exchangers()
+        self._register_demo_seed_hooks()
+        self._register_entity_types()
 
         # Register the access-level content provider (S01). This lets core's
         # /admin/access/user-levels/<id>/content route discover CMS-restricted
@@ -341,6 +382,10 @@ class CmsPlugin(BasePlugin):
         from vbwd.services.access_level_content_provider import (
             clear_access_level_content_providers,
         )
+        from vbwd.services.entity_type_registry import unregister_entity_type
+
+        unregister_entity_type("cms_page")
+        unregister_entity_type("cms_post")
 
         try:
             from plugins.cms.src.services.seo_wiring import unregister_seo_pipeline

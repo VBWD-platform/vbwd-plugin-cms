@@ -1,0 +1,19 @@
+{
+  "vbwd_export": "cms_widgets",
+  "version": 1,
+  "cms_widgets": [
+    {
+      "config": null,
+      "content_json": {
+        "component": "GhrmCatalogueContent",
+        "items_per_page": 12
+      },
+      "is_active": true,
+      "name": "GHRM Categories",
+      "slug": "ghrm-categories",
+      "sort_order": 0,
+      "source_css": null,
+      "widget_type": "vue-component"
+    }
+  ]
+}

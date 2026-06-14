@@ -41,6 +41,12 @@ from plugins.cms.src.repositories.cms_post_content_block_repository import (
 from plugins.cms.src.repositories.cms_post_widget_repository import (
     CmsPostWidgetRepository,
 )
+from plugins.cms.src.repositories.cms_menu_item_repository import (
+    CmsMenuItemRepository,
+)
+from plugins.cms.src.repositories.cms_layout_widget_repository import (
+    CmsLayoutWidgetRepository,
+)
 from plugins.cms.src.repositories.cms_style_repository import CmsStyleRepository
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.repositories.post_repository import PostRepository
@@ -190,6 +196,16 @@ class TestModelExchangersRoundTrip:
         )
         self._round_trip(db, "cms_widgets", slug, CmsWidget, "widget_type")
 
+    def test_widget_export_omits_is_global(self, db):
+        # The is_global feature was removed; the exchanger must not export it.
+        slug = f"gw-{uuid.uuid4().hex[:8]}"
+        CmsWidgetRepository(db.session).save(
+            CmsWidget(slug=slug, name="Plain", widget_type="html")
+        )
+        exchanger = _exchangers(db.session)["cms_widgets"]
+        before = exchanger.export(ExportSelector(ids=[slug]), include_pii=False).rows
+        assert before and "is_global" not in before[0]
+
     def _round_trip(self, db, key, slug, model_class, value_field):
         exchanger = _exchangers(db.session)[key]
         before = exchanger.export(ExportSelector(ids=[slug]), include_pii=False).rows
@@ -204,6 +220,312 @@ class TestModelExchangersRoundTrip:
         rebuilt = db.session.query(model_class).filter(model_class.slug == slug).first()
         assert rebuilt is not None
         assert getattr(rebuilt, value_field) == expected_value
+
+
+class TestLayoutsWidgetPlacementsRoundTrip:
+    """The ``cms_layouts`` exchanger carries the ``cms_layout_widget`` PLACEMENTS
+    (widget→area mapping) by widget slug, so an import restores which widgets
+    sit in which areas — no manual ``PUT /admin/cms/layouts/<id>/widgets``."""
+
+    def _seed_layout_with_placements(self, db, suffix):
+        widget_a = CmsWidget(slug=f"wa-{suffix}", name="Nav", widget_type="html")
+        widget_b = CmsWidget(slug=f"wb-{suffix}", name="Foot", widget_type="html")
+        db.session.add(widget_a)
+        db.session.add(widget_b)
+        db.session.commit()
+        layout_slug = f"lay-{suffix}"
+        CmsLayoutRepository(db.session).save(
+            CmsLayout(
+                slug=layout_slug,
+                name="Lay",
+                areas=[{"name": "header"}, {"name": "footer"}],
+            )
+        )
+        layout = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        CmsLayoutWidgetRepository(db.session).replace_for_layout(
+            str(layout.id),
+            [
+                {
+                    "widget_id": str(widget_a.id),
+                    "area_name": "header",
+                    "sort_order": 0,
+                },
+                {
+                    "widget_id": str(widget_b.id),
+                    "area_name": "footer",
+                    "sort_order": 1,
+                },
+            ],
+        )
+        return layout_slug, widget_a, widget_b
+
+    def _export_layout_row(self, db, layout_slug):
+        exchanger = _exchangers(db.session)["cms_layouts"]
+        rows = exchanger.export(
+            ExportSelector(ids=[layout_slug]), include_pii=False
+        ).rows
+        assert rows and rows[0]["slug"] == layout_slug
+        return rows[0]
+
+    def test_export_emits_widget_assignments_by_slug_without_widget_id(self, db):
+        suffix = uuid.uuid4().hex[:8]
+        layout_slug, widget_a, widget_b = self._seed_layout_with_placements(db, suffix)
+        row = self._export_layout_row(db, layout_slug)
+
+        assignments = row["widget_assignments"]
+        by_area = {item["area_name"]: item for item in assignments}
+        assert set(by_area) == {"header", "footer"}
+        assert by_area["header"]["widget_slug"] == widget_a.slug
+        assert by_area["header"]["sort_order"] == 0
+        assert by_area["footer"]["widget_slug"] == widget_b.slug
+        assert by_area["footer"]["sort_order"] == 1
+        for assignment in assignments:
+            assert "widget_id" not in assignment
+            assert "required_access_level_ids" not in assignment
+
+    def test_round_trip_recreates_placements_resolved_by_slug(self, db):
+        suffix = uuid.uuid4().hex[:8]
+        layout_slug, widget_a, widget_b = self._seed_layout_with_placements(db, suffix)
+        row = self._export_layout_row(db, layout_slug)
+
+        layout = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        CmsLayoutWidgetRepository(db.session).delete_by_layout(str(layout.id))
+        db.session.query(CmsLayout).filter(CmsLayout.slug == layout_slug).delete()
+        db.session.commit()
+        assert CmsLayoutRepository(db.session).find_by_slug(layout_slug) is None
+
+        exchanger = _exchangers(db.session)["cms_layouts"]
+        payload = build_envelope("cms_layouts", [row], instance="test")
+        result = exchanger.import_(payload, mode="upsert", dry_run=False)
+        assert result.created == 1 and not result.errors
+
+        rebuilt = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        assert rebuilt is not None
+        placements = CmsLayoutWidgetRepository(db.session).find_by_layout(
+            str(rebuilt.id)
+        )
+        by_area = {p.area_name: p for p in placements}
+        assert set(by_area) == {"header", "footer"}
+        assert str(by_area["header"].widget_id) == str(widget_a.id)
+        assert str(by_area["footer"].widget_id) == str(widget_b.id)
+        assert by_area["footer"].sort_order == 1
+
+    def test_reimport_is_idempotent_no_duplicate_placements(self, db):
+        suffix = uuid.uuid4().hex[:8]
+        layout_slug, _widget_a, _widget_b = self._seed_layout_with_placements(
+            db, suffix
+        )
+        row = self._export_layout_row(db, layout_slug)
+
+        exchanger = _exchangers(db.session)["cms_layouts"]
+        payload = build_envelope("cms_layouts", [row], instance="test")
+        exchanger.import_(payload, mode="upsert", dry_run=False)
+        exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        layout = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        placements = CmsLayoutWidgetRepository(db.session).find_by_layout(
+            str(layout.id)
+        )
+        assert len(placements) == 2, "re-import must replace-set, not duplicate"
+
+    def test_unknown_widget_slug_is_reported_layout_still_imported(self, db):
+        suffix = uuid.uuid4().hex[:8]
+        layout_slug, widget_a, _widget_b = self._seed_layout_with_placements(db, suffix)
+        row = self._export_layout_row(db, layout_slug)
+        # Point one placement at a widget that does not exist on the target.
+        for assignment in row["widget_assignments"]:
+            if assignment["area_name"] == "footer":
+                assignment["widget_slug"] = f"ghost-{suffix}"
+
+        layout = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        CmsLayoutWidgetRepository(db.session).delete_by_layout(str(layout.id))
+        db.session.query(CmsLayout).filter(CmsLayout.slug == layout_slug).delete()
+        db.session.commit()
+
+        exchanger = _exchangers(db.session)["cms_layouts"]
+        payload = build_envelope("cms_layouts", [row], instance="test")
+        result = exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        # Layout imported, the known placement applied, the ghost reported.
+        assert result.created == 1
+        assert any("ghost" in error["reason"] for error in result.errors)
+        rebuilt = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        assert rebuilt is not None
+        placements = CmsLayoutWidgetRepository(db.session).find_by_layout(
+            str(rebuilt.id)
+        )
+        assert len(placements) == 1
+        assert str(placements[0].widget_id) == str(widget_a.id)
+
+    def test_dry_run_writes_no_placements(self, db):
+        suffix = uuid.uuid4().hex[:8]
+        layout_slug, _widget_a, _widget_b = self._seed_layout_with_placements(
+            db, suffix
+        )
+        row = self._export_layout_row(db, layout_slug)
+
+        layout = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        CmsLayoutWidgetRepository(db.session).delete_by_layout(str(layout.id))
+        db.session.commit()
+        assert (
+            CmsLayoutWidgetRepository(db.session).find_by_layout(str(layout.id)) == []
+        )
+
+        exchanger = _exchangers(db.session)["cms_layouts"]
+        payload = build_envelope("cms_layouts", [row], instance="test")
+        exchanger.import_(payload, mode="upsert", dry_run=True)
+
+        layout = CmsLayoutRepository(db.session).find_by_slug(layout_slug)
+        assert (
+            CmsLayoutWidgetRepository(db.session).find_by_layout(str(layout.id)) == []
+        )
+
+
+class TestWidgetsMenuItemsRoundTrip:
+    """S68 Bug A — the unified ``cms_widgets`` exchanger must carry the
+    ``cms_menu_item`` tree of a menu widget (export AND import), at parity with
+    the bespoke ``CmsWidgetService.export_widget`` / ``import_widget`` path."""
+
+    def _seed_menu_widget(self, db, slug):
+        CmsWidgetRepository(db.session).save(
+            CmsWidget(slug=slug, name="Main Menu", widget_type="menu")
+        )
+        widget = CmsWidgetRepository(db.session).find_by_slug(slug)
+        CmsMenuItemRepository(db.session).replace_tree(
+            str(widget.id),
+            [
+                {
+                    "id": "placeholder-software",
+                    "label": "Software",
+                    "url": "/category",
+                    "target": "_self",
+                    "sort_order": 0,
+                },
+                {
+                    "id": "placeholder-home",
+                    "parent_id": "placeholder-software",
+                    "label": "Home",
+                    "page_slug": "home1",
+                    "target": "_blank",
+                    "sort_order": 1,
+                },
+                {
+                    "id": "placeholder-about",
+                    "label": "About",
+                    "page_slug": "about",
+                    "target": "_self",
+                    "sort_order": 2,
+                },
+            ],
+        )
+        return widget
+
+    def _exported_row(self, db, slug):
+        exchanger = _exchangers(db.session)["cms_widgets"]
+        rows = exchanger.export(ExportSelector(ids=[slug]), include_pii=False).rows
+        assert rows and rows[0]["slug"] == slug
+        return rows[0]
+
+    def _items_by_label(self, db, widget_id):
+        items = CmsMenuItemRepository(db.session).find_tree_by_widget(str(widget_id))
+        return {item.label: item for item in items}
+
+    def test_menu_widget_export_includes_menu_items_tree(self, db):
+        slug = f"menu-{uuid.uuid4().hex[:8]}"
+        self._seed_menu_widget(db, slug)
+        row = self._exported_row(db, slug)
+
+        menu_items = row.get("menu_items")
+        assert menu_items is not None, "menu widget export must carry menu_items"
+        by_label = {item["label"]: item for item in menu_items}
+        assert set(by_label) == {"Software", "Home", "About"}
+        assert by_label["Software"]["url"] == "/category"
+        assert by_label["Home"]["page_slug"] == "home1"
+        assert by_label["Home"]["target"] == "_blank"
+        assert by_label["About"]["sort_order"] == 2
+        # ids + parent ids must travel so the import two-pass remap works.
+        assert by_label["Software"]["id"]
+        assert by_label["Home"]["parent_id"] == by_label["Software"]["id"]
+
+    def test_non_menu_widget_export_has_no_menu_items_key(self, db):
+        slug = f"html-{uuid.uuid4().hex[:8]}"
+        CmsWidgetRepository(db.session).save(
+            CmsWidget(
+                slug=slug,
+                name="HTML Block",
+                widget_type="html",
+                content_json={"content": "PHA+aGk8L3A+"},
+                config={"foo": "bar"},
+            )
+        )
+        row = self._exported_row(db, slug)
+        assert "menu_items" not in row
+        assert row["content_json"] == {"content": "PHA+aGk8L3A+"}
+        assert row["config"] == {"foo": "bar"}
+
+    def test_round_trip_reconstructs_menu_tree(self, db):
+        slug = f"menu-{uuid.uuid4().hex[:8]}"
+        self._seed_menu_widget(db, slug)
+        row = self._exported_row(db, slug)
+
+        # Wipe the widget (menu items cascade away at the DB level).
+        db.session.query(CmsWidget).filter(CmsWidget.slug == slug).delete()
+        db.session.commit()
+
+        exchanger = _exchangers(db.session)["cms_widgets"]
+        payload = build_envelope("cms_widgets", [row], instance="test")
+        result = exchanger.import_(payload, mode="upsert", dry_run=False)
+        assert result.created == 1 and not result.errors
+
+        rebuilt = CmsWidgetRepository(db.session).find_by_slug(slug)
+        assert rebuilt is not None
+        by_label = self._items_by_label(db, rebuilt.id)
+        assert set(by_label) == {"Software", "Home", "About"}
+        assert str(by_label["Home"].parent_id) == str(by_label["Software"].id)
+        assert by_label["Software"].parent_id is None
+        assert by_label["Software"].url == "/category"
+        assert by_label["Home"].page_slug == "home1"
+        assert by_label["Home"].target == "_blank"
+        sort_orders = [
+            by_label[label].sort_order for label in ("Software", "Home", "About")
+        ]
+        assert sort_orders == [0, 1, 2]
+
+    def test_reimport_is_idempotent(self, db):
+        slug = f"menu-{uuid.uuid4().hex[:8]}"
+        widget = self._seed_menu_widget(db, slug)
+        row = self._exported_row(db, slug)
+
+        exchanger = _exchangers(db.session)["cms_widgets"]
+        payload = build_envelope("cms_widgets", [row], instance="test")
+        exchanger.import_(payload, mode="upsert", dry_run=False)
+        exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        items = CmsMenuItemRepository(db.session).find_tree_by_widget(str(widget.id))
+        assert len(items) == 3, "re-import must not duplicate menu rows"
+
+    def test_import_without_menu_items_is_clean(self, db):
+        slug = f"menu-{uuid.uuid4().hex[:8]}"
+        row = {
+            "slug": slug,
+            "name": "Bare Menu",
+            "widget_type": "menu",
+            "content_json": None,
+            "source_css": None,
+            "config": None,
+            "sort_order": 0,
+            "is_active": True,
+        }
+        exchanger = _exchangers(db.session)["cms_widgets"]
+        payload = build_envelope("cms_widgets", [row], instance="test")
+        result = exchanger.import_(payload, mode="upsert", dry_run=False)
+        assert result.created == 1 and not result.errors
+
+        widget = CmsWidgetRepository(db.session).find_by_slug(slug)
+        assert widget is not None
+        assert (
+            CmsMenuItemRepository(db.session).find_tree_by_widget(str(widget.id)) == []
+        )
 
 
 class TestImagesRoundTrip:

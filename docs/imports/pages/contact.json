@@ -1,44 +1,55 @@
 {
-  "slug": "contact",
-  "name": "Contact",
-  "language": "en",
-  "layout_slug": "contact-form",
-  "style_slug": null,
-  "category_slug": "about",
-  "content_json": {
-    "type": "doc",
-    "content": [
-      {
-        "type": "heading",
-        "attrs": {
-          "level": 1
-        },
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "contact",
+      "title": "Contact",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
         "content": [
           {
-            "type": "text",
-            "text": "Contact Us"
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Contact Us"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "Get in touch with our team. We will answer you shortly"
+              }
+            ]
           }
         ]
       },
-      {
-        "type": "paragraph",
-        "content": [
-          {
-            "type": "text",
-            "text": "Get in touch with our team. We will answer you shortly"
-          }
-        ]
-      }
-    ]
-  },
-  "content_html": null,
-  "is_published": true,
-  "sort_order": 32,
-  "robots": "index,follow",
-  "use_theme_switcher_styles": false,
-  "meta_title": "Contact",
-  "meta_description": "Contact our team.",
-  "meta_keywords": null,
-  "og_title": null,
-  "page_widget_assignments": []
+      "content_html": null,
+      "status": "published",
+      "language": "en",
+      "sort_order": 32,
+      "layout_slug": "contact-form",
+      "style_slug": null,
+      "meta_title": "Contact",
+      "meta_description": "Contact our team.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "index,follow",
+      "terms": [
+        {
+          "term_type": "category",
+          "slug": "about"
+        }
+      ]
+    }
+  ]
 }

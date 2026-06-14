@@ -1,6 +1,7 @@
 """Unit tests for CmsWidgetService."""
 import pytest
 from unittest.mock import MagicMock
+from sqlalchemy.exc import IntegrityError
 from plugins.cms.src.services.cms_widget_service import (
     CmsWidgetService,
     CmsWidgetSlugConflictError,
@@ -8,12 +9,13 @@ from plugins.cms.src.services.cms_widget_service import (
 )
 from plugins.cms.src.models.cms_widget import CmsWidget
 
+NO_USAGE = {"layouts": 0, "pages": 0, "posts": 0}
 
-def _make_service(widgets=None, menu_items=None, layout_widgets=None):
+
+def _make_service(widgets=None, menu_items=None, usage=None):
     widget_repo = MagicMock()
     menu_repo = MagicMock()
     image_repo = MagicMock()
-    lw_repo = MagicMock()
 
     store = {w.slug: w for w in (widgets or [])}
     id_store = {str(w.id): w for w in (widgets or [])}
@@ -29,14 +31,16 @@ def _make_service(widgets=None, menu_items=None, layout_widgets=None):
     widget_repo.find_by_ids.side_effect = lambda ids: [
         id_store[i] for i in ids if i in id_store
     ]
+    widget_repo.widget_usage.return_value = dict(usage or NO_USAGE)
+    widget_repo.delete.side_effect = lambda wid, detach_assignments=False: (
+        str(wid) in id_store
+    )
 
     menu_repo.find_tree_by_widget.return_value = menu_items or []
     menu_repo.replace_tree.side_effect = lambda wid, items: items
 
-    lw_repo.find_by_widget.return_value = layout_widgets or []
-
     return (
-        CmsWidgetService(widget_repo, menu_repo, image_repo, lw_repo),
+        CmsWidgetService(widget_repo, menu_repo, image_repo),
         widget_repo,
         menu_repo,
     )
@@ -113,18 +117,106 @@ class TestUpdateWidget:
 
 class TestDeleteWidget:
     def test_delete_widget_used_in_layout_raises_conflict(self):
-        from unittest.mock import MagicMock as MM
-
         w = _widget()
-        svc, _, _ = _make_service(widgets=[w], layout_widgets=[MM()])
+        svc, _, _ = _make_service(
+            widgets=[w], usage={"layouts": 1, "pages": 0, "posts": 0}
+        )
         with pytest.raises(CmsWidgetInUseError):
             svc.delete_widget(str(w.id))
 
+    def test_delete_widget_used_in_page_raises_conflict(self):
+        """Regression: the old guard checked only layout assignments, so a
+        page-assigned widget fell through to a raw IntegrityError (500)."""
+        w = _widget()
+        svc, _, _ = _make_service(
+            widgets=[w], usage={"layouts": 0, "pages": 2, "posts": 0}
+        )
+        with pytest.raises(CmsWidgetInUseError):
+            svc.delete_widget(str(w.id))
+
+    def test_delete_widget_used_in_post_raises_conflict(self):
+        w = _widget()
+        svc, _, _ = _make_service(
+            widgets=[w], usage={"layouts": 0, "pages": 0, "posts": 1}
+        )
+        with pytest.raises(CmsWidgetInUseError):
+            svc.delete_widget(str(w.id))
+
+    def test_in_use_error_carries_usage_counts(self):
+        w = _widget()
+        usage = {"layouts": 1, "pages": 2, "posts": 3}
+        svc, _, _ = _make_service(widgets=[w], usage=usage)
+        with pytest.raises(CmsWidgetInUseError) as exc_info:
+            svc.delete_widget(str(w.id))
+        assert exc_info.value.usage == usage
+
     def test_delete_widget_not_in_use_succeeds(self):
         w = _widget()
-        svc, repo, _ = _make_service(widgets=[w], layout_widgets=[])
+        svc, repo, _ = _make_service(widgets=[w])
         svc.delete_widget(str(w.id))
-        repo.delete.assert_called_once_with(str(w.id))
+        repo.delete.assert_called_once_with(str(w.id), detach_assignments=False)
+
+    def test_force_delete_detaches_assignments(self):
+        w = _widget()
+        svc, repo, _ = _make_service(
+            widgets=[w], usage={"layouts": 1, "pages": 1, "posts": 1}
+        )
+        svc.delete_widget(str(w.id), force=True)
+        repo.delete.assert_called_once_with(str(w.id), detach_assignments=True)
+
+    def test_integrity_error_backstop_becomes_in_use_error(self):
+        """A racing assignment may slip past the usage check; the delete must
+        roll back and surface a 409-mapped error, never a raw 500."""
+        w = _widget()
+        svc, repo, _ = _make_service(widgets=[w])
+        repo.delete.side_effect = IntegrityError("stmt", {}, Exception("fk"))
+        with pytest.raises(CmsWidgetInUseError):
+            svc.delete_widget(str(w.id))
+        repo.rollback.assert_called_once()
+
+
+class TestBulkDelete:
+    def test_bulk_delete_mixed_blocks_used_and_deletes_unused(self):
+        used = _widget(slug="used")
+        unused = _widget(slug="unused")
+        svc, repo, _ = _make_service(widgets=[used, unused])
+        usage_by_id = {
+            str(used.id): {"layouts": 1, "pages": 0, "posts": 0},
+            str(unused.id): dict(NO_USAGE),
+        }
+        repo.widget_usage.side_effect = lambda wid: usage_by_id[str(wid)]
+
+        result = svc.bulk_delete([str(used.id), str(unused.id)])
+
+        assert result["deleted"] == 1
+        by_id = {entry["id"]: entry for entry in result["results"]}
+        assert by_id[str(used.id)]["status"] == "blocked"
+        assert by_id[str(used.id)]["usage"] == usage_by_id[str(used.id)]
+        assert by_id[str(unused.id)]["status"] == "deleted"
+
+    def test_bulk_delete_force_deletes_used_widgets(self):
+        used = _widget(slug="used")
+        svc, repo, _ = _make_service(
+            widgets=[used], usage={"layouts": 1, "pages": 1, "posts": 0}
+        )
+        result = svc.bulk_delete([str(used.id)], force=True)
+        assert result["deleted"] == 1
+        repo.delete.assert_called_once_with(str(used.id), detach_assignments=True)
+
+    def test_bulk_delete_reports_missing_ids(self):
+        svc, _, _ = _make_service()
+        result = svc.bulk_delete(["does-not-exist"])
+        assert result["deleted"] == 0
+        assert result["results"][0]["status"] == "not_found"
+
+    def test_bulk_delete_integrity_error_blocks_id_without_raising(self):
+        w = _widget()
+        svc, repo, _ = _make_service(widgets=[w])
+        repo.delete.side_effect = IntegrityError("stmt", {}, Exception("fk"))
+        result = svc.bulk_delete([str(w.id)])
+        assert result["deleted"] == 0
+        assert result["results"][0]["status"] == "blocked"
+        repo.rollback.assert_called_once()
 
 
 class TestMenuTree:
@@ -163,3 +255,37 @@ class TestImportWidget:
             }
         )
         assert result["slug"] == "fresh-widget"
+
+
+class TestIsGlobalRemoved:
+    """Part 2 — the is_global widget feature is removed entirely.
+
+    The model/to_dict no longer carries is_global, admin create/update ignore
+    an is_global in the body (no crash, no persist), and the global-injection
+    service method is gone. Engineering requirements (binding, restated):
+    TDD-first; no overengineering (the narrowest removal); DRY (one home per
+    field). Quality guard: bin/pre-commit-check.sh --plugin cms --full.
+    """
+
+    def test_to_dict_has_no_is_global_field(self):
+        svc, _, _ = _make_service()
+        result = svc.create_widget({"name": "Plain", "widget_type": "html"})
+        assert "is_global" not in result
+
+    def test_create_ignores_is_global_in_body(self):
+        svc, _, _ = _make_service()
+        result = svc.create_widget(
+            {"name": "Analytics", "widget_type": "html", "is_global": True}
+        )
+        assert "is_global" not in result
+
+    def test_update_ignores_is_global_in_body(self):
+        widget = _widget()
+        svc, _, _ = _make_service(widgets=[widget])
+        result = svc.update_widget(str(widget.id), {"is_global": True})
+        assert "is_global" not in result
+        assert not hasattr(widget, "is_global")
+
+    def test_list_global_widgets_method_is_gone(self):
+        svc, _, _ = _make_service()
+        assert not hasattr(svc, "list_global_widgets")

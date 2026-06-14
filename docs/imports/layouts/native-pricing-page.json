@@ -1,38 +1,48 @@
 {
-  "slug": "native-pricing-page",
-  "name": "Native Pricing Page (Header + Vue Component + Footer)",
-  "description": "Page layout that renders a configurable Vue pricing component in the main area.",
-  "sort_order": 14,
-  "is_active": true,
-  "areas": [
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
     {
-      "name": "header",
-      "type": "header",
-      "label": "Header"
-    },
-    {
-      "name": "main",
-      "type": "vue-component",
-      "label": "Pricing Component"
-    },
-    {
-      "name": "footer",
-      "type": "footer",
-      "label": "Footer"
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "Pricing Component",
+          "name": "main",
+          "type": "vue-component"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Page layout that renders a configurable Vue pricing component in the main area.",
+      "is_active": true,
+      "is_default": false,
+      "name": "Native Pricing Page (Header + Vue Component + Footer)",
+      "slug": "native-pricing-page",
+      "sort_order": 14,
+      "widget_assignments": [
+        {
+          "area_name": "footer",
+          "sort_order": 2,
+          "widget_slug": "footer-nav"
+        },
+        {
+          "area_name": "header",
+          "sort_order": 0,
+          "widget_slug": "header-nav"
+        },
+        {
+          "area_name": "main",
+          "sort_order": 1,
+          "widget_slug": "pricing-native-plans"
+        }
+      ]
     }
-  ],
-  "widget_assignments": [
-    [
-      "header",
-      "header-nav"
-    ],
-    [
-      "main",
-      "pricing-native-plans"
-    ],
-    [
-      "footer",
-      "footer-nav"
-    ]
   ]
 }

@@ -126,6 +126,10 @@ class CmsImportExportService:
                 )
 
             if "widgets" in effective:
+                # S68 TODO: this legacy export omits the cms_menu_item rows of
+                # menu widgets; the unified cms_widgets exchanger (canonical)
+                # carries them. Parity here needs the menu-item repo wired
+                # into this service — deferred, no scope creep.
                 zf.writestr(
                     "widgets.json",
                     _json([w.to_dict() for w in self._paginated(self._widget)]),

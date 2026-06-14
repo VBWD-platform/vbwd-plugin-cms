@@ -33,7 +33,6 @@ def service(repo, menu_repo):
         widget_repo=repo,
         menu_item_repo=menu_repo,
         image_repo=MagicMock(),
-        layout_widget_repo=MagicMock(),
     )
 
 

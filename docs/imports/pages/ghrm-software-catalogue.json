@@ -1,22 +1,33 @@
 {
-  "slug": "ghrm-software-catalogue",
-  "name": "GHRM Catalogue Template",
-  "language": "en",
-  "layout_slug": "ghrm-software-catalogue",
-  "style_slug": null,
-  "category_slug": "ghrm",
-  "content_json": {
-    "type": "doc",
-    "content": []
-  },
-  "content_html": null,
-  "is_published": false,
-  "sort_order": 0,
-  "robots": "noindex,nofollow",
-  "use_theme_switcher_styles": false,
-  "meta_title": "GHRM Catalogue Template",
-  "meta_description": "Browse our software catalogue.",
-  "meta_keywords": null,
-  "og_title": null,
-  "page_widget_assignments": []
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "ghrm-software-catalogue",
+      "title": "GHRM Catalogue Template",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
+        "content": []
+      },
+      "content_html": null,
+      "status": "draft",
+      "language": "en",
+      "sort_order": 0,
+      "layout_slug": "ghrm-software-catalogue",
+      "style_slug": null,
+      "meta_title": "GHRM Catalogue Template",
+      "meta_description": "Browse our software catalogue.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "noindex,nofollow",
+      "terms": [
+        {
+          "term_type": "category",
+          "slug": "ghrm"
+        }
+      ]
+    }
+  ]
 }

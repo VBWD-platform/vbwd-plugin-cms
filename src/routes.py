@@ -231,6 +231,35 @@ def _post_content_blocks_dict(post_id: str) -> dict:
     return {block.area_name: block.to_dict() for block in blocks}
 
 
+def _core_entity_type_for_post(post: dict) -> str:
+    """Map a unified post's ``type`` discriminator onto its core entity type.
+
+    Pages (``type=page``) are addressed as ``cms_page``; everything else as
+    ``cms_post`` — so the new core tags / custom-fields blocks are scoped per
+    content kind exactly like the matrix entries.
+    """
+    return "cms_page" if post.get("type") == "page" else "cms_post"
+
+
+def _append_core_tags_and_custom_fields(post: dict) -> None:
+    """Append the core ``tags`` / ``custom_fields`` blocks to a post payload.
+
+    Added ALONGSIDE the existing CMS ``terms`` taxonomy (categories + legacy
+    tag terms) via the core helper — no model import, no extra round trip. The
+    D7 ``cms_term('tag')`` migration is a separate later slice; this only ADDS
+    the new keys.
+    """
+    post_id = post.get("id")
+    if not post_id:
+        return
+    from uuid import UUID
+
+    from vbwd.services.tags_and_custom_fields import append_tags_and_custom_fields
+
+    entity_type = _core_entity_type_for_post(post)
+    append_tags_and_custom_fields(post, entity_type, UUID(str(post_id)))
+
+
 def _enrich_public_post_areas(post: dict) -> None:
     """Add ``content_blocks`` + access-filtered, enriched ``page_assignments``
     to a public post payload in place (S55 — mirror of /cms/pages/<slug>)."""
@@ -253,7 +282,21 @@ def _page_service() -> CmsPageService:
     # style_repo wires the default-style resolver: pages without an explicit
     # style_id fall back to the admin-designated default (sprint 26).
     style_repo = CmsStyleRepository(db.session)
-    return CmsPageService(page_repo, cat_repo, style_repo=style_repo)
+    # layout_repo wires the default-LAYOUT resolver: pages without an explicit
+    # layout_id fall back to the admin-designated default layout (is_default)
+    # so layout-less pages still render with chrome.
+    layout_repo = CmsLayoutRepository(db.session)
+    # layout_widget_repo lets the resolver detect an explicit layout with ZERO
+    # widget placements ("not seeded") and fall back to the default so the page
+    # renders chrome + body instead of blank.
+    layout_widget_repo = CmsLayoutWidgetRepository(db.session)
+    return CmsPageService(
+        page_repo,
+        cat_repo,
+        style_repo=style_repo,
+        layout_repo=layout_repo,
+        layout_widget_repo=layout_widget_repo,
+    )
 
 
 def _category_service() -> CmsCategoryService:
@@ -277,6 +320,9 @@ def _post_service() -> PostService:
         layout_repo=CmsLayoutRepository(db.session),
         style_repo=CmsStyleRepository(db.session),
         content_block_repo=_post_content_block_repo(),
+        # Detects an explicit-but-unseeded layout (0 placements) so the public
+        # resolver falls back to the default layout instead of rendering blank.
+        layout_widget_repo=CmsLayoutWidgetRepository(db.session),
     )
 
 
@@ -289,10 +335,13 @@ def _content_ingest_service() -> ContentIngestService:
 
     Owns no persistence; reuses PostService / TermService / CmsImageService.
     """
+    from vbwd.services.tags_and_custom_fields import resolve_tags_and_custom_fields
+
     return ContentIngestService(
         post_service=_post_service(),
         term_service=_term_service(),
         image_service=_image_service(),
+        tags_port=resolve_tags_and_custom_fields(),
     )
 
 
@@ -421,7 +470,6 @@ def _widget_service() -> CmsWidgetService:
         CmsWidgetRepository(db.session),
         CmsMenuItemRepository(db.session),
         CmsImageRepository(db.session),
-        CmsLayoutWidgetRepository(db.session),
     )
 
 
@@ -1291,6 +1339,13 @@ def admin_create_widget():
         return jsonify({"error": str(e)}), 409
 
 
+def _widget_force_flag(data=None) -> bool:
+    """Read the S68 force flag from the query string or the JSON body."""
+    if request.args.get("force", "").lower() == "true":
+        return True
+    return bool(data and data.get("force"))
+
+
 @cms_bp.route("/api/v1/admin/cms/widgets/bulk", methods=["POST"])
 @require_auth
 @require_admin
@@ -1299,7 +1354,7 @@ def admin_bulk_widgets():
     data = request.get_json()
     if not data or "ids" not in data:
         return jsonify({"error": "ids required"}), 400
-    result = _widget_service().bulk_delete(data["ids"])
+    result = _widget_service().bulk_delete(data["ids"], force=_widget_force_flag(data))
     return jsonify(result), 200
 
 
@@ -1336,12 +1391,12 @@ def admin_update_widget(widget_id: str):
 @require_permission("cms.widgets.manage")
 def admin_delete_widget(widget_id: str):
     try:
-        _widget_service().delete_widget(widget_id)
+        _widget_service().delete_widget(widget_id, force=_widget_force_flag())
         return jsonify({"deleted": widget_id}), 200
     except CmsWidgetNotFoundError as e:
         return jsonify({"error": str(e)}), 404
     except CmsWidgetInUseError as e:
-        return jsonify({"error": str(e)}), 409
+        return jsonify({"error": str(e), "usage": e.usage}), 409
 
 
 @cms_bp.route("/api/v1/admin/cms/widgets/<widget_id>/menu", methods=["PUT"])
@@ -2232,6 +2287,7 @@ def public_get_post(slug: str):
     if not post:
         return jsonify({"error": "Post not found"}), 404
     _enrich_public_post_areas(post)
+    _append_core_tags_and_custom_fields(post)
     if preview_token:
         if post.get("preview_token") and post["preview_token"] == preview_token:
             return jsonify(post), 200

@@ -8,9 +8,16 @@ key's user. Owns **no** persistence (SRP/DRY) — every write goes through
 import base64
 import binascii
 from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from plugins.cms.src.services._slug import slugify
 
 DEFAULT_TYPE = "post"
 DEFAULT_STATUS = "draft"
+
+# Posts ingested through this path are tagged on the core ``cms_post`` entity
+# type (categories stay on the cms_term taxonomy — D7).
+TAG_ENTITY_TYPE = "cms_post"
 
 # SEO fields lifted verbatim from the ``seo`` sub-object onto the post payload
 # (PostService._apply_seo consumes these top-level keys).
@@ -30,10 +37,13 @@ _SEO_FIELDS = (
 class ContentIngestService:
     """Create a cms post/page from an API ingestion payload."""
 
-    def __init__(self, *, post_service, term_service, image_service) -> None:
+    def __init__(self, *, post_service, term_service, image_service, tags_port) -> None:
         self._post_service = post_service
         self._term_service = term_service
         self._image_service = image_service
+        # The core tags port (``ITagsAndCustomFields``) — categories stay on the
+        # cms_term taxonomy, tags go to the single core catalog (D7).
+        self._tags_port = tags_port
 
     def ingest(self, payload: Dict[str, Any], *, user_id: Any) -> Dict[str, Any]:
         """Validate + create a post/page owned by ``user_id``.
@@ -64,9 +74,11 @@ class ContentIngestService:
 
         created = self._post_service.create_post(data)
 
-        term_ids = self._resolve_terms(payload)
-        if term_ids:
-            self._post_service.assign_terms(created["id"], term_ids)
+        category_term_ids = self._resolve_category_terms(payload)
+        if category_term_ids:
+            self._post_service.assign_terms(created["id"], category_term_ids)
+
+        self._apply_tags(created["id"], payload)
 
         return {
             "id": created.get("id"),
@@ -84,15 +96,25 @@ class ContentIngestService:
             if seo.get(field) is not None:
                 data[field] = seo[field]
 
-    def _resolve_terms(self, payload: Dict[str, Any]) -> List[Any]:
+    def _resolve_category_terms(self, payload: Dict[str, Any]) -> List[Any]:
+        """Resolve category names to cms_term ids (tags go via the core port)."""
         term_ids: List[Any] = []
         for name in payload.get("categories") or []:
             term = self._term_service.find_or_create("category", name)
             term_ids.append(term["id"])
-        for name in payload.get("tags") or []:
-            term = self._term_service.find_or_create("tag", name)
-            term_ids.append(term["id"])
         return term_ids
+
+    def _apply_tags(self, post_id: Any, payload: Dict[str, Any]) -> None:
+        """Write the payload's ``tags`` to the core tag catalog (D7).
+
+        Names are slugified (matching the cms_term slug rule the migrated tags
+        carried), so re-ingesting the same tag name maps to one catalog row.
+        """
+        names = payload.get("tags") or []
+        if not names:
+            return
+        slugs = [slug for slug in (slugify(name) for name in names) if slug]
+        self._tags_port.set_tags(TAG_ENTITY_TYPE, UUID(str(post_id)), slugs)
 
     def _maybe_upload_image(self, image: Optional[Dict[str, Any]]) -> Optional[str]:
         if not image or not image.get("base64"):

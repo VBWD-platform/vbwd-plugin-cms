@@ -706,7 +706,7 @@ def _load_extras(start_order: int, generated_slugs: set[str]) -> list[dict]:
         return []
     out = []
     for path in sorted(EXTRAS_DIR.glob("*.json")):
-        src = json.loads(path.read_text())
+        src = _style_row_of(json.loads(path.read_text()))
         slug = src.get("slug")
         if not slug or slug in generated_slugs:
             continue
@@ -716,6 +716,18 @@ def _load_extras(start_order: int, generated_slugs: set[str]) -> list[dict]:
         entry["sort_order"] = start_order
         out.append(entry)
     return out
+
+
+def _style_row_of(data: dict) -> dict:
+    """Return the single style row from a cms_styles envelope (or a bare row).
+
+    The standalone style files ship as the VBWD-standard envelope
+    ``{"cms_styles": [<row>]}``; a legacy bare-object file is accepted too.
+    """
+    rows = data.get("cms_styles")
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return data
 
 
 def main() -> None:
@@ -732,11 +744,17 @@ def main() -> None:
     extras = _load_extras(order, generated_slugs)
     themes.extend(extras)
 
+    # Emit the VBWD-standard data-exchange envelope so the file imports through
+    # the generic /admin/data-exchange/cms_styles/import route unchanged. The
+    # rows live under the entity key (validate_envelope reads them there); the
+    # default-style identity is preserved by each row's is_default flag plus the
+    # default_slug metadata key (the single style with is_default=True).
     obj = {
+        "vbwd_export": "cms_styles",
         "version": 1,
         "description": "CMS style import — generated matrix + styles/styles/.",
         "default_slug": "light-clean-narrow",
-        "themes": themes,
+        "cms_styles": themes,
     }
     OUT.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
     print(f"Wrote {len(themes)} themes → {OUT} ({len(extras)} from styles/styles/)")

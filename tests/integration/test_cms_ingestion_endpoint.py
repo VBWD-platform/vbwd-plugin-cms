@@ -31,9 +31,8 @@ def _registry():
     term_type_registry.register_term_type(
         TermType(key="category", label="Category", hierarchical=True)
     )
-    term_type_registry.register_term_type(
-        TermType(key="tag", label="Tag", hierarchical=False)
-    )
+    # ``tag`` is no longer a cms_term taxonomy (D7) — ingested tags go to the
+    # core tag catalog via the tags port.
     yield
     post_type_registry.clear_post_types()
     term_type_registry.clear_term_types()
@@ -92,9 +91,20 @@ def test_scoped_key_creates_post_with_terms_and_image(client, db):
     assert post.source_css == ".x{}"
     assert post.meta_title == "MT"
 
+    # D7: the category stays on the cms_term taxonomy; the tag goes to the core
+    # catalog (vbwd_entity_tag on cms_post), NOT a cms_term('tag') row.
     terms = TermRepository(db.session)
     assert terms.find_by_type_and_slug("category", "news") is not None
-    assert terms.find_by_type_and_slug("tag", "saas") is not None
+    assert terms.find_by_type_and_slug("tag", "saas") is None
+
+    from uuid import UUID
+
+    from vbwd.services.tags_and_custom_fields import resolve_tags_and_custom_fields
+
+    core_tags = resolve_tags_and_custom_fields().get_tags(
+        "cms_post", UUID(str(post.id))
+    )
+    assert "saas" in core_tags
 
 
 def test_scoped_key_creates_page(client, db):

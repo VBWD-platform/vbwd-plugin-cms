@@ -37,12 +37,27 @@ class CmsPageService:
         repo: CmsPageRepository,
         category_repo: CmsCategoryRepository,
         style_repo: Optional[Any] = None,
+        layout_repo: Optional[Any] = None,
+        layout_widget_repo: Optional[Any] = None,
     ) -> None:
         self._repo = repo
         self._category_repo = category_repo
         # Optional — when provided, get_page / list_pages add
         # resolved_style_id + resolved_style_source to each dict.
         self._style_repo = style_repo
+        # Optional — when provided, get_page adds resolved_layout_id +
+        # resolved_layout_source so a layout-less page falls back to the
+        # admin-designated default layout (the cms_layout row flagged
+        # is_default). Missing → fields still appear with None / 'none' so
+        # the public renderer can rely on their presence (the disabled-
+        # feature path).
+        self._layout_repo = layout_repo
+        # Optional layout-widget (placement) repo. When present, an explicit
+        # layout with ZERO widget placements ("not seeded") is treated as
+        # unusable on PUBLIC reads and falls back to the default layout, so the
+        # page renders chrome + body instead of blank. Absent → an explicit
+        # layout is always honoured (the disabled-feature path).
+        self._layout_widget_repo = layout_widget_repo
 
     def _with_resolved_style(self, dto: Dict[str, Any]) -> Dict[str, Any]:
         """Augment a page dict with resolved_style_id / resolved_style_source.
@@ -72,6 +87,52 @@ class CmsPageService:
             dto["resolved_style_source"] = None
         return dto
 
+    def _with_resolved_layout(self, dto: Dict[str, Any]) -> Dict[str, Any]:
+        """Augment a page dict with resolved_layout_id / resolved_layout_source.
+
+        Mirrors _with_resolved_style (and PostService._with_resolved_layout) —
+        the default is the cms_layout row flagged ``is_default`` (via
+        layout_repo.find_default), not a config value:
+          - An explicit layout_id on the page wins (source='explicit') *only
+            when it is seeded* — i.e. it has ≥1 widget placement. An explicit
+            layout with ZERO placements is unusable (it would render blank) and
+            falls through to the default below.
+          - Otherwise an active default layout is used (source='default').
+          - Otherwise both fields resolve to None / 'none'.
+
+        Missing layout_repo is tolerated — the fields still appear so the
+        public renderer can rely on their presence.
+        """
+        layout_id = dto.get("layout_id")
+        if layout_id and self._layout_is_seeded(layout_id):
+            dto["resolved_layout_id"] = str(layout_id)
+            dto["resolved_layout_source"] = "explicit"
+            return dto
+        default = None
+        if self._layout_repo is not None and hasattr(self._layout_repo, "find_default"):
+            default = self._layout_repo.find_default()
+        if default is not None and getattr(default, "is_active", True):
+            dto["resolved_layout_id"] = str(default.id)
+            dto["resolved_layout_source"] = "default"
+        else:
+            dto["resolved_layout_id"] = None
+            dto["resolved_layout_source"] = "none"
+        return dto
+
+    def _layout_is_seeded(self, layout_id: Any) -> bool:
+        """True when the layout has ≥1 widget placement (cms_layout_widget row).
+
+        A layout with zero placements is "not seeded" — it has no chrome and no
+        content area, so a page using it renders blank; the public resolver
+        treats it as unusable and falls back to the default layout. When no
+        placement repo is wired we cannot tell, so we conservatively treat the
+        explicit layout as usable (the disabled-feature path).
+        """
+        if self._layout_widget_repo is None:
+            return True
+        placements = self._layout_widget_repo.find_by_layout(str(layout_id))
+        return bool(placements)
+
     def get_page(self, slug: str, published_only: bool = True) -> Dict[str, Any]:
         """Get a page by slug. Raises CmsPageNotFoundError if not found."""
         page = self._repo.find_by_slug(slug)
@@ -79,7 +140,7 @@ class CmsPageService:
             raise CmsPageNotFoundError(f"Page '{slug}' not found")
         if published_only and not page.is_published:
             raise CmsPageNotFoundError(f"Page '{slug}' is not published")
-        return self._with_resolved_style(page.to_dict())
+        return self._with_resolved_layout(self._with_resolved_style(page.to_dict()))
 
     def list_pages(
         self,

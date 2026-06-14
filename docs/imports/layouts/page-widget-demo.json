@@ -1,0 +1,58 @@
+{
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
+    {
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "",
+          "name": "breadcrumbs",
+          "type": "vue"
+        },
+        {
+          "label": "Main Content",
+          "name": "main",
+          "type": "content"
+        },
+        {
+          "label": "Sidebar",
+          "name": "sidebar",
+          "type": "page-widget"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Demonstrates the page-widget slot: the 'sidebar' area is type 'page-widget', so each page picks its own widget for that slot (see page-widget-demo page).",
+      "is_active": true,
+      "is_default": false,
+      "name": "Page Widget Demo (Header + Content + Sidebar Slot + Footer)",
+      "slug": "page-widget-demo",
+      "sort_order": 18,
+      "widget_assignments": [
+        {
+          "area_name": "header",
+          "sort_order": 0,
+          "widget_slug": "header-nav"
+        },
+        {
+          "area_name": "breadcrumbs",
+          "sort_order": 0,
+          "widget_slug": "breadcrumbs"
+        },
+        {
+          "area_name": "footer",
+          "sort_order": 0,
+          "widget_slug": "footer-nav"
+        }
+      ]
+    }
+  ]
+}

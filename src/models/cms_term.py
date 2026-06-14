@@ -14,6 +14,12 @@ from vbwd.models.base import BaseModel
 # replacement for the legacy cms_category table). Single source of truth.
 CATEGORY_TERM_TYPE = "category"
 
+# The legacy ``term_type`` value for tags. Tags no longer live on cms_term (D7
+# folded them into the core ``vbwd_tag`` catalog); this constant remains the
+# single source for the read-path dispatch (``?term_type=tag`` routes to the
+# core tag path) and the D7 migration's source filter.
+TAG_TERM_TYPE = "tag"
+
 
 class CmsTerm(BaseModel):
     """A single taxonomy term (category, tag, or custom type)."""

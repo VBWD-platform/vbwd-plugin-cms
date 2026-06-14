@@ -1,22 +1,33 @@
 {
-  "slug": "category/backend",
-  "name": "Backend Packages",
-  "language": "en",
-  "layout_slug": "ghrm-software-catalogue",
-  "style_slug": null,
-  "category_slug": "ghrm",
-  "content_json": {
-    "type": "doc",
-    "content": []
-  },
-  "content_html": null,
-  "is_published": true,
-  "sort_order": 1,
-  "robots": "index,follow",
-  "use_theme_switcher_styles": false,
-  "meta_title": "Backend Packages",
-  "meta_description": "Backend software packages.",
-  "meta_keywords": null,
-  "og_title": null,
-  "page_widget_assignments": []
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "category/backend",
+      "title": "Backend Packages",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
+        "content": []
+      },
+      "content_html": null,
+      "status": "published",
+      "language": "en",
+      "sort_order": 1,
+      "layout_slug": "ghrm-software-catalogue",
+      "style_slug": null,
+      "meta_title": "Backend Packages",
+      "meta_description": "Backend software packages.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "index,follow",
+      "terms": [
+        {
+          "term_type": "category",
+          "slug": "ghrm"
+        }
+      ]
+    }
+  ]
 }

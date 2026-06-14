@@ -1,22 +1,33 @@
 {
-  "slug": "privacy",
-  "name": "Privacy Policy",
-  "language": "en",
-  "layout_slug": "content-page",
-  "style_slug": null,
-  "category_slug": "about",
-  "content_json": {
-    "type": "doc",
-    "content": []
-  },
-  "content_html": "<h1>Privacy Policy</h1><p>Your privacy policy content goes here.</p>",
-  "is_published": true,
-  "sort_order": 30,
-  "robots": "index,follow",
-  "use_theme_switcher_styles": false,
-  "meta_title": "Privacy Policy",
-  "meta_description": "Read our privacy policy.",
-  "meta_keywords": null,
-  "og_title": null,
-  "page_widget_assignments": []
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "privacy",
+      "title": "Privacy Policy",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
+        "content": []
+      },
+      "content_html": "<h1>Privacy Policy</h1><p>Your privacy policy content goes here.</p>",
+      "status": "published",
+      "language": "en",
+      "sort_order": 30,
+      "layout_slug": "content-page",
+      "style_slug": null,
+      "meta_title": "Privacy Policy",
+      "meta_description": "Read our privacy policy.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "index,follow",
+      "terms": [
+        {
+          "term_type": "category",
+          "slug": "about"
+        }
+      ]
+    }
+  ]
 }

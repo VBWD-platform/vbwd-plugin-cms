@@ -1,0 +1,36 @@
+{
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
+    {
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "",
+          "name": "breadcrumbs",
+          "type": "vue"
+        },
+        {
+          "label": "Archive",
+          "name": "archive",
+          "type": "vue"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Tag-archive listing: breadcrumbs plus the URL-driven TagArchive widget that lists a tag's posts.",
+      "is_active": true,
+      "is_default": false,
+      "name": "Tag Archive",
+      "slug": "tag-archive",
+      "sort_order": 11
+    }
+  ]
+}

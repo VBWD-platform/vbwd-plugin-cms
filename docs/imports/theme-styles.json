@@ -1,8 +1,9 @@
 {
+  "vbwd_export": "cms_styles",
   "version": 1,
   "description": "CMS style import — generated matrix + styles/styles/.",
   "default_slug": "light-clean-narrow",
-  "themes": [
+  "cms_styles": [
     {
       "slug": "light-clean-narrow",
       "name": "Light — Clean — Narrow",

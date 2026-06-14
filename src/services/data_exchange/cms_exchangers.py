@@ -114,6 +114,160 @@ class _CmsModelExchanger(BaseModelExchanger):
         return self._manage_permission
 
 
+class _CmsWidgetsExchanger(_CmsModelExchanger):
+    """``cms_widgets`` carrying the ``cms_menu_item`` tree of menu widgets.
+
+    Menu links live in the separate ``cms_menu_item`` table, not in the
+    widget's ``config``/``content_json`` — a scalar-only export is structurally
+    empty for menus and import is equally lossy (S68 Bug A). Mirrors the S61
+    ``booking_resources`` precedent (a thin subclass carries the relation):
+    export attaches ``menu_items`` (item dicts keep ``id``/``parent_id`` as
+    placeholder ids so the import two-pass remap works — the same payload the
+    bespoke ``CmsWidgetService.export_widget`` emits); import routes them
+    through ``CmsMenuItemRepository.replace_tree`` (already idempotent).
+    Non-menu widgets are unchanged (no ``menu_items`` key).
+    """
+
+    MENU_WIDGET_TYPE = "menu"
+
+    def __init__(self, *, menu_item_repository: Any, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._menu_item_repository = menu_item_repository
+
+    def _serialise_row(self, row: Any, *, include_pii: bool) -> dict:
+        result = super()._serialise_row(row, include_pii=include_pii)
+        if row.widget_type == self.MENU_WIDGET_TYPE:
+            result["menu_items"] = [
+                item.to_dict()
+                for item in self._menu_item_repository.find_tree_by_widget(str(row.id))
+            ]
+        return result
+
+    def _import_row(
+        self, row: dict, index: int, result: ImportResult, *, dry_run: bool
+    ) -> None:
+        menu_items = row.get("menu_items")
+        scalar_row = {key: value for key, value in row.items() if key != "menu_items"}
+        super()._import_row(scalar_row, index, result, dry_run=dry_run)
+        if dry_run or not menu_items:
+            return
+        if scalar_row.get("widget_type") != self.MENU_WIDGET_TYPE:
+            return
+        widget = self._repository.find_by_natural_key(scalar_row[self.natural_key])
+        if widget is not None:
+            self._menu_item_repository.replace_tree(str(widget.id), menu_items)
+
+
+class _CmsLayoutsExchanger(_CmsModelExchanger):
+    """``cms_layouts`` carrying its widget PLACEMENTS (the ``cms_layout_widget``
+    rows) by widget slug.
+
+    A layout's "which widget sits in which area" mapping lives in the separate
+    ``cms_layout_widget`` table, not on the layout row — a scalar-only export
+    loses every placement, forcing a manual ``PUT /admin/cms/layouts/<id>/
+    widgets`` after import. Mirrors the ``_CmsWidgetsExchanger`` (menu items)
+    precedent: export attaches ``widget_assignments``; import pops them, runs
+    the scalar upsert, then replace-sets the placements via
+    ``CmsLayoutWidgetRepository.replace_for_layout``.
+
+    Portability: a placement is carried as ``area_name`` + ``widget_slug`` +
+    ``sort_order``. The per-instance ``widget_id`` and per-placement
+    ``required_access_level_ids`` (access-level UUIDs that do not port across
+    instances) are deliberately NOT emitted — per-placement access gating is
+    not carried by this exchanger (out of scope for this round-trip gap).
+
+    Import order: widgets must exist before a layout's placements resolve (the
+    manifest/full-instance import does widgets before layouts). If a
+    ``widget_slug`` is unknown the placement is reported as a row error and
+    skipped — the layout still imports and the other placements still apply
+    (safe degrade, never a 500/crash).
+    """
+
+    def __init__(
+        self,
+        *,
+        layout_widget_repository: Any,
+        widget_repository: Any,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._layout_widget_repository = layout_widget_repository
+        self._widget_repository = widget_repository
+
+    def _serialise_row(self, row: Any, *, include_pii: bool) -> dict:
+        result = super()._serialise_row(row, include_pii=include_pii)
+        result["widget_assignments"] = self._serialise_assignments(row)
+        return result
+
+    def _serialise_assignments(self, layout: Any) -> List[dict]:
+        assignments: List[dict] = []
+        for placement in self._layout_widget_repository.find_by_layout(layout.id):
+            widget = self._widget_repository.find_by_id(str(placement.widget_id))
+            if widget is None:
+                # Defensive: a dangling placement whose widget no longer exists.
+                continue
+            assignments.append(
+                {
+                    "area_name": placement.area_name,
+                    "widget_slug": widget.slug,
+                    "sort_order": placement.sort_order,
+                }
+            )
+        assignments.sort(key=lambda item: (item["area_name"], item["sort_order"]))
+        return assignments
+
+    def _import_row(
+        self, row: dict, index: int, result: ImportResult, *, dry_run: bool
+    ) -> None:
+        assignments = row.get("widget_assignments")
+        scalar_row = {
+            key: value for key, value in row.items() if key != "widget_assignments"
+        }
+        super()._import_row(scalar_row, index, result, dry_run=dry_run)
+        if dry_run or not assignments:
+            return
+        layout = self._repository.find_by_natural_key(scalar_row[self.natural_key])
+        if layout is None:
+            return
+        self._apply_assignments(layout, assignments, index, result)
+
+    def _apply_assignments(
+        self,
+        layout: Any,
+        assignments: List[dict],
+        index: int,
+        result: ImportResult,
+    ) -> None:
+        resolved: List[dict] = []
+        for assignment in assignments:
+            widget_slug = assignment.get("widget_slug")
+            widget = (
+                self._widget_repository.find_by_slug(widget_slug)
+                if widget_slug
+                else None
+            )
+            if widget is None:
+                result.errors.append(
+                    {
+                        "row": index,
+                        "reason": (
+                            f"layout '{layout.slug}' references unknown widget_slug "
+                            f"'{widget_slug}'; placement skipped"
+                        ),
+                    }
+                )
+                continue
+            resolved.append(
+                {
+                    "widget_id": str(widget.id),
+                    "area_name": assignment.get("area_name"),
+                    "sort_order": assignment.get("sort_order", 0),
+                    "required_access_level_ids": [],
+                }
+            )
+        self._layout_widget_repository.replace_for_layout(str(layout.id), resolved)
+
+
 # ── posts (delegates to PostImportExportService) ──────────────────────────────
 
 
@@ -403,6 +557,12 @@ def build_cms_exchangers(
     from plugins.cms.src.models.cms_widget import CmsWidget
     from plugins.cms.src.repositories.cms_image_repository import CmsImageRepository
     from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
+    from plugins.cms.src.repositories.cms_layout_widget_repository import (
+        CmsLayoutWidgetRepository,
+    )
+    from plugins.cms.src.repositories.cms_menu_item_repository import (
+        CmsMenuItemRepository,
+    )
     from plugins.cms.src.repositories.cms_style_repository import CmsStyleRepository
     from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
     from plugins.cms.src.repositories.post_repository import PostRepository
@@ -436,13 +596,15 @@ def build_cms_exchangers(
     return [
         CmsPostsExchanger(post_service),
         CmsTermsExchanger(term_service),
-        _CmsModelExchanger(
+        _CmsLayoutsExchanger(
             entity_key="cms_layouts",
             label="CMS Layouts",
             cluster=CMS_CLUSTER,
             natural_key="slug",
             model_class=CmsLayout,
             repository=_SessionModelRepository(session, CmsLayout, "slug"),
+            layout_widget_repository=CmsLayoutWidgetRepository(session),
+            widget_repository=CmsWidgetRepository(session),
             session=session,
             public_fields=[
                 "slug",
@@ -475,13 +637,14 @@ def build_cms_exchangers(
             view_permission=PERM_PAGES_VIEW,
             manage_permission=PERM_STYLES_MANAGE,
         ),
-        _CmsModelExchanger(
+        _CmsWidgetsExchanger(
             entity_key="cms_widgets",
             label="CMS Widgets",
             cluster=CMS_CLUSTER,
             natural_key="slug",
             model_class=CmsWidget,
             repository=_SessionModelRepository(session, CmsWidget, "slug"),
+            menu_item_repository=CmsMenuItemRepository(session),
             session=session,
             public_fields=[
                 "slug",

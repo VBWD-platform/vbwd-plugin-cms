@@ -1,0 +1,27 @@
+{
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "tarifs",
+      "title": "Plans & Pricing",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
+        "content": []
+      },
+      "content_html": null,
+      "status": "published",
+      "language": "en",
+      "sort_order": 50,
+      "layout_slug": "native-pricing-page",
+      "style_slug": null,
+      "meta_title": "Plans & Pricing",
+      "meta_description": "Compare our subscription plans and choose the one that fits your needs.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "index,follow"
+    }
+  ]
+}

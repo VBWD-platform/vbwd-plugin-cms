@@ -1,0 +1,28 @@
+{
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "tag",
+      "title": "Tag Archive",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
+        "content": []
+      },
+      "content_html": null,
+      "status": "published",
+      "language": "en",
+      "sort_order": 0,
+      "layout_slug": "tag-archive",
+      "style_slug": null,
+      "meta_title": "Tag Archive",
+      "meta_description": "Browse posts by tag.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "index,follow",
+      "terms": []
+    }
+  ]
+}
