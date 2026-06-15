@@ -880,6 +880,36 @@ _STANDALONE_VUE_WIDGETS = [
             "per_page": 10,
         },
     },
+    # Pure-frontend catalog widgets — they consume EXISTING public catalog APIs
+    # (GET /tarif-plans?category=<slug> / GET /tarif-plans/<slug> for plans;
+    # GET /token-bundles/ for bundles). No backend endpoint or per-widget
+    # backend logic is added here; the seeds only create the picker RECORDS.
+    {
+        "slug": "tariff-plan-collection",
+        "name": "Tariff Plan Collection",
+        "widget_type": "vue-component",
+        "content_json": {"component": "TariffPlanCollection"},
+        "config": {
+            "component_name": "TariffPlanCollection",
+            "source_mode": "category",
+            "category": "root",
+            "plan_slugs": [],
+            "default_view": "cards",
+            "heading": "",
+        },
+    },
+    {
+        "slug": "token-bundle-collection",
+        "name": "Token Bundle Collection",
+        "widget_type": "vue-component",
+        "content_json": {"component": "TokenBundleCollection"},
+        "config": {
+            "component_name": "TokenBundleCollection",
+            "bundle_ids": [],
+            "default_view": "cards",
+            "heading": "",
+        },
+    },
 ]
 
 

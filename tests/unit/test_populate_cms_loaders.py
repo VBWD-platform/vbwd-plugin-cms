@@ -183,6 +183,53 @@ class TestLostStandaloneWidgets:
         assert "code" in config
 
 
+class TestCatalogCollectionWidgets:
+    """Two pure-frontend catalog widgets — TariffPlanCollection and
+    TokenBundleCollection — are seeded as standalone vue-component RECORDS so
+    they appear in the admin widget picker and can be placed on CMS pages.
+    They consume EXISTING public catalog APIs (``GET /tarif-plans?category=…``
+    / ``GET /tarif-plans/<slug>`` and ``GET /token-bundles/``); the seeds add
+    no backend endpoints — only the picker records. Driven by
+    ``_STANDALONE_VUE_WIDGETS`` so the set stays a single source of truth and
+    is unit-testable without a DB."""
+
+    def _by_slug(self):
+        return {w["slug"]: w for w in populate_cms._STANDALONE_VUE_WIDGETS}
+
+    def test_collection_widgets_are_defined(self):
+        by_slug = self._by_slug()
+        for slug in ("tariff-plan-collection", "token-bundle-collection"):
+            assert slug in by_slug, f"collection widget '{slug}' not defined"
+
+    def test_each_collection_widget_is_a_vue_component_with_its_name(self):
+        expected_component = {
+            "tariff-plan-collection": "TariffPlanCollection",
+            "token-bundle-collection": "TokenBundleCollection",
+        }
+        by_slug = self._by_slug()
+        for slug, component in expected_component.items():
+            widget = by_slug[slug]
+            assert widget["widget_type"] == "vue-component"
+            assert widget["content_json"]["component"] == component
+            assert widget["name"]
+
+    def test_tariff_plan_collection_config_keys(self):
+        config = self._by_slug()["tariff-plan-collection"]["config"]
+        assert config["component_name"] == "TariffPlanCollection"
+        assert config["source_mode"] == "category"
+        assert config["category"] == "root"
+        assert config["plan_slugs"] == []
+        assert config["default_view"] == "cards"
+        assert config["heading"] == ""
+
+    def test_token_bundle_collection_config_keys(self):
+        config = self._by_slug()["token-bundle-collection"]["config"]
+        assert config["component_name"] == "TokenBundleCollection"
+        assert config["bundle_ids"] == []
+        assert config["default_view"] == "cards"
+        assert config["heading"] == ""
+
+
 class TestPageWidgetDemo:
     """A layout declares a ``page-widget`` slot (an AREA, type 'page-widget');
     each page picks the concrete widget for that slot via ``page_assignments``.
