@@ -54,21 +54,19 @@ def app():
 
     limiter.reset()
 
-    # Build the full schema exactly ONCE for the whole session, resetting the
-    # public schema first (clearing any table or ENUM type left by a prior
-    # crashed run or a sibling suite sharing this ``*_test`` DB). A per-test
-    # create_all()/drop_all() strands standalone PG ENUM types and races other
-    # suites on the shared catalog — see vbwd/testing/integration_db.py. Each
-    # test then isolates by TRUNCATE-ing data, not by dropping the schema.
+    # Build the schema once per process (create_all, checkfirst — never drops,
+    # so it cannot wipe data) and commit baseline reference rows once. Each test
+    # then isolates itself via a rolled-back transaction (no TRUNCATE, no DROP) —
+    # see vbwd/testing/integration_db.py.
     with app.app_context():
         from vbwd.extensions import db as _db
-        from vbwd.testing.integration_db import reset_schema_and_create_all
+        from vbwd.testing.integration_db import ensure_schema_and_baseline
 
         # Import the cms model the core create_app() does not auto-register so
         # its table is part of the one-time create_all().
         import plugins.cms.src.models.cms_page_widget  # noqa: F401
 
-        reset_schema_and_create_all(_db)
+        ensure_schema_and_baseline(_db)
 
     yield app
 
@@ -85,21 +83,24 @@ def client(app):
 
 @pytest.fixture
 def db(app):
+    """Isolate each test in a rolled-back transaction (self-cleaning, no wipe).
+
+    The schema + baseline RBAC rows are built once in the ``app`` fixture; each
+    test runs inside a transaction that is rolled back at teardown, so nothing it
+    writes persists. The admin user the integration tests log in with is seeded
+    inside that transaction so the route paths see it on the same connection; it
+    rolls back with the rest of the test's writes. See
+    vbwd/testing/integration_db.py.
+    """
     from vbwd.extensions import db
 
     with app.app_context():
-        # Isolate each test by clearing data (not schema); the schema is built
-        # once per session in the ``app`` fixture. The shared helper truncates
-        # every table and re-seeds the canonical RBAC role rows the TRUNCATE
-        # wipes, so the seeder's user does not violate the role FK.
-        from vbwd.testing.integration_db import truncate_all_tables
+        from vbwd.testing.integration_db import rollback_isolation
 
-        truncate_all_tables(db)
+        with rollback_isolation(db):
+            # Seed admin user so integration tests can log in.
+            os.environ["TEST_DATA_SEED"] = "true"
+            from vbwd.testing.test_data_seeder import TestDataSeeder
 
-        # Seed admin user so integration tests can log in.
-        os.environ["TEST_DATA_SEED"] = "true"
-        from vbwd.testing.test_data_seeder import TestDataSeeder
-
-        TestDataSeeder(db.session).seed()
-        yield db
-        db.session.remove()
+            TestDataSeeder(db.session).seed()
+            yield db

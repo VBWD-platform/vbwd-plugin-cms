@@ -10,9 +10,12 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy import func
 
+from vbwd.models.entity_tag import EntityTag
+
 from plugins.cms.src.models.cms_post import CmsPost
-from plugins.cms.src.models.cms_term import CmsTerm
+from plugins.cms.src.models.cms_term import CmsTerm, TAG_TERM_TYPE
 from plugins.cms.src.models.cms_post_term import CmsPostTerm
+from plugins.cms.src.repositories.post_repository import POST_TAG_ENTITY_TYPE
 
 
 # Text search configuration for ``websearch_to_tsquery`` / ``to_tsvector``.
@@ -46,11 +49,22 @@ class SearchRepository:
         if post_type:
             base = base.filter(CmsPost.type == post_type)
         if term_type and term_slug:
-            base = (
-                base.join(CmsPostTerm, CmsPostTerm.post_id == CmsPost.id)
-                .join(CmsTerm, CmsTerm.id == CmsPostTerm.term_id)
-                .filter(CmsTerm.term_type == term_type, CmsTerm.slug == term_slug)
-            )
+            if term_type == TAG_TERM_TYPE:
+                # D7: tags live in the core vbwd_entity_tag table, not in
+                # cms_term('tag')/cms_post_term. Mirror PostRepository.
+                # find_by_tag_slug — the bounded D5-allowed small-N reverse-index
+                # lookup over the CMS post set (NOT the 1M-SKU catalog path).
+                base = base.join(
+                    EntityTag,
+                    (EntityTag.entity_id == CmsPost.id)
+                    & (EntityTag.entity_type == POST_TAG_ENTITY_TYPE),
+                ).filter(EntityTag.tag_slug == term_slug)
+            else:
+                base = (
+                    base.join(CmsPostTerm, CmsPostTerm.post_id == CmsPost.id)
+                    .join(CmsTerm, CmsTerm.id == CmsPostTerm.term_id)
+                    .filter(CmsTerm.term_type == term_type, CmsTerm.slug == term_slug)
+                )
 
         total = base.count()
         rank = func.ts_rank(CmsPost.search_vector, ts_query)

@@ -43,6 +43,11 @@ def _load_migration():
 
 migration = _load_migration()
 
+# These tests open their OWN connection off a real ``db.engine`` and roll it
+# back themselves, so they must run WITHOUT the rolled-back-session isolation
+# (which swaps ``db.engine`` for a Connection, breaking ``db.engine.connect()``).
+pytestmark = pytest.mark.no_db_isolation
+
 
 def _insert_term(conn, term_type, slug, name):
     term_id = uuid.uuid4()
@@ -98,12 +103,19 @@ def _count(conn, sql, params=None):
 
 
 @pytest.fixture
-def seeded(db):
+def seeded(app):
     """Seed pre-migration state on a rolled-back connection.
 
     Two tag terms (one shared across two posts, one on one post) + one category
     term (also linked) — so we can assert tags move and categories don't.
+
+    Depends on ``app`` (schema built once), not ``db`` — this fixture opens its
+    OWN connection + transaction and rolls back at teardown, so it self-cleans
+    without the rolled-back-session isolation (which would swap ``db.engine`` for
+    a Connection and break ``db.engine.connect()`` below).
     """
+    from vbwd.extensions import db
+
     connection = db.engine.connect()
     transaction = connection.begin()
     suffix = uuid.uuid4().hex[:8]

@@ -53,14 +53,24 @@ _SITEMAP_FILTER_DEFAULTS = {
 
 
 @pytest.fixture(autouse=True)
-def _seo_sitemap_filter_baseline(db):
+def _seo_sitemap_filter_baseline(request):
     """Reset the cms sitemap-filter config keys to their no-filter defaults.
 
     Snapshots the cms config blob, forces the four ``sitemap_*`` filter keys to
     the shipped (no-filter) values for the test, then restores the original blob
     on teardown. A test that PUTs its own filters (the S56 settings suite) still
     overrides these for the duration of its body.
+
+    A ``no_db_isolation`` test (e.g. the migration suites, which open their OWN
+    connection off a real ``db.engine``) must NOT pull the rolled-back ``db``
+    fixture — that swaps ``db.engine`` for a Connection and breaks
+    ``db.engine.connect()``. For such tests this autouse fixture is a no-op and
+    never touches ``db``.
     """
+    if request.node.get_closest_marker("no_db_isolation") is not None:
+        yield
+        return
+    request.getfixturevalue("db")
     store = current_app.config_store
     saved = dict(store.get_config("cms") or {})
     store.save_config("cms", {**saved, **_SITEMAP_FILTER_DEFAULTS})
@@ -69,14 +79,21 @@ def _seo_sitemap_filter_baseline(db):
 
 
 @pytest.fixture(autouse=True)
-def _seo_sitemap_provider_registered(db, _seo_sitemap_filter_baseline):
+def _seo_sitemap_provider_registered(request, _seo_sitemap_filter_baseline):
     """Guarantee the cms sitemap provider is registered for each SEO test.
 
     Uses the SAME production wiring ``on_enable`` uses (``register_seo_pipeline``)
     so the provider reads the live ``db.session`` and config. Snapshots the
     registry, registers the cms pipeline, then restores the prior providers on
     teardown so no suite strands the registry for another (any collection order).
+
+    Skipped for ``no_db_isolation`` tests (migration suites) — they neither hit
+    the sitemap nor want the rolled-back ``db`` binding.
     """
+    if request.node.get_closest_marker("no_db_isolation") is not None:
+        yield
+        return
+    request.getfixturevalue("db")
     saved_providers = seo_registry.list_sitemap_providers()
     seo_registry.clear_sitemap_providers()
     register_seo_pipeline()

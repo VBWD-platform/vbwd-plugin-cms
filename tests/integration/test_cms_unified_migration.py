@@ -31,6 +31,11 @@ def _load_migration():
 
 migration = _load_migration()
 
+# These tests open their OWN connection off a real ``db.engine`` and roll it
+# back themselves, so they must run WITHOUT the rolled-back-session isolation
+# (which swaps ``db.engine`` for a Connection, breaking ``db.engine.connect()``).
+pytestmark = pytest.mark.no_db_isolation
+
 UNIFIED_TABLES = ("cms_post", "cms_term", "cms_post_term")
 
 
@@ -39,7 +44,13 @@ def _table_names(connection):
 
 
 @pytest.fixture
-def migration_connection(db):
+def migration_connection(app):
+    # Depend on ``app`` (schema built once), not ``db`` — this fixture opens
+    # its OWN connection + transaction and rolls back at teardown, so it
+    # self-cleans without the rolled-back-session isolation (which would swap
+    # ``db.engine`` for a Connection and break ``db.engine.connect()`` below).
+    from vbwd.extensions import db
+
     connection = db.engine.connect()
     transaction = connection.begin()
     operations = Operations(MigrationContext.configure(connection))
