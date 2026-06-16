@@ -1,0 +1,23 @@
+{
+  "vbwd_export": "cms_widgets",
+  "version": 1,
+  "cms_widgets": [
+    {
+      "slug": "token-bundle-collection",
+      "name": "Token Bundle Collection",
+      "widget_type": "vue-component",
+      "content_json": {
+        "component": "TokenBundleCollection"
+      },
+      "source_css": null,
+      "config": {
+        "component_name": "TokenBundleCollection",
+        "bundle_ids": [],
+        "default_view": "cards",
+        "heading": ""
+      },
+      "sort_order": 0,
+      "is_active": true
+    }
+  ]
+}
