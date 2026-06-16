@@ -46,13 +46,22 @@ def app():
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": url,
         "SQLALCHEMY_TRACK_MODIFICATIONS": False,
-        "RATELIMIT_ENABLED": True,
+        # Disabled (was True): the flask-limiter ``memory://`` store is a
+        # process-global singleton shared across every in-process test app, and
+        # this session-scoped fixture only resets it once. After the S90 G5 auth
+        # caps were tightened (login 30/min), logins accumulated across earlier
+        # suites in a --full run exhausted the cap by the time cms ran → the
+        # admin login got a 429, the token came back None, and every authed
+        # cms-import test failed with "Invalid or expired token". cms tests don't
+        # exercise flask rate limiting (the contact-form limiter is a separate
+        # plugin-config concern), so disable it here like the other suites.
+        "RATELIMIT_ENABLED": False,
         "RATELIMIT_STORAGE_URL": "memory://",
     }
     app = create_app(test_config)
-    from vbwd.extensions import limiter
 
-    limiter.reset()
+    # (No limiter.reset() — rate limiting is disabled above, so flask-limiter
+    # never initialises its storage and reset() would assert.)
 
     # Build the schema once per process (create_all, checkfirst — never drops,
     # so it cannot wipe data) and commit baseline reference rows once. Each test

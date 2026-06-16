@@ -262,7 +262,11 @@ class TestPageWidgetDemo:
         assert len(assignments) >= 1
         sidebar = next(a for a in assignments if a["area_name"] == "sidebar")
         # The page fills the slot with a concrete widget the seeder creates.
-        assert sidebar["widget_slug"] in {"search", "code-snippet"}
+        # Assert it's one of the seeded standalone widgets (drift-proof) rather
+        # than a hardcoded slug — the demo's chosen widget is a CMS content
+        # decision, not this test's contract.
+        standalone_slugs = {w["slug"] for w in populate_cms._STANDALONE_VUE_WIDGETS}
+        assert sidebar["widget_slug"] in standalone_slugs
 
     def test_demo_page_assigned_widget_is_seeded(self):
         pages = populate_cms._load_pages()
