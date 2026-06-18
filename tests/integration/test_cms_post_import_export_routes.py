@@ -157,6 +157,61 @@ class TestImportRoute:
         assert post is not None
         assert post.layout_id is not None
 
+    def test_round_trip_preserves_widget_config_override(
+        self, client, db, admin_headers
+    ):
+        from plugins.cms.src.models.cms_widget import CmsWidget
+        from plugins.cms.src.repositories.cms_post_widget_repository import (
+            CmsPostWidgetRepository,
+        )
+
+        widget_slug = f"w-{uuid.uuid4().hex[:8]}"
+        widget = CmsWidget(
+            slug=widget_slug,
+            name="Sidebar",
+            widget_type="html",
+            content_json={"html": "x"},
+        )
+        db.session.add(widget)
+        db.session.commit()
+
+        slug = f"rt-cfg-{uuid.uuid4().hex[:8]}"
+        post = _post_service(db).create_post(
+            {"type": "post", "slug": slug, "title": "RT", "status": "published"}
+        )
+        widget_repo = CmsPostWidgetRepository(db.session)
+        widget_repo.replace_for_post(
+            post["id"],
+            [
+                {
+                    "widget_id": str(widget.id),
+                    "area_name": "sidebar",
+                    "config_override": {"heading": "Page-specific"},
+                }
+            ],
+        )
+
+        exported = client.get(
+            "/api/v1/admin/cms/posts/export", headers=admin_headers
+        ).get_json()
+        item = next(i for i in exported["items"] if i["slug"] == slug)
+        assignment = item["page_assignments"][0]
+        assert assignment["widget_slug"] == widget_slug
+        assert assignment["config_override"] == {"heading": "Page-specific"}
+
+        # Clear the override, then re-import the envelope -> override restored.
+        widget_repo.replace_for_post(
+            post["id"],
+            [{"widget_id": str(widget.id), "area_name": "sidebar"}],
+        )
+        result = client.post(
+            "/api/v1/admin/cms/posts/import", json=exported, headers=admin_headers
+        )
+        assert result.status_code == 200, result.get_data(as_text=True)
+        restored = widget_repo.find_by_post(post["id"])
+        assert len(restored) == 1
+        assert restored[0].config_override == {"heading": "Page-specific"}
+
     def test_bad_payload_returns_400(self, client, db, admin_headers):
         resp = client.post(
             "/api/v1/admin/cms/posts/import",

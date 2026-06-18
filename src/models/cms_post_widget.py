@@ -33,6 +33,10 @@ class CmsPostWidget(BaseModel):
     area_name = db.Column(db.String(64), nullable=False)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     required_access_level_ids = db.Column(db.JSON, nullable=False, default=list)
+    # Per-page config override for this widget instance. Merged OVER the
+    # widget record's shared ``config`` at render time, for this post only.
+    # Nullable: ``None`` means "use the widget's default config unchanged".
+    config_override = db.Column(db.JSON, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -42,6 +46,7 @@ class CmsPostWidget(BaseModel):
             "area_name": self.area_name,
             "sort_order": self.sort_order,
             "required_access_level_ids": self.required_access_level_ids or [],
+            "config_override": self.config_override,
             "created_at": (self.created_at.isoformat() if self.created_at else None),
         }
 

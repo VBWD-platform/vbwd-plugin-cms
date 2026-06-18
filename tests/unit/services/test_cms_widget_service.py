@@ -289,3 +289,34 @@ class TestIsGlobalRemoved:
     def test_list_global_widgets_method_is_gone(self):
         svc, _, _ = _make_service()
         assert not hasattr(svc, "list_global_widgets")
+
+    def test_list_widgets_includes_menu_items_for_menu_widgets(self):
+        # The per-page widget editor seeds a menu widget's tree from the LIST
+        # payload, so list_widgets must attach menu_items for menu widgets.
+        menu_widget = _widget(slug="main-menu", widget_type="menu", name="Main Menu")
+        item_dict = {"id": "mi-1", "parent_id": None, "label": "Home", "url": "/"}
+        menu_item = MagicMock()
+        menu_item.to_dict.return_value = item_dict
+        svc, widget_repo, _ = _make_service(menu_items=[menu_item])
+        widget_repo.find_all.return_value = {
+            "items": [menu_widget],
+            "total": 1,
+            "page": 1,
+            "per_page": 20,
+            "pages": 1,
+        }
+        result = svc.list_widgets()
+        assert result["items"][0]["menu_items"] == [item_dict]
+
+    def test_list_widgets_omits_menu_items_for_non_menu_widgets(self):
+        html_widget = _widget(slug="promo", widget_type="html")
+        svc, widget_repo, _ = _make_service(menu_items=[])
+        widget_repo.find_all.return_value = {
+            "items": [html_widget],
+            "total": 1,
+            "page": 1,
+            "per_page": 20,
+            "pages": 1,
+        }
+        result = svc.list_widgets()
+        assert "menu_items" not in result["items"][0]

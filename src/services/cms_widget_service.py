@@ -56,7 +56,9 @@ class CmsWidgetService:
             query=params.get("query"),
             widget_type=params.get("widget_type"),
         )
-        result["items"] = [self._to_dto(w) for w in result["items"]]
+        # include_menu so a menu widget in the list carries its items (the
+        # per-page widget editor seeds its tree from this list payload).
+        result["items"] = [self._to_dto(w, include_menu=True) for w in result["items"]]
         return result
 
     def get_widget(self, widget_id: str) -> Dict[str, Any]:

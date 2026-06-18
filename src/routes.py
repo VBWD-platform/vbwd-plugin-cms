@@ -1869,7 +1869,10 @@ def admin_set_post_widgets(post_id: str):
     """PUT /api/v1/admin/cms/posts/<id>/widgets — replace widget assignments.
 
     Body: a JSON array of ``{widget_id, area_name, sort_order,
-    required_access_level_ids}``. Mirror of admin_set_page_widgets (S55).
+    required_access_level_ids, config_override}``. Mirror of
+    admin_set_page_widgets (S55). ``config_override`` (optional, default
+    ``None``) is the per-page config merged over the widget's shared config
+    at render time, for this post only; it flows straight through to the repo.
     """
     data = request.get_json()
     if not isinstance(data, list):
@@ -2304,6 +2307,58 @@ def public_list_terms():
     if not term_type:
         return jsonify({"error": "type query param required"}), 400
     return jsonify(_term_service().list_terms(term_type)), 200
+
+
+@cms_bp.route("/api/v1/cms/embed-manifest", methods=["GET"])
+def public_embed_manifest():
+    """GET /api/v1/cms/embed-manifest?type=&category= — mobile validation probe.
+
+    A cheap, fail-loud check the mobile app calls once on entry before pointing
+    a WebView at the host's CMS archive (S91). Validates that the requested
+    post-type is registered and the category slug resolves, returning the
+    post count and the RELATIVE embed archive URL. The device derives the web
+    origin from ``api_base_url``, so the backend returns a relative path only.
+    """
+    post_type = request.args.get("type")
+    category_slug = request.args.get("category")
+    if not post_type:
+        return jsonify({"error": "type query param required"}), 400
+    if not category_slug:
+        return jsonify({"error": "category query param required"}), 400
+
+    if not post_type_registry.is_registered(post_type):
+        return (
+            jsonify({"error": f"Post type '{post_type}' is not registered"}),
+            404,
+        )
+
+    category = _term_service().find_by_slug("category", category_slug)
+    if not category:
+        return jsonify({"error": f"Category '{category_slug}' not found"}), 404
+
+    archive = _post_service().list_posts_by_term(
+        term_type="category",
+        term_slug=category_slug,
+        post_type=post_type,
+        status=POST_STATUS_PUBLISHED,
+        page=1,
+        per_page=1,
+    )
+    return (
+        jsonify(
+            {
+                "ok": True,
+                "type": post_type,
+                "category": {
+                    "slug": category["slug"],
+                    "name": category["name"],
+                },
+                "post_count": archive["total"],
+                "archive_url": f"/cms/embed/{post_type}/{category_slug}",
+            }
+        ),
+        200,
+    )
 
 
 @cms_bp.route("/api/v1/cms/search", methods=["GET"])

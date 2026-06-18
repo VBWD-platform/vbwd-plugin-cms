@@ -79,6 +79,60 @@ class TestPostWidgetRepository:
         assert session.query.return_value.deleted is True
         assert all(w.post_id == post_id for w in created)
 
+    def test_replace_for_post_persists_config_override(self):
+        session = MagicMock()
+        session.query.return_value = _QueryStub([])
+        repo = CmsPostWidgetRepository(session)
+
+        created = repo.replace_for_post(
+            str(uuid4()),
+            [
+                {
+                    "widget_id": str(uuid4()),
+                    "area_name": "sidebar",
+                    "config_override": {"title": "Per page"},
+                },
+                {
+                    "widget_id": str(uuid4()),
+                    "area_name": "footer",
+                    # No override -> defaults to None (use widget default).
+                },
+            ],
+        )
+
+        assert created[0].config_override == {"title": "Per page"}
+        assert created[1].config_override is None
+
+    def test_to_dict_includes_config_override(self):
+        from plugins.cms.src.models.cms_post_widget import CmsPostWidget
+
+        post_widget = CmsPostWidget()
+        post_widget.id = uuid4()
+        post_widget.post_id = uuid4()
+        post_widget.widget_id = uuid4()
+        post_widget.area_name = "sidebar"
+        post_widget.sort_order = 0
+        post_widget.required_access_level_ids = []
+        post_widget.config_override = {"heading": "Override"}
+        post_widget.created_at = None
+
+        serialized = post_widget.to_dict()
+        assert serialized["config_override"] == {"heading": "Override"}
+
+    def test_to_dict_config_override_defaults_to_none(self):
+        from plugins.cms.src.models.cms_post_widget import CmsPostWidget
+
+        post_widget = CmsPostWidget()
+        post_widget.id = uuid4()
+        post_widget.post_id = uuid4()
+        post_widget.widget_id = uuid4()
+        post_widget.area_name = "sidebar"
+        post_widget.sort_order = 0
+        post_widget.required_access_level_ids = []
+        post_widget.created_at = None
+
+        assert post_widget.to_dict()["config_override"] is None
+
     def test_find_by_post_orders_by_sort_order(self):
         session = MagicMock()
         query = _QueryStub(["row-a", "row-b"])

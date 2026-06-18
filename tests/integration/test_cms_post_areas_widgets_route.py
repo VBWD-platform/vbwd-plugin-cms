@@ -141,6 +141,37 @@ class TestPostWidgetsRoute:
         assert assignments[0]["area_name"] == "sidebar"
         assert assignments[0]["widget"]["id"] == str(widget.id)
 
+    def test_put_then_get_preserves_config_override(self, client, db, admin_headers):
+        widget = _seed_widget(db, f"w-{uuid.uuid4().hex[:8]}", "Sidebar")
+        post = _seed_post(db, f"p-{uuid.uuid4().hex[:8]}")
+
+        put = client.put(
+            f"/api/v1/admin/cms/posts/{post['id']}/widgets",
+            headers=admin_headers,
+            json=[
+                {
+                    "widget_id": str(widget.id),
+                    "area_name": "sidebar",
+                    "config_override": {"heading": "Just for this page"},
+                }
+            ],
+        )
+        assert put.status_code == 200
+        assert put.get_json()[0]["config_override"] == {"heading": "Just for this page"}
+
+        got = client.get(f"/api/v1/admin/cms/posts/{post['id']}", headers=admin_headers)
+        assignment = got.get_json()["page_assignments"][0]
+        assert assignment["config_override"] == {"heading": "Just for this page"}
+
+        # Re-PUT without the override clears it back to None.
+        client.put(
+            f"/api/v1/admin/cms/posts/{post['id']}/widgets",
+            headers=admin_headers,
+            json=[{"widget_id": str(widget.id), "area_name": "sidebar"}],
+        )
+        got = client.get(f"/api/v1/admin/cms/posts/{post['id']}", headers=admin_headers)
+        assert got.get_json()["page_assignments"][0]["config_override"] is None
+
     def test_content_blocks_round_trip(self, client, db, admin_headers):
         post = _seed_post(db, f"p-{uuid.uuid4().hex[:8]}")
 

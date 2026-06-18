@@ -1,5 +1,5 @@
 """TermService — business logic for the unified taxonomy (S47.0)."""
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from plugins.cms.src.models.cms_term import CmsTerm
 from plugins.cms.src.services import term_type_registry
@@ -26,6 +26,17 @@ class TermService:
 
     def list_terms(self, term_type: str) -> List[Dict[str, Any]]:
         return [term.to_dict() for term in self._repo.find_by_type(term_type)]
+
+    def find_by_slug(self, term_type: str, slug: str) -> Optional[Dict[str, Any]]:
+        """Resolve a term by its (term_type, slug), or None when absent.
+
+        A public, fail-soft lookup (no raise) used by the embed-manifest
+        validation probe. Delegates to the repo's existing
+        ``find_by_type_and_slug`` so the by-slug lookup has one home and the
+        route stays on the route → service → repo layering.
+        """
+        term = self._repo.find_by_type_and_slug(term_type, slug)
+        return term.to_dict() if term else None
 
     def get_term(self, term_id: str) -> Dict[str, Any]:
         term = self._repo.find_by_id(term_id)

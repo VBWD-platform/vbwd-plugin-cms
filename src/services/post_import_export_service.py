@@ -157,6 +157,7 @@ class PostImportExportService:
                     "required_access_level_ids": (
                         assignment.required_access_level_ids or []
                     ),
+                    "config_override": assignment.config_override,
                 }
             )
         return assignments
@@ -331,6 +332,7 @@ class PostImportExportService:
                     "required_access_level_ids": assignment.get(
                         "required_access_level_ids", []
                     ),
+                    "config_override": assignment.get("config_override"),
                 }
             )
         if resolved:

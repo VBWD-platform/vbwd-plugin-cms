@@ -147,11 +147,13 @@ class CmsPlugin(BasePlugin):
         register_term_type(
             TermType(key="category", label="Category", hierarchical=True)
         )
-        # Tags are no longer a cms_term taxonomy (D7): they live in the single
-        # core tag catalog (``vbwd_tag``), managed under Settings → Custom
-        # Fields → Global tags. So the ``tag`` term type is deliberately NOT
-        # registered — TermManager.vue (tabs come from this registry) loses its
-        # "Tag" tab automatically, leaving category management intact.
+        # Tags are a cms_term taxonomy again (reverses the S77 D7 fold). They
+        # live in the CMS taxonomy system (``cms_term`` rows with
+        # ``term_type='tag'``), NOT the generic core ``vbwd_tag`` catalog.
+        # Registering the type restores the "Tag" tab in TermManager.vue (its
+        # tabs come from this registry) and lets the post/page editor edit tags
+        # as cms_term, exactly like categories (with inline create).
+        register_term_type(TermType(key="tag", label="Tag", hierarchical=False))
 
     def _register_unified_repositories(self) -> None:
         """Register the S47.0 repos as DI providers on the container.

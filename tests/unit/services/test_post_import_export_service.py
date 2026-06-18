@@ -179,6 +179,7 @@ class _FakePostWidgetRepo:
             widget.required_access_level_ids = assignment.get(
                 "required_access_level_ids", []
             )
+            widget.config_override = assignment.get("config_override")
             stored.append(widget)
         self._by_post[str(post_id)] = stored
         return stored
@@ -563,6 +564,7 @@ class TestContentBlocksAndPageAssignments:
                 "area_name": "header",
                 "sort_order": 0,
                 "required_access_level_ids": [],
+                "config_override": None,
             }
         ]
 
@@ -576,7 +578,14 @@ class TestContentBlocksAndPageAssignments:
         )
         source["post_widget_repo"].replace_for_post(
             str(post.id),
-            [{"widget_id": str(widget.id), "area_name": "header", "sort_order": 0}],
+            [
+                {
+                    "widget_id": str(widget.id),
+                    "area_name": "header",
+                    "sort_order": 0,
+                    "config_override": {"heading": "Page-specific"},
+                }
+            ],
         )
         exported = source["service"].export_posts()
 
@@ -592,6 +601,7 @@ class TestContentBlocksAndPageAssignments:
         assert len(assignments) == 1
         assert str(assignments[0].widget_id) == str(target_widget.id)
         assert assignments[0].area_name == "header"
+        assert assignments[0].config_override == {"heading": "Page-specific"}
 
     def test_import_skips_unknown_widget_slug(self):
         target = _make_service_with_areas()

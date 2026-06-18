@@ -32,6 +32,7 @@ class CmsPostWidgetRepository:
             post_widget.required_access_level_ids = assignment.get(
                 "required_access_level_ids", []
             )
+            post_widget.config_override = assignment.get("config_override")
             self.session.add(post_widget)
             created.append(post_widget)
         self.session.flush()
