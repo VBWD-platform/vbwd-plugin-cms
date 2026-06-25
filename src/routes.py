@@ -44,8 +44,6 @@ from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
 from vbwd.middleware.api_key_auth import require_api_key
 
-from plugins.cms.src.repositories.cms_page_repository import CmsPageRepository
-from plugins.cms.src.repositories.cms_category_repository import CmsCategoryRepository
 from plugins.cms.src.repositories.cms_image_repository import CmsImageRepository
 from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
 from plugins.cms.src.repositories.cms_layout_widget_repository import (
@@ -54,15 +52,6 @@ from plugins.cms.src.repositories.cms_layout_widget_repository import (
 from plugins.cms.src.repositories.cms_widget_repository import CmsWidgetRepository
 from plugins.cms.src.repositories.cms_menu_item_repository import CmsMenuItemRepository
 from plugins.cms.src.repositories.cms_style_repository import CmsStyleRepository
-from plugins.cms.src.services.cms_page_service import (
-    CmsPageService,
-    CmsPageNotFoundError,
-    CmsPageSlugConflictError,
-)
-from plugins.cms.src.services.cms_category_service import (
-    CmsCategoryService,
-    CmsCategoryConflictError,
-)
 from plugins.cms.src.services.cms_image_service import (
     CmsImageService,
     CmsImageNotFoundError,
@@ -118,6 +107,7 @@ from plugins.cms.src.services.rss_feed_service import RssFeedService
 from plugins.cms.src.services.content_ingest_service import ContentIngestService
 from plugins.cms.src.services import post_type_registry, term_type_registry
 from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED, POST_STATUS_PRIVATE
+from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE
 
 # Some base images ship a mimetypes registry that does not know modern image
 # formats (e.g. `.webp` → None → served as application/octet-stream, which an
@@ -276,33 +266,6 @@ def _enrich_public_post_areas(post: dict) -> None:
 # ── Service factory helpers ───────────────────────────────────────────────────
 
 
-def _page_service() -> CmsPageService:
-    page_repo = CmsPageRepository(db.session)
-    cat_repo = CmsCategoryRepository(db.session)
-    # style_repo wires the default-style resolver: pages without an explicit
-    # style_id fall back to the admin-designated default (sprint 26).
-    style_repo = CmsStyleRepository(db.session)
-    # layout_repo wires the default-LAYOUT resolver: pages without an explicit
-    # layout_id fall back to the admin-designated default layout (is_default)
-    # so layout-less pages still render with chrome.
-    layout_repo = CmsLayoutRepository(db.session)
-    # layout_widget_repo lets the resolver detect an explicit layout with ZERO
-    # widget placements ("not seeded") and fall back to the default so the page
-    # renders chrome + body instead of blank.
-    layout_widget_repo = CmsLayoutWidgetRepository(db.session)
-    return CmsPageService(
-        page_repo,
-        cat_repo,
-        style_repo=style_repo,
-        layout_repo=layout_repo,
-        layout_widget_repo=layout_widget_repo,
-    )
-
-
-def _category_service() -> CmsCategoryService:
-    return CmsCategoryService(CmsCategoryRepository(db.session))
-
-
 def _post_service() -> PostService:
     # content.changed is published onto the core EventBus (the plugin pub/sub
     # seam the 47.1 prerender writer subscribes to). ContentEventPublisher
@@ -432,14 +395,6 @@ def _image_service() -> CmsImageService:
     return CmsImageService(CmsImageRepository(db.session), storage)
 
 
-def _page_widget_repo():
-    from plugins.cms.src.repositories.cms_page_widget_repository import (
-        CmsPageWidgetRepository,
-    )
-
-    return CmsPageWidgetRepository(db.session)
-
-
 def _post_widget_repo():
     from plugins.cms.src.repositories.cms_post_widget_repository import (
         CmsPostWidgetRepository,
@@ -461,7 +416,6 @@ def _layout_service() -> CmsLayoutService:
         CmsLayoutRepository(db.session),
         CmsLayoutWidgetRepository(db.session),
         CmsWidgetRepository(db.session),
-        CmsPageRepository(db.session),
     )
 
 
@@ -601,266 +555,18 @@ def serve_upload(filename: str):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# PUBLIC — CMS pages (no auth required)
+# PUBLIC — CMS categories (no auth required)
 # ════════════════════════════════════════════════════════════════════════════
 
 
 @cms_bp.route("/api/v1/cms/categories", methods=["GET"])
 def list_public_categories():
-    """GET /api/v1/cms/categories — list all CMS categories (public)."""
-    return jsonify(_category_service().list_categories()), 200
+    """GET /api/v1/cms/categories — list all CMS categories (public).
 
-
-@cms_bp.route("/api/v1/cms/pages/<path:slug>", methods=["GET"])
-def get_published_page(slug: str):
-    """GET /api/v1/cms/pages/<slug> — fetch a published page by slug.
-
-    Supports preview via ?preview_token=<token> for unpublished pages.
-    Checks page-level access restrictions — returns 403 if user lacks required level.
+    Backed by the unified ``cms_term`` taxonomy (term_type=category), the single
+    source of truth. The legacy ``cms_category`` table is retired (S105).
     """
-    preview_token = request.args.get("preview_token")
-    try:
-        if preview_token:
-            page = _page_service().get_page(slug, published_only=False)
-            if page.get("preview_token") != preview_token:
-                return jsonify({"error": "Invalid preview token"}), 403
-            return jsonify(page), 200
-
-        page = _page_service().get_page(slug, published_only=True)
-
-        # Check page-level access restriction
-        required = page.get("required_access_level_ids") or []
-        if required:
-            user_level_ids = _get_current_user_access_level_ids()
-            if not any(level_id in required for level_id in user_level_ids):
-                return (
-                    jsonify(
-                        {
-                            "error": "Access denied",
-                            "required_access_levels": required,
-                        }
-                    ),
-                    403,
-                )
-
-        # Include page-level widget assignments (filtered by access level)
-        page_id = page.get("id")
-        if page_id:
-            user_level_ids = (
-                user_level_ids
-                if "user_level_ids" in dir()
-                else _get_current_user_access_level_ids()
-            )
-            pw_repo = _page_widget_repo()
-            page_widgets = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
-            page_widgets = _filter_assignments_by_access(page_widgets, user_level_ids)
-            # Enrich with full widget data
-            if page_widgets:
-                widget_svc = _widget_service()
-                for pw in page_widgets:
-                    wid = pw.get("widget_id")
-                    if wid:
-                        try:
-                            pw["widget"] = widget_svc.get_widget(wid)
-                        except Exception:
-                            pw["widget"] = None
-            page["page_assignments"] = page_widgets
-
-        return jsonify(page), 200
-    except CmsPageNotFoundError as e:
-        return jsonify({"error": str(e)}), 404
-
-
-@cms_bp.route("/api/v1/cms/pages", methods=["GET"])
-def list_published_pages():
-    """GET /api/v1/cms/pages — list published pages, optionally filtered by category."""
-    page = request.args.get("page", 1, type=int)
-    per_page = min(request.args.get("per_page", 20, type=int), 100)
-    filters = {}
-    if request.args.get("category"):
-        filters["category_slug"] = request.args.get("category")
-
-    result = _page_service().list_pages(
-        page=page, per_page=per_page, published_only=True, filters=filters
-    )
-    return jsonify(result), 200
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# ADMIN — Pages
-# ════════════════════════════════════════════════════════════════════════════
-
-
-@cms_bp.route("/api/v1/admin/cms/pages", methods=["GET"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.view")
-def admin_list_pages():
-    """GET /api/v1/admin/cms/pages — paginated list with filters."""
-    page = request.args.get("page", 1, type=int)
-    per_page = min(request.args.get("per_page", 20, type=int), 100)
-    sort_by = request.args.get("sort_by", "updated_at")
-    sort_dir = request.args.get("sort_dir", "desc")
-
-    filters = {}
-    if request.args.get("category_id"):
-        filters["category_id"] = request.args.get("category_id")
-    if request.args.get("language"):
-        filters["language"] = request.args.get("language")
-    if request.args.get("is_published") is not None:
-        val = request.args.get("is_published", "").lower()
-        if val in ("true", "1"):
-            filters["is_published"] = True
-        elif val in ("false", "0"):
-            filters["is_published"] = False
-    if request.args.get("search"):
-        filters["search"] = request.args.get("search")
-
-    result = _page_service().list_pages(
-        page=page,
-        per_page=per_page,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        filters=filters,
-    )
-    return jsonify(result), 200
-
-
-@cms_bp.route("/api/v1/admin/cms/pages", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_create_page():
-    """POST /api/v1/admin/cms/pages — create a new page."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-    try:
-        page = _page_service().create_page(data)
-        return jsonify(page), 201
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except CmsPageSlugConflictError as e:
-        return jsonify({"error": str(e)}), 409
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/bulk", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_bulk_pages():
-    """POST /api/v1/admin/cms/pages/bulk — bulk actions on pages.
-
-    Body: {"ids": [...], "action": "publish|unpublish|delete|set_category",
-           "params": {"category_id": "..."}}
-    """
-    data = request.get_json()
-    if not data or "ids" not in data or "action" not in data:
-        return jsonify({"error": "ids and action are required"}), 400
-    try:
-        result = _page_service().bulk_action(
-            data["ids"], data["action"], data.get("params")
-        )
-        return jsonify(result), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["GET"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.view")
-def admin_get_page(page_id: str):
-    """GET /api/v1/admin/cms/pages/<id> — get a single page (any publish state)."""
-    svc = _page_service()
-    # Find by ID, not slug
-    page_obj = svc._repo.find_by_id(page_id)
-    if not page_obj:
-        return jsonify({"error": "Page not found"}), 404
-    # Route through the service's default-style resolver so the admin UI
-    # sees resolved_style_id / resolved_style_source — same as the public
-    # /cms/pages/<slug> endpoint.
-    result = svc._with_resolved_style(page_obj.to_dict())
-    # Include page widget assignments
-    pw_repo = _page_widget_repo()
-    result["page_assignments"] = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
-    return jsonify(result), 200
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["PUT"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_update_page(page_id: str):
-    """PUT /api/v1/admin/cms/pages/<id> — update a page."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-    try:
-        page = _page_service().update_page(page_id, data)
-        return jsonify(page), 200
-    except CmsPageNotFoundError as e:
-        return jsonify({"error": str(e)}), 404
-    except (ValueError, CmsPageSlugConflictError) as e:
-        return jsonify({"error": str(e)}), 409
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/<page_id>", methods=["DELETE"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_delete_page(page_id: str):
-    """DELETE /api/v1/admin/cms/pages/<id> — delete a page."""
-    try:
-        _page_service().delete_page(page_id)
-        return jsonify({"deleted": page_id}), 200
-    except CmsPageNotFoundError as e:
-        return jsonify({"error": str(e)}), 404
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# ADMIN — Page Widgets
-# ════════════════════════════════════════════════════════════════════════════
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/<page_id>/widgets", methods=["GET"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.view")
-def admin_get_page_widgets(page_id: str):
-    """GET /api/v1/admin/cms/pages/<id>/widgets — list page widget assignments."""
-    pw_repo = _page_widget_repo()
-    assignments = [pw.to_dict() for pw in pw_repo.find_by_page(page_id)]
-    # Enrich with widget data
-    if assignments:
-        widget_svc = _widget_service()
-        for assignment in assignments:
-            wid = assignment.get("widget_id")
-            if wid:
-                try:
-                    assignment["widget"] = widget_svc.get_widget(wid)
-                except Exception:
-                    assignment["widget"] = None
-    return jsonify(assignments), 200
-
-
-@cms_bp.route("/api/v1/admin/cms/pages/<page_id>/widgets", methods=["PUT"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_set_page_widgets(page_id: str):
-    """PUT /api/v1/admin/cms/pages/<id>/widgets — replace page widget assignments."""
-    data = request.get_json()
-    if not isinstance(data, list):
-        return jsonify({"error": "JSON array of assignments required"}), 400
-    pw_repo = _page_widget_repo()
-    created = pw_repo.replace_for_page(page_id, data)
-    return jsonify([pw.to_dict() for pw in created]), 200
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# ADMIN — Categories
-# ════════════════════════════════════════════════════════════════════════════
+    return jsonify(_term_service().list_terms(CATEGORY_TERM_TYPE)), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/categories", methods=["GET"])
@@ -868,55 +574,13 @@ def admin_set_page_widgets(page_id: str):
 @require_admin
 @require_permission("cms.pages.view")
 def admin_list_categories():
-    """GET /api/v1/admin/cms/categories — list all categories."""
-    return jsonify(_category_service().list_categories()), 200
+    """GET /api/v1/admin/cms/categories — list all categories.
 
-
-@cms_bp.route("/api/v1/admin/cms/categories", methods=["POST"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_create_category():
-    """POST /api/v1/admin/cms/categories — create a category."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-    try:
-        cat = _category_service().create_category(data)
-        return jsonify(cat), 201
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-
-
-@cms_bp.route("/api/v1/admin/cms/categories/<cat_id>", methods=["PUT"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_update_category(cat_id: str):
-    """PUT /api/v1/admin/cms/categories/<id> — update a category."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-    try:
-        cat = _category_service().update_category(cat_id, data)
-        return jsonify(cat), 200
-    except KeyError as e:
-        return jsonify({"error": str(e)}), 404
-
-
-@cms_bp.route("/api/v1/admin/cms/categories/<cat_id>", methods=["DELETE"])
-@require_auth
-@require_admin
-@require_permission("cms.pages.manage")
-def admin_delete_category(cat_id: str):
-    """DELETE /api/v1/admin/cms/categories/<id> — delete a category."""
-    try:
-        _category_service().delete_category(cat_id)
-        return jsonify({"deleted": cat_id}), 200
-    except KeyError as e:
-        return jsonify({"error": str(e)}), 404
-    except CmsCategoryConflictError as e:
-        return jsonify({"error": str(e)}), 409
+    Backed by the unified ``cms_term`` taxonomy (S105 — legacy ``cms_category``
+    retired). Prefer ``GET /api/v1/admin/cms/terms?type=category`` /
+    ``POST|PUT|DELETE /api/v1/admin/cms/terms*`` for writes in new code.
+    """
+    return jsonify(_term_service().list_terms(CATEGORY_TERM_TYPE)), 200
 
 
 # ════════════════════════════════════════════════════════════════════════════

@@ -20,7 +20,6 @@ def _make_service(layouts=None, lw_assignments=None):
     layout_repo = MagicMock()
     lw_repo = MagicMock()
     widget_repo = MagicMock()
-    page_repo = MagicMock()
 
     store = {lo.slug: lo for lo in (layouts or [])}
     id_store = {str(lo.id): lo for lo in (layouts or [])}
@@ -37,7 +36,7 @@ def _make_service(layouts=None, lw_assignments=None):
     lw_repo.replace_for_layout.return_value = lw_assignments or []
 
     return (
-        CmsLayoutService(layout_repo, lw_repo, widget_repo, page_repo),
+        CmsLayoutService(layout_repo, lw_repo, widget_repo),
         layout_repo,
         lw_repo,
     )

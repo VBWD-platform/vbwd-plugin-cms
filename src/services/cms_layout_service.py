@@ -52,12 +52,10 @@ class CmsLayoutService:
         layout_repo: CmsLayoutRepository,
         lw_repo: CmsLayoutWidgetRepository,
         widget_repo: CmsWidgetRepository,
-        page_repo,
     ) -> None:
         self._repo = layout_repo
         self._lw_repo = lw_repo
         self._widget_repo = widget_repo
-        self._page_repo = page_repo
 
     def list_layouts(self, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         params = params or {}

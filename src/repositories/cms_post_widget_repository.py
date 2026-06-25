@@ -1,4 +1,4 @@
-"""CmsPostWidget repository — mirror of CmsPageWidgetRepository (S55)."""
+"""CmsPostWidget repository — per-post widget assignment data access (S55)."""
 from typing import List, Dict, Any
 from plugins.cms.src.models.cms_post_widget import CmsPostWidget
 

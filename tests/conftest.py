@@ -71,9 +71,9 @@ def app():
         from vbwd.extensions import db as _db
         from vbwd.testing.integration_db import ensure_schema_and_baseline
 
-        # Import the cms model the core create_app() does not auto-register so
-        # its table is part of the one-time create_all().
-        import plugins.cms.src.models.cms_page_widget  # noqa: F401
+        # Import the cms models package so every cms table is registered with
+        # SQLAlchemy and part of the one-time create_all().
+        import plugins.cms.src.models  # noqa: F401
 
         ensure_schema_and_baseline(_db)
 

@@ -1,9 +1,12 @@
 """Migration up/down/up for dropping ``use_theme_switcher_styles`` (real PG).
 
-The legacy theme-switcher flag is removed from ``cms_post`` and ``cms_page``.
-Validates the upgrade drops the column from both tables, the downgrade restores
-it, and a re-upgrade drops it again — all against a real connection through
-alembic's Operations context, isolated from the db fixture's ``create_all``.
+The legacy theme-switcher flag is removed from ``cms_post``. (The migration also
+touched ``cms_page``, but that table was retired in S105 and its model no longer
+exists, so ``create_all`` does not build it — this test exercises the live
+``cms_post`` table only.) Validates the upgrade drops the column, the downgrade
+restores it, and a re-upgrade drops it again — all against a real connection
+through alembic's Operations context, isolated from the db fixture's
+``create_all``.
 
 Engineering requirements (binding, restated): TDD-first; DevOps-first (schema
 only via Alembic; resolves standalone within the cms plugin's own migration
@@ -61,6 +64,15 @@ def migration_connection(app):
     connection = db.engine.connect()
     transaction = connection.begin()
     operations = Operations(MigrationContext.configure(connection))
+    # ``cms_page`` was retired in S105 so ``create_all`` no longer builds it,
+    # but this historical migration still drops/re-adds its column. Recreate a
+    # minimal stub of it so the migration runs against the shape it expects; the
+    # fixture's transaction rollback removes the stub at teardown.
+    if "cms_page" not in set(inspect(connection).get_table_names()):
+        operations.create_table(
+            "cms_page",
+            sa.Column("id", sa.String(), primary_key=True),
+        )
     # The model no longer declares the column, so create_all() omits it; add it
     # back so the migration's upgrade runs against the pre-drop shape.
     for table in TABLES:

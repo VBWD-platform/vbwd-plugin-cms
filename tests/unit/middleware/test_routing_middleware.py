@@ -19,7 +19,7 @@ def _make_app():
 
 
 def test_is_passthrough_api():
-    assert _is_passthrough("/api/v1/cms/pages") is True
+    assert _is_passthrough("/api/v1/cms/posts") is True
 
 
 def test_is_passthrough_uploads():
@@ -46,7 +46,7 @@ def test_middleware_passthrough_api_path():
     svc = MagicMock()
     mw = CmsRoutingMiddleware(svc)
     app = _make_app()
-    with app.test_request_context("/api/v1/cms/pages"):
+    with app.test_request_context("/api/v1/cms/posts"):
         result = mw.before_request()
     assert result is None
     svc.evaluate.assert_not_called()

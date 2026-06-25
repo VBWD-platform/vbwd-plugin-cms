@@ -1,9 +1,13 @@
 """CMS implementation of ``IAccessLevelContentProvider``.
 
-Returns CMS pages and layout-widget assignments whose
-``required_access_level_ids`` JSON column contains the given access level
-id. The shape of each item is preserved to match what the admin route
-emitted before S01 (FE backward-compat).
+Returns CMS layout-widget assignments whose ``required_access_level_ids`` JSON
+column contains the given access level id. The shape of each item is preserved
+to match what the admin route emitted before S01 (FE backward-compat).
+
+The legacy ``cms_page`` access-restriction surface is retired (S105): the unified
+``cms_post`` table carries no page-level ``required_access_level_ids`` column, so
+``pages`` is now always empty (the key is kept for FE backward-compat). Widget
+assignments — the only remaining access-restricted CMS surface — are unchanged.
 """
 from typing import Any, Mapping
 
@@ -13,26 +17,17 @@ from vbwd.services.access_level_content_provider import (
 )
 
 from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget
-from plugins.cms.src.models.cms_page import CmsPage
 
 
 class CmsAccessContentProvider(IAccessLevelContentProvider):
-    """Reports CMS pages + widget assignments restricted to a user level."""
+    """Reports CMS widget assignments restricted to a user level."""
 
     def list_restricted_content_for_level(
         self, level_id: str
     ) -> Mapping[str, list[Mapping[str, Any]]]:
+        # Pages no longer carry an access-restriction column (S105); the key is
+        # preserved (always empty) so the admin FE contract stays stable.
         pages: list[Mapping[str, Any]] = []
-        for page in db.session.query(CmsPage).all():
-            required_ids = page.required_access_level_ids or []
-            if level_id in required_ids:
-                pages.append(
-                    {
-                        "id": str(page.id),
-                        "name": page.name,
-                        "slug": page.slug,
-                    }
-                )
 
         widgets: list[Mapping[str, Any]] = []
         for assignment in db.session.query(CmsLayoutWidget).all():

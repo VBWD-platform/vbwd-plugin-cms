@@ -1,21 +1,43 @@
-"""Integration tests verifying CMS data actually persists across requests.
+"""Integration: the public/admin category endpoints serve the unified taxonomy.
 
-These tests catch the class of bug where repositories call flush() but not
-commit(), causing data to be lost when the session ends.
+The legacy ``cms_page`` / ``cms_category`` subsystem was retired (S105). The two
+remaining category endpoints (``GET /api/v1/cms/categories`` and
+``GET /api/v1/admin/cms/categories``) are now backed by the unified ``cms_term``
+taxonomy — this test proves a seeded ``cms_term(term_type=category)`` surfaces
+through both, and that the removed legacy page/category write routes are gone.
+
+Unified post/category persistence + multi-segment slug routing are covered by
+``test_cms_unified_persistence.py`` and ``test_cms_post_*`` — not re-asserted here.
+
+Engineering requirements (binding, restated): TDD-first; DevOps-first (real PG,
+cold local + CI); SOLID/DI/DRY; Liskov; clean code; no overengineering. Quality
+guard: ``bin/pre-commit-check.sh --plugin cms --full``.
 """
-import pytest
 import uuid
+
+import pytest
+
+from plugins.cms.src.repositories.term_repository import TermRepository
+from plugins.cms.src.services.term_service import TermService
+from plugins.cms.src.services import term_type_registry
+from plugins.cms.src.services.term_type_registry import TermType
+from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE
+
+
+@pytest.fixture(autouse=True)
+def _category_term_type():
+    if not term_type_registry.is_registered(CATEGORY_TERM_TYPE):
+        term_type_registry.register_term_type(
+            TermType(key=CATEGORY_TERM_TYPE, label="Category", hierarchical=True)
+        )
+    yield
 
 
 @pytest.fixture(autouse=True)
 def admin_token(client, db):
-    """Log in as admin and return JWT token."""
     resp = client.post(
         "/api/v1/auth/login",
-        json={
-            "email": "admin@example.com",
-            "password": "AdminPass123@",
-        },
+        json={"email": "admin@example.com", "password": "AdminPass123@"},
     )
     if resp.status_code != 200:
         pytest.skip("Admin user not available in test DB")
@@ -28,238 +50,50 @@ def auth_headers(admin_token):
     return {"Authorization": f"Bearer {admin_token}"}
 
 
-class TestCmsPagePersistence:
-    """Pages must survive across DB sessions (commit, not just flush)."""
+def _seed_category(db) -> str:
+    slug = f"news-{uuid.uuid4().hex[:8]}"
+    TermService(TermRepository(db.session)).create_term(
+        {"term_type": CATEGORY_TERM_TYPE, "name": "News", "slug": slug}
+    )
+    db.session.commit()
+    return slug
 
-    def test_create_then_update_page(self, client, db, auth_headers):
-        """POST creates a page; a subsequent PUT on the same ID must succeed.
 
-        This test would fail if save() only calls flush() without commit(),
-        because the second request opens a new session and can't see the row.
-        """
-        # Create
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": "Persistence Test",
-                "slug": f"persistence-{uuid.uuid4().hex[:8]}",
-                "language": "en",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201, resp.get_json()
-        page_id = resp.get_json()["id"]
+class TestCategoriesBackedByCmsTerm:
+    def test_public_categories_returns_cms_term_categories(self, client, db):
+        slug = _seed_category(db)
+        resp = client.get("/api/v1/cms/categories")
+        assert resp.status_code == 200
+        slugs = [c["slug"] for c in resp.get_json()]
+        assert slug in slugs
 
-        # Update (separate request = potentially new session)
-        resp = client.put(
-            f"/api/v1/admin/cms/pages/{page_id}",
-            json={
-                "name": "Persistence Test Updated",
-            },
-            headers=auth_headers,
-        )
-        assert (
-            resp.status_code == 200
-        ), f"PUT returned {resp.status_code}: {resp.get_json()}"
-        assert resp.get_json()["name"] == "Persistence Test Updated"
+    def test_admin_categories_returns_cms_term_categories(
+        self, client, db, auth_headers
+    ):
+        slug = _seed_category(db)
+        resp = client.get("/api/v1/admin/cms/categories", headers=auth_headers)
+        assert resp.status_code == 200
+        slugs = [c["slug"] for c in resp.get_json()]
+        assert slug in slugs
 
-    def test_create_then_delete_page(self, client, db, auth_headers):
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": "Delete Test",
-                "slug": f"delete-{uuid.uuid4().hex[:8]}",
-                "language": "en",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
-        page_id = resp.get_json()["id"]
 
-        resp = client.delete(f"/api/v1/admin/cms/pages/{page_id}", headers=auth_headers)
-        assert resp.status_code in (200, 204)
+class TestLegacyRoutesRetired:
+    """The legacy page + category-write routes are gone (S105)."""
 
-        # Confirm it's gone
-        resp = client.get(f"/api/v1/admin/cms/pages/{page_id}", headers=auth_headers)
+    def test_legacy_single_page_route_removed(self, client):
+        assert client.get("/api/v1/cms/pages/anything").status_code == 404
+
+    def test_legacy_page_list_route_removed(self, client):
+        assert client.get("/api/v1/cms/pages").status_code == 404
+
+    def test_legacy_admin_page_list_route_removed(self, client, auth_headers):
+        resp = client.get("/api/v1/admin/cms/pages", headers=auth_headers)
         assert resp.status_code == 404
 
-    def test_created_page_appears_in_list(self, client, db, auth_headers):
-        slug = f"list-{uuid.uuid4().hex[:8]}"
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": "List Test",
-                "slug": slug,
-                "language": "en",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
-
-        resp = client.get("/api/v1/admin/cms/pages", headers=auth_headers)
-        assert resp.status_code == 200
-        slugs = [p["slug"] for p in resp.get_json()["items"]]
-        assert slug in slugs, f"Created page slug '{slug}' not found in list: {slugs}"
-
-
-class TestCmsCategoryPersistence:
-    def test_create_then_update_category(self, client, db, auth_headers):
+    def test_legacy_admin_category_create_route_removed(self, client, auth_headers):
         resp = client.post(
             "/api/v1/admin/cms/categories",
-            json={
-                "name": "Test Cat",
-                "slug": f"cat-{uuid.uuid4().hex[:8]}",
-            },
+            json={"name": "X", "slug": "x"},
             headers=auth_headers,
         )
-        assert resp.status_code == 201, resp.get_json()
-        cat_id = resp.get_json()["id"]
-
-        resp = client.put(
-            f"/api/v1/admin/cms/categories/{cat_id}",
-            json={
-                "name": "Test Cat Updated",
-            },
-            headers=auth_headers,
-        )
-        assert (
-            resp.status_code == 200
-        ), f"PUT returned {resp.status_code}: {resp.get_json()}"
-        assert resp.get_json()["name"] == "Test Cat Updated"
-
-    def test_create_then_delete_category(self, client, db, auth_headers):
-        resp = client.post(
-            "/api/v1/admin/cms/categories",
-            json={
-                "name": "Delete Cat",
-                "slug": f"del-cat-{uuid.uuid4().hex[:8]}",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
-        cat_id = resp.get_json()["id"]
-
-        resp = client.delete(
-            f"/api/v1/admin/cms/categories/{cat_id}", headers=auth_headers
-        )
-        assert resp.status_code in (200, 204)
-
-
-class TestCmsMultiSegmentSlug:
-    """cms_page slugs may contain forward slashes (multi-segment paths)."""
-
-    def test_create_and_fetch_multi_segment_slug(self, client, db, auth_headers):
-        slug = f"blog/2026/{uuid.uuid4().hex[:8]}"
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": "Multi-Segment Test",
-                "slug": slug,
-                "language": "en",
-                "is_published": True,
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201, resp.get_json()
-
-        resp = client.get(f"/api/v1/cms/pages/{slug}")
-        assert resp.status_code == 200, resp.get_json()
-        assert resp.get_json()["slug"] == slug
-
-    def test_multi_segment_slug_uniqueness(self, client, db, auth_headers):
-        slug = f"a/b/{uuid.uuid4().hex[:8]}"
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": "Unique Slug 1",
-                "slug": slug,
-                "language": "en",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
-
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": "Unique Slug 2",
-                "slug": slug,
-                "language": "en",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 409
-
-    def test_deeply_nested_slug(self, client, db, auth_headers):
-        slug = f"something/anothersomething/{uuid.uuid4().hex[:8]}/leaf"
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": "Deep Slug",
-                "slug": slug,
-                "language": "en",
-                "is_published": True,
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
-
-        resp = client.get(f"/api/v1/cms/pages/{slug}")
-        assert resp.status_code == 200
-        assert resp.get_json()["slug"] == slug
-
-
-class TestCmsBulkPersistence:
-    def _create_page(self, client, auth_headers, name_suffix=""):
-        resp = client.post(
-            "/api/v1/admin/cms/pages",
-            json={
-                "name": f"Bulk Page {name_suffix}",
-                "slug": f"bulk-{uuid.uuid4().hex[:8]}",
-                "language": "en",
-                "is_published": False,
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
-        return resp.get_json()["id"]
-
-    def test_bulk_publish_persists(self, client, db, auth_headers):
-        ids = [self._create_page(client, auth_headers, i) for i in range(3)]
-
-        resp = client.post(
-            "/api/v1/admin/cms/pages/bulk",
-            json={
-                "ids": ids,
-                "action": "publish",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-
-        # Verify each page is now published
-        for page_id in ids:
-            resp = client.get(
-                f"/api/v1/admin/cms/pages/{page_id}", headers=auth_headers
-            )
-            assert resp.status_code == 200
-            assert resp.get_json()["is_published"] is True
-
-    def test_bulk_delete_persists(self, client, db, auth_headers):
-        ids = [self._create_page(client, auth_headers, i) for i in range(2)]
-
-        resp = client.post(
-            "/api/v1/admin/cms/pages/bulk",
-            json={
-                "ids": ids,
-                "action": "delete",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 200
-
-        for page_id in ids:
-            resp = client.get(
-                f"/api/v1/admin/cms/pages/{page_id}", headers=auth_headers
-            )
-            assert resp.status_code == 404
+        assert resp.status_code in (404, 405)

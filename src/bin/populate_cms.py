@@ -38,8 +38,6 @@ from plugins.cms.src.models.cms_widget import CmsWidget  # noqa: E402
 from plugins.cms.src.models.cms_menu_item import CmsMenuItem  # noqa: E402
 from plugins.cms.src.models.cms_layout import CmsLayout  # noqa: E402
 from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget  # noqa: E402
-from plugins.cms.src.models.cms_page import CmsPage  # noqa: E402
-from plugins.cms.src.models.cms_category import CmsCategory  # noqa: E402
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule  # noqa: E402
 from plugins.cms.src.bin.apply_style_alignment import (  # noqa: E402
     apply_alignment_to_all_styles,
@@ -1246,22 +1244,37 @@ def _get_or_create_layout(data: dict, widget_map: dict) -> "CmsLayout":
     return layout
 
 
-def _get_or_create_category(slug: str, name: str, sort_order: int = 0):
-    existing = db.session.query(CmsCategory).filter_by(slug=slug).first()
-    if existing:
-        existing.name = name
-        existing.sort_order = sort_order
-        db.session.flush()
-        print(f"  ~ category '{slug}' (updated)")
-        return existing, False
-    obj = CmsCategory(slug=slug, name=name, sort_order=sort_order)
-    db.session.add(obj)
-    db.session.flush()
-    print(f"  + category '{slug}'")
-    return obj, True
+def _get_or_create_category_term(
+    term_service, term_repo, slug: str, name: str, sort_order: int = 0
+) -> Optional[dict]:
+    """Create a ``cms_term(term_type=category)`` for a demo category, idempotently.
+
+    Returns the term dict (existing or freshly created). Re-runs hit the slug
+    guard and resolve the existing term instead of creating a duplicate.
+    """
+    from plugins.cms.src.services.term_service import TermSlugConflictError
+    from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE
+
+    try:
+        term = term_service.create_term(
+            {
+                "term_type": CATEGORY_TERM_TYPE,
+                "slug": slug,
+                "name": name,
+                "sort_order": sort_order,
+            }
+        )
+        print(f"  + category '{slug}'")
+        return term
+    except TermSlugConflictError:
+        existing = term_repo.find_by_type_and_slug(CATEGORY_TERM_TYPE, slug)
+        print(f"  ~ category '{slug}' (exists)")
+        return existing.to_dict() if existing else None
 
 
-def _get_or_create_page(
+def _get_or_create_unified_page(
+    post_service,
+    post_repo,
     slug: str,
     name: str,
     layout: Optional["CmsLayout"],
@@ -1270,74 +1283,74 @@ def _get_or_create_page(
     content_html: Optional[str] = None,
     meta_description: Optional[str] = None,
     sort_order: int = 0,
-    category_id: Optional[str] = None,
     robots: str = "index,follow",
     is_published: bool = True,
-) -> "CmsPage":
-    existing = db.session.query(CmsPage).filter_by(slug=slug).first()
-    if existing:
-        existing.name = name
-        existing.layout_id = layout.id if layout else None
-        existing.style_id = style.id if style else None
-        if content_json is not None:
-            existing.content_json = content_json
-        if content_html is not None:
-            existing.content_html = content_html
-        if meta_description:
-            existing.meta_description = meta_description
-        existing.sort_order = sort_order
-        if category_id is not None:
-            existing.category_id = category_id
-        existing.robots = robots
-        db.session.flush()
-        print(f"  ~ page '{slug}' (updated)")
-        return existing
-    page = CmsPage(
-        slug=slug,
-        name=name,
-        language="en",
-        content_json=content_json or {"type": "doc", "content": []},
-        content_html=content_html,
-        is_published=is_published,
-        sort_order=sort_order,
-        layout_id=layout.id if layout else None,
-        style_id=style.id if style else None,
-        category_id=category_id,
-        meta_title=name,
-        meta_description=meta_description or name,
-        robots=robots,
+) -> Optional[dict]:
+    """Create a unified ``cms_post(type=page)`` for a demo page, idempotently.
+
+    Returns the post dict (existing or freshly created), or ``None`` if it could
+    neither be created nor resolved. Re-runs hit the service's slug guard and
+    resolve the existing post (via the repo, which sees drafts too) instead of
+    creating a duplicate.
+    """
+    from plugins.cms.src.services.post_service import PostSlugConflictError
+    from plugins.cms.src.models.cms_post import (
+        POST_STATUS_PUBLISHED,
+        POST_STATUS_DRAFT,
     )
-    db.session.add(page)
-    db.session.flush()
-    print(f"  + page '{slug}' (layout={layout.slug if layout else None})")
-    return page
+
+    data = {
+        "type": "page",
+        "slug": slug,
+        "title": name,
+        "language": "en",
+        "content_json": content_json or {"type": "doc", "content": []},
+        "content_html": content_html,
+        "sort_order": sort_order,
+        "robots": robots,
+        "meta_title": name,
+        "meta_description": meta_description or name,
+        "status": POST_STATUS_PUBLISHED if is_published else POST_STATUS_DRAFT,
+        "layout_id": str(layout.id) if layout else None,
+        "style_id": str(style.id) if style else None,
+    }
+    try:
+        post = post_service.create_post(data)
+        print(f"  + page '{slug}' (layout={layout.slug if layout else None})")
+        return post
+    except PostSlugConflictError:
+        existing = post_repo.find_by_type_and_slug("page", slug.strip("/"))
+        print(f"  ~ page '{slug}' (exists)")
+        return existing.to_dict() if existing else None
 
 
-def _set_page_widgets(
-    page: "CmsPage",
+def _set_unified_page_widgets(
+    post_widget_repo,
+    post: dict,
     assignments: list[tuple[str, str]],
     widget_map: dict[str, "CmsWidget"],
 ) -> None:
-    """Assign page-level widgets. Idempotent — skips if already assigned."""
-    from plugins.cms.src.models.cms_page_widget import CmsPageWidget
-
-    existing = db.session.query(CmsPageWidget).filter_by(page_id=page.id).count()
-    if existing > 0:
+    """Assign page-level widgets to a unified post. Idempotent — skips if the
+    post already has assignments (replace would otherwise re-write them)."""
+    post_id = post["id"]
+    if post_widget_repo.find_by_post(post_id):
         return
+    rows: list[dict] = []
     for order, (area_name, widget_slug) in enumerate(assignments):
         widget = widget_map.get(widget_slug)
         if not widget:
             print(f"    ! widget '{widget_slug}' not found, skipping")
             continue
-        pw = CmsPageWidget(
-            page_id=page.id,
-            widget_id=widget.id,
-            area_name=area_name,
-            sort_order=order,
+        rows.append(
+            {
+                "widget_id": str(widget.id),
+                "area_name": area_name,
+                "sort_order": order,
+            }
         )
-        db.session.add(pw)
-    db.session.flush()
-    print(f"    + {len(assignments)} page widget(s) for '{page.slug}'")
+    if rows:
+        post_widget_repo.replace_for_post(post_id, rows)
+        print(f"    + {len(rows)} page widget(s) for '{post['slug']}'")
 
 
 # ─── Unified model seed (S47.0) ────────────────────────────────────────────────
@@ -1448,11 +1461,14 @@ def _link_hello_world_tags(post_service, tags_port) -> int:
     return len(_HELLO_WORLD_TAG_SLUGS)
 
 
-def _seed_unified_via_services() -> None:
-    """Build the unified services from db.session and seed idempotently.
+def _build_unified_services():
+    """Build the unified post/term services + repos from ``db.session``.
 
     Ensures the built-in post/term types are registered (the standalone
-    ``__main__`` path does not run the plugin's ``on_enable``).
+    ``__main__`` path does not run the plugin's ``on_enable``). Returns a tuple
+    of ``(post_service, term_service, post_repo, term_repo, post_widget_repo)``
+    so the demo seeds pages, terms and page-widget assignments straight through
+    the unified layer (the legacy cms_page round-trip was retired in S105).
     """
     from plugins.cms.src.services import post_type_registry, term_type_registry
     from plugins.cms.src.services.post_type_registry import PostType
@@ -1460,6 +1476,9 @@ def _seed_unified_via_services() -> None:
     from plugins.cms.src.repositories.post_repository import PostRepository
     from plugins.cms.src.repositories.term_repository import TermRepository
     from plugins.cms.src.repositories.post_term_repository import PostTermRepository
+    from plugins.cms.src.repositories.cms_post_widget_repository import (
+        CmsPostWidgetRepository,
+    )
     from plugins.cms.src.services.post_service import PostService
     from plugins.cms.src.services.term_service import TermService
 
@@ -1476,14 +1495,22 @@ def _seed_unified_via_services() -> None:
             TermType(key="category", label="Category", hierarchical=True)
         )
     # ``tag`` is no longer a cms_term taxonomy (D7) — tags live in the core
-    # catalog and are seeded via the tags port below.
+    # catalog and are seeded via the tags port.
 
+    post_repo = PostRepository(db.session)
+    term_repo = TermRepository(db.session)
     post_service = PostService(
-        repo=PostRepository(db.session),
-        term_repo=TermRepository(db.session),
+        repo=post_repo,
+        term_repo=term_repo,
         post_term_repo=PostTermRepository(db.session),
     )
-    term_service = TermService(TermRepository(db.session))
+    term_service = TermService(term_repo)
+    post_widget_repo = CmsPostWidgetRepository(db.session)
+    return post_service, term_service, post_repo, term_repo, post_widget_repo
+
+
+def _seed_unified_demo_content(post_service, term_service) -> None:
+    """Seed the small unified demo content set (extra posts + hello-world tags)."""
     from vbwd.services.tags_and_custom_fields import resolve_tags_and_custom_fields
 
     summary = seed_unified_content(
@@ -1707,34 +1734,38 @@ def populate_cms() -> None:
     db.session.commit()
     print(f"  Layouts: {len(layout_map)} total")
 
-    print("\n── Categories ──────────────────────────────────────────────────")
-    cat_about, _ = _get_or_create_category("about", "About", sort_order=0)
-    cat_blog, _ = _get_or_create_category("blog", "Blog", sort_order=0)
-    cat_static, _ = _get_or_create_category(
-        "static-pages", "Static Pages", sort_order=0
-    )
-    cat_ghrm, _ = _get_or_create_category("ghrm", "Software Catalogue", sort_order=0)
+    # Unified content layer (cms_post / cms_term) — the single source of truth.
+    # Pages, categories and page-widget assignments are seeded straight through
+    # the unified services (the legacy cms_page round-trip was retired in S105).
+    (
+        post_service,
+        term_service,
+        post_repo,
+        term_repo,
+        post_widget_repo,
+    ) = _build_unified_services()
+
+    print("\n── Categories (cms_term) ───────────────────────────────────────")
+    for cat_slug, cat_name in (
+        ("about", "About"),
+        ("blog", "Blog"),
+        ("static-pages", "Static Pages"),
+        ("ghrm", "Software Catalogue"),
+    ):
+        _get_or_create_category_term(term_service, term_repo, cat_slug, cat_name)
     db.session.commit()
 
-    print("\n── Pages ───────────────────────────────────────────────────────")
+    print("\n── Pages (cms_post type=page) ──────────────────────────────────")
     pages_data = _load_pages()
-    category_by_slug = {
-        "about": cat_about,
-        "blog": cat_blog,
-        "static-pages": cat_static,
-        "ghrm": cat_ghrm,
-    }
-    page_map: dict[str, "CmsPage"] = {}
+    page_map: dict[str, dict] = {}
     for pd in pages_data:
         page_layout_slug = cast(Optional[str], pd.get("layout_slug"))
         layout_obj = layout_map.get(page_layout_slug) if page_layout_slug else None
         page_style_slug = cast(Optional[str], pd.get("style_slug"))
         style_obj = style_map.get(page_style_slug) if page_style_slug else None
-        page_category_slug = cast(Optional[str], pd.get("category_slug"))
-        cat_obj = (
-            category_by_slug.get(page_category_slug) if page_category_slug else None
-        )
-        page = _get_or_create_page(
+        post = _get_or_create_unified_page(
+            post_service,
+            post_repo,
             pd["slug"],
             pd["name"],
             layout_obj,
@@ -1743,23 +1774,24 @@ def populate_cms() -> None:
             content_html=pd.get("content_html"),
             meta_description=pd.get("meta_description"),
             sort_order=pd.get("sort_order", 0),
-            category_id=(cat_obj.id if cat_obj else None),
             robots=pd.get("robots", "index,follow"),
             is_published=pd.get("is_published", True),
         )
-        page_map[pd["slug"]] = page
+        if post:
+            page_map[pd["slug"]] = post
     db.session.commit()
 
-    print("\n── Page Widgets ────────────────────────────────────────────────")
+    print("\n── Page Widgets (cms_post_widget) ──────────────────────────────")
     for pd in pages_data:
         assignments = [
             (a["area_name"], a["widget_slug"])
             for a in pd.get("page_widget_assignments", [])
         ]
-        if assignments:
-            page_for_assign = page_map.get(pd["slug"])
-            if page_for_assign:
-                _set_page_widgets(page_for_assign, assignments, widget_map)
+        post_for_assign = page_map.get(pd["slug"])
+        if assignments and post_for_assign:
+            _set_unified_page_widgets(
+                post_widget_repo, post_for_assign, assignments, widget_map
+            )
     db.session.commit()
 
     print("\n── Routing Rules ───────────────────────────────────────────────")
@@ -1785,8 +1817,8 @@ def populate_cms() -> None:
     else:
         print(f"  ~ routing rule: default → {rule.target_slug} (exists)")
 
-    print("\n── Unified content (cms_post / cms_term) ───────────────────────")
-    _seed_unified_via_services()
+    print("\n── Unified demo content (cms_post / cms_term) ──────────────────")
+    _seed_unified_demo_content(post_service, term_service)
 
     print("\n" + "=" * 55)
     print("✓ CMS demo data population complete")

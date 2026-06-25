@@ -202,26 +202,6 @@ class CmsPlugin(BasePlugin):
                 "[cms] Failed to register SEO pipeline: %s", seo_error
             )
 
-    def _register_cli_commands(self) -> None:
-        """Register the plugin's ``flask cms ...`` CLI group.
-
-        Core declares no cms command (it stays agnostic); the plugin adds its
-        group to the live app's click group on enable. Guarded so a repeat
-        enable (e.g. per-test app) does not raise on a duplicate name.
-        """
-        import logging
-        from flask import current_app
-
-        try:
-            from plugins.cms.src.cli import cms_cli
-
-            if "cms" not in current_app.cli.commands:
-                current_app.cli.add_command(cms_cli)
-        except Exception as cli_error:
-            logging.getLogger(__name__).warning(
-                "[cms] Failed to register CLI commands: %s", cli_error
-            )
-
     def _start_scheduled_publish_tick(self) -> None:
         """Start the scheduled-publish tick — never under TESTING.
 
@@ -276,20 +256,17 @@ class CmsPlugin(BasePlugin):
             )
 
     def _register_demo_seed_hooks(self) -> None:
-        """Contribute CMS seed + backfill to ``flask reset-demo`` (S88).
+        """Contribute the CMS catalog seeder to ``flask reset-demo`` (S88).
 
-        ``seed_catalog`` runs with the other catalog seeders; ``run_backfill``
-        runs as a post-seed hook so it folds EVERY plugin's seeded pages into
-        the unified model after they all exist. Core imports no cms model.
+        ``seed_catalog`` runs with the other catalog seeders and writes the demo
+        content straight into the unified ``cms_post`` / ``cms_term`` model (the
+        legacy ``cms_page`` round-trip + post-seed backfill hook were retired in
+        S105). Core imports no cms model (registry indirection).
         """
-        from vbwd.services.demo_data_registry import (
-            register_catalog_seeder,
-            register_post_seed_hook,
-        )
-        from plugins.cms.src.demo_seed import run_backfill, seed_catalog
+        from vbwd.services.demo_data_registry import register_catalog_seeder
+        from plugins.cms.src.demo_seed import seed_catalog
 
         register_catalog_seeder(seed_catalog)
-        register_post_seed_hook(run_backfill)
 
     def _register_entity_types(self) -> None:
         """Register cms_page / cms_post as taggable/custom-field-able (S77).
@@ -316,7 +293,6 @@ class CmsPlugin(BasePlugin):
 
         self._register_built_in_types()
         self._register_unified_repositories()
-        self._register_cli_commands()
         self._start_scheduled_publish_tick()
         self._register_seo_pipeline()
         self._register_data_exchangers()

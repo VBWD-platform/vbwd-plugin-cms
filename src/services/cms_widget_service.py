@@ -156,7 +156,7 @@ class CmsWidgetService:
     def _in_use_message(widget_id: str, usage: Dict[str, int]) -> str:
         return (
             f"Widget {widget_id} is in use by {usage['layouts']} layout(s), "
-            f"{usage['pages']} page(s), {usage['posts']} post(s)"
+            f"{usage['posts']} post(s)"
         )
 
     def replace_menu_tree(

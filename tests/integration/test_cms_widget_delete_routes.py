@@ -1,16 +1,17 @@
 """Integration: widget deletion never 500s (S68 Bug B), real PG.
 
-Three tables reference ``cms_widget.id`` with ``ondelete=RESTRICT``
-(``cms_layout_widget``, ``cms_page_widget``, ``cms_post_widget``). The old
-delete path guarded only layout assignments, so page-/post-assigned widgets
-hit the RESTRICT FK → uncaught IntegrityError → 500 + poisoned session; bulk
-delete had no guard at all. These tests pin the fixed contract:
+Two tables reference ``cms_widget.id`` with ``ondelete=RESTRICT``
+(``cms_layout_widget``, ``cms_post_widget``; the legacy ``cms_page_widget`` was
+retired in S105). The old delete path guarded only layout assignments, so
+post-assigned widgets hit the RESTRICT FK → uncaught IntegrityError → 500 +
+poisoned session; bulk delete had no guard at all. These tests pin the fixed
+contract:
 
 * unused widget → 200;
-* in-use widget without ``force`` → 409 with per-kind usage counts (layout,
-  page AND post cases), session usable afterwards;
-* ``?force=true`` detaches (join rows deleted) then deletes — the layout /
-  page / post survive, ``cms_menu_item`` rows cascade away;
+* in-use widget without ``force`` → 409 with per-kind usage counts (layout AND
+  post cases), session usable afterwards;
+* ``?force=true`` detaches (join rows deleted) then deletes — the layout / post
+  survive, ``cms_menu_item`` rows cascade away;
 * bulk delete applies the same guard/force per id and reports per-id results.
 
 Data is seeded through services / repositories (no raw SQL); the shared ``db``
@@ -28,8 +29,6 @@ import pytest
 from plugins.cms.src.models.cms_layout import CmsLayout
 from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget
 from plugins.cms.src.models.cms_menu_item import CmsMenuItem
-from plugins.cms.src.models.cms_page import CmsPage
-from plugins.cms.src.models.cms_page_widget import CmsPageWidget
 from plugins.cms.src.models.cms_post import CmsPost
 from plugins.cms.src.models.cms_post_widget import CmsPostWidget
 from plugins.cms.src.models.cms_widget import CmsWidget
@@ -39,9 +38,6 @@ from plugins.cms.src.repositories.cms_layout_widget_repository import (
 )
 from plugins.cms.src.repositories.cms_menu_item_repository import (
     CmsMenuItemRepository,
-)
-from plugins.cms.src.repositories.cms_page_widget_repository import (
-    CmsPageWidgetRepository,
 )
 from plugins.cms.src.repositories.cms_post_widget_repository import (
     CmsPostWidgetRepository,
@@ -87,17 +83,6 @@ def _assign_to_layout(db, widget_id):
     return layout
 
 
-def _assign_to_page(db, widget_id):
-    page = CmsPage(slug=f"page-{uuid.uuid4().hex[:8]}", name="Page")
-    db.session.add(page)
-    db.session.commit()
-    CmsPageWidgetRepository(db.session).replace_for_page(
-        str(page.id),
-        [{"widget_id": str(widget_id), "area_name": "header", "sort_order": 0}],
-    )
-    return page
-
-
 def _assign_to_post(db, widget_id):
     post = CmsPost(type="page", slug=f"post-{uuid.uuid4().hex[:8]}", title="Post")
     db.session.add(post)
@@ -139,26 +124,11 @@ class TestSingleDelete:
         )
         assert follow_up.status_code == 200
 
-    def test_delete_page_assigned_widget_returns_409_not_500(
-        self, client, db, auth_headers
-    ):
-        """Regression: only layout assignments were guarded — a page-assigned
-        widget passed the guard and the RESTRICT FK turned into a 500."""
-        widget = _create_widget(db)
-        _assign_to_page(db, widget.id)
-        response = client.delete(
-            f"/api/v1/admin/cms/widgets/{widget.id}", headers=auth_headers
-        )
-        assert response.status_code == 409, response.get_json()
-        assert response.get_json()["usage"]["pages"] == 1
-        follow_up = client.get(
-            f"/api/v1/admin/cms/widgets/{widget.id}", headers=auth_headers
-        )
-        assert follow_up.status_code == 200
-
     def test_delete_post_assigned_widget_returns_409_not_500(
         self, client, db, auth_headers
     ):
+        """Regression: only layout assignments were guarded — a post-assigned
+        widget passed the guard and the RESTRICT FK turned into a 500."""
         widget = _create_widget(db)
         _assign_to_post(db, widget.id)
         response = client.delete(
@@ -166,6 +136,10 @@ class TestSingleDelete:
         )
         assert response.status_code == 409, response.get_json()
         assert response.get_json()["usage"]["posts"] == 1
+        follow_up = client.get(
+            f"/api/v1/admin/cms/widgets/{widget.id}", headers=auth_headers
+        )
+        assert follow_up.status_code == 200
 
     def test_force_delete_detaches_and_deletes(self, client, db, auth_headers):
         widget = _create_widget(db, widget_type="menu")
@@ -173,7 +147,6 @@ class TestSingleDelete:
             str(widget.id), [{"label": "Home", "url": "/", "sort_order": 0}]
         )
         layout = _assign_to_layout(db, widget.id)
-        page = _assign_to_page(db, widget.id)
         post = _assign_to_post(db, widget.id)
         widget_id = str(widget.id)
 
@@ -184,12 +157,10 @@ class TestSingleDelete:
 
         assert CmsWidgetRepository(db.session).find_by_id(widget_id) is None
         assert _count(db, CmsLayoutWidget, widget_id=widget_id) == 0
-        assert _count(db, CmsPageWidget, widget_id=widget_id) == 0
         assert _count(db, CmsPostWidget, widget_id=widget_id) == 0
         assert _count(db, CmsMenuItem, widget_id=widget_id) == 0
         # The hosts survive — force only un-places the widget.
         assert _count(db, CmsLayout, id=layout.id) == 1
-        assert _count(db, CmsPage, id=page.id) == 1
         assert _count(db, CmsPost, id=post.id) == 1
 
     def test_delete_missing_widget_returns_404(self, client, db, auth_headers):
@@ -205,7 +176,7 @@ class TestBulkDelete:
     ):
         used = _create_widget(db)
         unused = _create_widget(db)
-        _assign_to_page(db, used.id)
+        _assign_to_post(db, used.id)
         used_id, unused_id = str(used.id), str(unused.id)
 
         response = client.post(
@@ -218,7 +189,7 @@ class TestBulkDelete:
         assert body["deleted"] == 1
         by_id = {entry["id"]: entry for entry in body["results"]}
         assert by_id[used_id]["status"] == "blocked"
-        assert by_id[used_id]["usage"]["pages"] == 1
+        assert by_id[used_id]["usage"]["posts"] == 1
         assert by_id[unused_id]["status"] == "deleted"
 
         repository = CmsWidgetRepository(db.session)

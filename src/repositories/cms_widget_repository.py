@@ -1,16 +1,15 @@
 """CmsWidget repository."""
 from typing import Optional, List, Dict, Any
 from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget
-from plugins.cms.src.models.cms_page_widget import CmsPageWidget
 from plugins.cms.src.models.cms_post_widget import CmsPostWidget
 from plugins.cms.src.models.cms_widget import CmsWidget
 
-# The three assignment tables whose FK to cms_widget.id is ondelete=RESTRICT
-# (cms_menu_item is CASCADE and needs no handling here). One source of truth
-# for both the usage counts and the force-delete detach (S68 Bug B).
+# The two assignment tables whose FK to cms_widget.id is ondelete=RESTRICT
+# (cms_menu_item is CASCADE and needs no handling here; the legacy
+# cms_page_widget table was retired in S105). One source of truth for both the
+# usage counts and the force-delete detach (S68 Bug B).
 _ASSIGNMENT_MODELS = {
     "layouts": CmsLayoutWidget,
-    "pages": CmsPageWidget,
     "posts": CmsPostWidget,
 }
 

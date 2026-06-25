@@ -1,9 +1,9 @@
 """Unit: PostService resolves the default style on public reads.
 
-Mirrors CmsPageService._with_resolved_style — since the S47 cutover routes
-both pages and posts through PostService, a post/page WITHOUT an explicit
-style_id must still pick up the admin-designated default style so the public
-renderer can apply it.
+Since the S47 cutover routes both pages and posts through PostService, a
+post/page WITHOUT an explicit style_id must still pick up the admin-designated
+default style so the public renderer can apply it (the legacy page resolver was
+retired in S105).
 
 Engineering requirements (binding, restated): TDD-first; DI (style_repo
 injected); Liskov (absent repo → fields present but null, never a failure);

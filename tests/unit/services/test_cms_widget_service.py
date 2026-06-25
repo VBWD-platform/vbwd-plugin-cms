@@ -9,7 +9,7 @@ from plugins.cms.src.services.cms_widget_service import (
 )
 from plugins.cms.src.models.cms_widget import CmsWidget
 
-NO_USAGE = {"layouts": 0, "pages": 0, "posts": 0}
+NO_USAGE = {"layouts": 0, "posts": 0}
 
 
 def _make_service(widgets=None, menu_items=None, usage=None):
@@ -118,33 +118,21 @@ class TestUpdateWidget:
 class TestDeleteWidget:
     def test_delete_widget_used_in_layout_raises_conflict(self):
         w = _widget()
-        svc, _, _ = _make_service(
-            widgets=[w], usage={"layouts": 1, "pages": 0, "posts": 0}
-        )
-        with pytest.raises(CmsWidgetInUseError):
-            svc.delete_widget(str(w.id))
-
-    def test_delete_widget_used_in_page_raises_conflict(self):
-        """Regression: the old guard checked only layout assignments, so a
-        page-assigned widget fell through to a raw IntegrityError (500)."""
-        w = _widget()
-        svc, _, _ = _make_service(
-            widgets=[w], usage={"layouts": 0, "pages": 2, "posts": 0}
-        )
+        svc, _, _ = _make_service(widgets=[w], usage={"layouts": 1, "posts": 0})
         with pytest.raises(CmsWidgetInUseError):
             svc.delete_widget(str(w.id))
 
     def test_delete_widget_used_in_post_raises_conflict(self):
+        """Regression: the old guard checked only layout assignments, so a
+        post-assigned widget fell through to a raw IntegrityError (500)."""
         w = _widget()
-        svc, _, _ = _make_service(
-            widgets=[w], usage={"layouts": 0, "pages": 0, "posts": 1}
-        )
+        svc, _, _ = _make_service(widgets=[w], usage={"layouts": 0, "posts": 1})
         with pytest.raises(CmsWidgetInUseError):
             svc.delete_widget(str(w.id))
 
     def test_in_use_error_carries_usage_counts(self):
         w = _widget()
-        usage = {"layouts": 1, "pages": 2, "posts": 3}
+        usage = {"layouts": 1, "posts": 3}
         svc, _, _ = _make_service(widgets=[w], usage=usage)
         with pytest.raises(CmsWidgetInUseError) as exc_info:
             svc.delete_widget(str(w.id))
@@ -158,9 +146,7 @@ class TestDeleteWidget:
 
     def test_force_delete_detaches_assignments(self):
         w = _widget()
-        svc, repo, _ = _make_service(
-            widgets=[w], usage={"layouts": 1, "pages": 1, "posts": 1}
-        )
+        svc, repo, _ = _make_service(widgets=[w], usage={"layouts": 1, "posts": 1})
         svc.delete_widget(str(w.id), force=True)
         repo.delete.assert_called_once_with(str(w.id), detach_assignments=True)
 
@@ -181,7 +167,7 @@ class TestBulkDelete:
         unused = _widget(slug="unused")
         svc, repo, _ = _make_service(widgets=[used, unused])
         usage_by_id = {
-            str(used.id): {"layouts": 1, "pages": 0, "posts": 0},
+            str(used.id): {"layouts": 1, "posts": 0},
             str(unused.id): dict(NO_USAGE),
         }
         repo.widget_usage.side_effect = lambda wid: usage_by_id[str(wid)]
@@ -196,9 +182,7 @@ class TestBulkDelete:
 
     def test_bulk_delete_force_deletes_used_widgets(self):
         used = _widget(slug="used")
-        svc, repo, _ = _make_service(
-            widgets=[used], usage={"layouts": 1, "pages": 1, "posts": 0}
-        )
+        svc, repo, _ = _make_service(widgets=[used], usage={"layouts": 1, "posts": 0})
         result = svc.bulk_delete([str(used.id)], force=True)
         assert result["deleted"] == 1
         repo.delete.assert_called_once_with(str(used.id), detach_assignments=True)
