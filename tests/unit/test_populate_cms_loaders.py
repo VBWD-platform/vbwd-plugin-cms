@@ -80,6 +80,7 @@ class TestLayoutLoader:
             "pricing-native-plans",
             "tag-archive",
             "addon-catalog",
+            "cookie-consent",
         }
         assert placed <= seeded_widget_slugs
 
