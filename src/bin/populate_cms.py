@@ -638,7 +638,9 @@ COOKIE_CONSENT_CONFIG = {
     "component_name": "CookieConsent",
     "consent_version": 1,
     "privacy_policy_url": "/privacy",
-    "mode": "modal",
+    "position": "center",  # "center" (popup) | "bottom" (bar)
+    "additional_text": "",
+    "backdrop_opacity": 0.55,  # site "blend" dim, 0..1
     "categories": ["necessary", "statistics", "marketing", "preferences"],
     "show_settings_button": True,
     "debug_mode": False,

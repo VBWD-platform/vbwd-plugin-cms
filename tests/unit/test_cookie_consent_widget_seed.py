@@ -38,7 +38,9 @@ class TestCookieConsentSeed:
     def test_default_config_has_the_documented_shape(self):
         assert COOKIE_CONSENT_CONFIG["component_name"] == "CookieConsent"
         assert COOKIE_CONSENT_CONFIG["consent_version"] == 1
-        assert COOKIE_CONSENT_CONFIG["mode"] == "modal"
+        assert COOKIE_CONSENT_CONFIG["position"] == "center"
+        assert COOKIE_CONSENT_CONFIG["additional_text"] == ""
+        assert COOKIE_CONSENT_CONFIG["backdrop_opacity"] == 0.55
         assert COOKIE_CONSENT_CONFIG["privacy_policy_url"] == "/privacy"
         assert COOKIE_CONSENT_CONFIG["show_settings_button"] is True
         assert COOKIE_CONSENT_CONFIG["debug_mode"] is False
