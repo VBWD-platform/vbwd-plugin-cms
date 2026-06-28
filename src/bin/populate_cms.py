@@ -959,6 +959,10 @@ _LAYOUT_WIDGET_PLACEMENTS: dict[str, list[tuple[str, str]]] = {
         ("header", "header-nav"),
         ("breadcrumbs", "breadcrumbs"),
         ("footer", "footer-nav"),
+        # S87 — GDPR/DSGVO consent overlay. Mounted in its own `consent` vue
+        # area (Teleports to body, so the area is just a mount point); placing
+        # it on the default content-page layout makes it site-wide.
+        ("consent", "cookie-consent"),
     ],
     "ghrm-software-catalogue": [
         ("header", "header-nav"),

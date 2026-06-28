@@ -33,6 +33,11 @@
           "label": "",
           "name": "html-ga",
           "type": "vue"
+        },
+        {
+          "label": "",
+          "name": "consent",
+          "type": "vue"
         }
       ],
       "description": "Standard article/blog/about page with a content area in the middle.",
@@ -66,6 +71,11 @@
           "area_name": "html-ga",
           "sort_order": 0,
           "widget_slug": "google-analytics"
+        },
+        {
+          "area_name": "consent",
+          "sort_order": 0,
+          "widget_slug": "cookie-consent"
         }
       ]
     }
