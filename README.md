@@ -198,6 +198,29 @@ EmailPlugin handler → send notification to recipient_email
 | `429` | Rate limit exceeded |
 | `200` | Also returned for honeypot triggers (to avoid exposing bot detection) |
 
+#### CookieConsent (GDPR/DSGVO)
+
+A client-only GDPR/DSGVO **cookie-consent overlay** driving Google Consent Mode v2.
+The backend adds **no endpoint and no per-widget logic** — it only seeds the
+picker RECORD (`populate_cms._STANDALONE_VUE_WIDGETS`, slug `cookie-consent`); all
+state lives client-side in `localStorage`. Settings ride the `CmsWidget.config`
+JSON (no model or migration change). An admin drops the widget into any layout
+area; it renders as a fixed body overlay, so the area is irrelevant.
+
+| Config key | Type | Default | Description |
+|------------|------|---------|-------------|
+| `component_name` | string | `"CookieConsent"` | Component selector |
+| `consent_version` | number | `1` | Bump to re-prompt every visitor after a policy change |
+| `privacy_policy_url` | string | `"/privacy"` | Linked from the dialog (informed consent) |
+| `mode` | string | `"modal"` | `modal` (blocking) or `banner` (non-blocking) |
+| `categories` | array | `["necessary","statistics","marketing","preferences"]` | Optional buckets shown; `necessary` is always implicit/locked |
+| `show_settings_button` | boolean | `true` | Persistent re-open affordance (withdraw consent) |
+| `debug_mode` | boolean | `false` | Plugin debug toggle |
+
+**Compliance posture:** strictly-necessary flows (login/cart/checkout) are never
+gated — consent gates cookies/scripts via Consent Mode, not routes. Reject is as
+prominent as Accept on layer 1; granular per-category control is on layer 2.
+
 ---
 
 ## CMS Import / Export

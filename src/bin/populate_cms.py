@@ -631,6 +631,19 @@ CONTACT_FORM_CONFIG = {
     ),
 }
 
+# S87 — GDPR/DSGVO Cookie Consent widget. Settings ride the CmsWidget.config
+# JSON (no model/migration change); the fe-admin descriptor edits the same keys.
+# `necessary` is implicit/locked regardless of the list.
+COOKIE_CONSENT_CONFIG = {
+    "component_name": "CookieConsent",
+    "consent_version": 1,
+    "privacy_policy_url": "/privacy",
+    "mode": "modal",
+    "categories": ["necessary", "statistics", "marketing", "preferences"],
+    "show_settings_button": True,
+    "debug_mode": False,
+}
+
 TESTIMONIALS_HTML = """
 <section class="testimonials">
   <div class="container">
@@ -907,6 +920,16 @@ _STANDALONE_VUE_WIDGETS = [
             "default_view": "cards",
             "heading": "",
         },
+    },
+    # S87 — GDPR/DSGVO Cookie Consent. The seed only creates the picker RECORD;
+    # an admin drops it into a layout area (the widget renders as a body overlay,
+    # so the area is irrelevant). No backend endpoint or per-widget logic.
+    {
+        "slug": "cookie-consent",
+        "name": "Cookie Consent (GDPR/DSGVO)",
+        "widget_type": "vue-component",
+        "content_json": {"component": "CookieConsent"},
+        "config": COOKIE_CONSENT_CONFIG,
     },
 ]
 
