@@ -581,6 +581,8 @@ NATIVE_PRICING_CONFIG = {
     "css": NATIVE_PRICING_CSS,
 }
 
+# S109: theme-aware via --vbwd-* roles; light fallbacks == original values so
+# the default theme is visually unchanged on every vertical.
 BREADCRUMBS_CSS = (
     ".cms-breadcrumb {\n"
     "    display: flex;\n"
@@ -588,13 +590,13 @@ BREADCRUMBS_CSS = (
     "    flex-wrap: wrap;\n"
     "    gap: 4px;\n"
     "    font-size: 0.7rem;\n"
-    "    color: #6b7280;\n"
+    "    color: var(--vbwd-text-muted, #6b7280);\n"
     "    padding: 8px 0 0.25rem;\n"
     "}\n"
-    ".cms-breadcrumb a, .cms-breadcrumb__link { color: #3498db; text-decoration: none; }\n"
+    ".cms-breadcrumb a, .cms-breadcrumb__link { color: var(--vbwd-color-primary, #3498db); text-decoration: none; }\n"
     ".cms-breadcrumb a:hover, .cms-breadcrumb__link:hover { text-decoration: underline; }\n"
-    ".cms-breadcrumb__separator { color: #9ca3af; user-select: none; }\n"
-    ".cms-breadcrumb__current { color: #374151; font-weight: 500; }"
+    ".cms-breadcrumb__separator { color: var(--vbwd-text-muted, #9ca3af); user-select: none; }\n"
+    ".cms-breadcrumb__current { color: var(--vbwd-text-body, #374151); font-weight: 500; }"
 )
 
 BREADCRUMBS_CONFIG = {
