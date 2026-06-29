@@ -206,6 +206,70 @@ class TestModelExchangersRoundTrip:
         before = exchanger.export(ExportSelector(ids=[slug]), include_pii=False).rows
         assert before and "is_global" not in before[0]
 
+    def test_importing_new_default_style_demotes_current_default(self, db):
+        # Singleton-default invariant: ix_cms_style_default_singleton allows at
+        # most one is_default=True row. Importing a DIFFERENT-slug default while
+        # one already exists must demote the incumbent, not raise UniqueViolation.
+        incumbent = f"sty-old-{uuid.uuid4().hex[:8]}"
+        incoming = f"sty-new-{uuid.uuid4().hex[:8]}"
+        CmsStyleRepository(db.session).save(
+            CmsStyle(slug=incumbent, name="Old", source_css=".a{}", is_default=True)
+        )
+        db.session.commit()
+
+        exchanger = _exchangers(db.session)["cms_styles"]
+        payload = build_envelope(
+            "cms_styles",
+            [
+                {
+                    "slug": incoming,
+                    "name": "New",
+                    "source_css": ".b{}",
+                    "is_default": True,
+                }
+            ],
+            instance="test",
+        )
+        exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        defaults = (
+            db.session.query(CmsStyle).filter(CmsStyle.is_default.is_(True)).all()
+        )
+        assert [s.slug for s in defaults] == [incoming]
+
+    def test_importing_new_default_layout_demotes_current_default(self, db):
+        incumbent = f"lay-old-{uuid.uuid4().hex[:8]}"
+        incoming = f"lay-new-{uuid.uuid4().hex[:8]}"
+        CmsLayoutRepository(db.session).save(
+            CmsLayout(
+                slug=incumbent,
+                name="Old",
+                areas=[{"name": "content"}],
+                is_default=True,
+            )
+        )
+        db.session.commit()
+
+        exchanger = _exchangers(db.session)["cms_layouts"]
+        payload = build_envelope(
+            "cms_layouts",
+            [
+                {
+                    "slug": incoming,
+                    "name": "New",
+                    "areas": [{"name": "content"}],
+                    "is_default": True,
+                }
+            ],
+            instance="test",
+        )
+        exchanger.import_(payload, mode="upsert", dry_run=False)
+
+        defaults = (
+            db.session.query(CmsLayout).filter(CmsLayout.is_default.is_(True)).all()
+        )
+        assert [layout.slug for layout in defaults] == [incoming]
+
     def _round_trip(self, db, key, slug, model_class, value_field):
         exchanger = _exchangers(db.session)[key]
         before = exchanger.export(ExportSelector(ids=[slug]), include_pii=False).rows

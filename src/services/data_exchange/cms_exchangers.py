@@ -114,6 +114,45 @@ class _CmsModelExchanger(BaseModelExchanger):
         return self._manage_permission
 
 
+class _SingletonDefaultMixin:
+    """Import-side handling for entities with a partial-unique "only one row may
+    have ``is_default=True``" index (``cms_style`` → ``ix_cms_style_default_singleton``,
+    ``cms_layout`` → ``ix_cms_layout_default_singleton``).
+
+    Importing a row flagged ``is_default=True`` whose slug differs from the row
+    that currently holds the default violates that index the moment the new row
+    flushes (two ``is_default=True`` rows coexist) — surfacing as a 500. Before
+    applying such a row we demote the incumbent default(s) and flush, so the
+    singleton invariant holds at every flush boundary. Dry-runs mutate nothing,
+    so they skip the demotion. Last-default-wins when an import carries several.
+    """
+
+    def _import_row(
+        self, row: dict, index: int, result: ImportResult, *, dry_run: bool
+    ) -> None:
+        if not dry_run and row.get("is_default"):
+            self._demote_current_default(row.get(self.natural_key))
+        super()._import_row(row, index, result, dry_run=dry_run)
+
+    def _demote_current_default(self, incoming_key: Any) -> None:
+        model_class = self._model_class
+        current_defaults = (
+            self._session.query(model_class)
+            .filter(model_class.is_default.is_(True))
+            .all()
+        )
+        demoted = False
+        for existing in current_defaults:
+            if getattr(existing, self.natural_key) == incoming_key:
+                continue
+            existing.is_default = False
+            demoted = True
+        if demoted:
+            # Flush the demotion before the incoming default row flushes, so the
+            # partial-unique singleton index never sees two defaults at once.
+            self._session.flush()
+
+
 class _CmsWidgetsExchanger(_CmsModelExchanger):
     """``cms_widgets`` carrying the ``cms_menu_item`` tree of menu widgets.
 
@@ -158,7 +197,12 @@ class _CmsWidgetsExchanger(_CmsModelExchanger):
             self._menu_item_repository.replace_tree(str(widget.id), menu_items)
 
 
-class _CmsLayoutsExchanger(_CmsModelExchanger):
+class _CmsStylesExchanger(_SingletonDefaultMixin, _CmsModelExchanger):
+    """``cms_styles`` — a flat-scalar model exchanger that additionally honours
+    the singleton-default invariant on import (see :class:`_SingletonDefaultMixin`)."""
+
+
+class _CmsLayoutsExchanger(_SingletonDefaultMixin, _CmsModelExchanger):
     """``cms_layouts`` carrying its widget PLACEMENTS (the ``cms_layout_widget``
     rows) by widget slug.
 
@@ -618,7 +662,7 @@ def build_cms_exchangers(
             view_permission=PERM_PAGES_VIEW,
             manage_permission=PERM_LAYOUTS_MANAGE,
         ),
-        _CmsModelExchanger(
+        _CmsStylesExchanger(
             entity_key="cms_styles",
             label="CMS Styles",
             cluster=CMS_CLUSTER,
