@@ -53,11 +53,15 @@ def migration_connection(app):
 
     connection = db.engine.connect()
     transaction = connection.begin()
-    operations = Operations(MigrationContext.configure(connection))
     # Start from a clean slate: the db fixture's create_all() already made
-    # these tables, so drop them before exercising the migration. Tables that
-    # FK cms_post (cms_post_widget / cms_post_content_block, added later in the
-    # cms chain by S55) must drop first so the cms_post drop is unblocked.
+    # these tables, so drop them before exercising the migration. Use CASCADE
+    # so we stay robust to tables OTHER plugins FK onto the unified tables
+    # without this test needing to know about them — e.g. the dataset plugin's
+    # ``dataset_term.term_id -> cms_term`` junction in the aggregated CI DB.
+    # Everything runs inside ``transaction`` and is rolled back at teardown, so
+    # cascading away a foreign table here has no lasting effect.
+    from sqlalchemy import text
+
     for table in (
         "cms_post_widget",
         "cms_post_content_block",
@@ -66,7 +70,7 @@ def migration_connection(app):
         "cms_post",
     ):
         if table in _table_names(connection):
-            operations.drop_table(table)
+            connection.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
     try:
         yield connection
     finally:
