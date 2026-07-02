@@ -1,6 +1,6 @@
 """CMS Pages plugin — pages, categories, and image gallery."""
 from typing import Optional, Dict, Any, Union, TYPE_CHECKING
-from vbwd.plugins.base import BasePlugin, PluginMetadata
+from vbwd.plugins.base import BasePlugin, PluginMetadata, PublicRouteDeclaration
 
 if TYPE_CHECKING:
     from flask import Blueprint
@@ -75,6 +75,40 @@ class CmsPlugin(BasePlugin):
         if config:
             merged.update(config)
         super().initialize(merged)
+
+    def declare_public_routes(self) -> PublicRouteDeclaration:
+        """The public CMS website reads + the anonymous contact form.
+
+        The website (categories, posts, layouts, styles, routing rules, RSS,
+        search, taxonomy, published uploads) and the crawler surfaces
+        (robots.txt, sitemaps) are intentionally reachable pre-login; the
+        contact form accepts an anonymous submission.
+        """
+        return PublicRouteDeclaration(
+            read={
+                "/uploads/<path:filename>": "Public CMS upload serving; published media only.",
+                "/api/v1/cms/categories": "Public CMS category listing for the website.",
+                "/api/v1/cms/embed-manifest": "Public mobile WebView validation probe for the CMS archive (S91).",
+                "/api/v1/cms/layouts/<layout_id>": "Public CMS layout for page rendering.",
+                "/api/v1/cms/layouts/by-slug/<slug>": "Public CMS layout by slug for page rendering.",
+                "/api/v1/cms/posts": "Public published-CMS-posts listing for the website/blog.",
+                "/api/v1/cms/posts/<path:slug>": "Public published CMS post by slug.",
+                "/api/v1/cms/routing-rules": "Public CMS routing rules for the SPA router.",
+                "/api/v1/cms/routing-rules/middleware": "Public CMS middleware routing rules for the SPA router.",
+                "/api/v1/cms/rss.xml": "Public RSS feed for the blog.",
+                "/api/v1/cms/search": "Public CMS post search for the website.",
+                "/api/v1/cms/styles/<style_id>/css": "Public CMS style CSS for page rendering.",
+                "/api/v1/cms/styles/default": "Public default CMS style descriptor.",
+                "/api/v1/cms/styles/default/css": "Public default CMS style CSS.",
+                "/api/v1/cms/terms": "Public CMS taxonomy terms for the website.",
+                "/robots.txt": "Public robots.txt for crawlers.",
+                "/sitemap.xml": "Public sitemap index for crawlers.",
+                "/sitemap-<int:chunk>.xml": "Public paginated sitemap chunk for crawlers.",
+            },
+            mutation={
+                "/api/v1/contact": "Public contact form submission (no account required).",
+            },
+        )
 
     def get_blueprint(self) -> Optional["Blueprint"]:
         from plugins.cms.src.routes import cms_bp

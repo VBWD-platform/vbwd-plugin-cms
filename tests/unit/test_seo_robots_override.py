@@ -68,3 +68,31 @@ def test_mode_off_forces_disallow_all_even_with_custom(robots_app):
 def test_no_config_store_falls_back_to_default(robots_app):
     body = _robots_body(robots_app)
     assert "Disallow: /dashboard" in body
+
+
+def _robots_body_http(app, cms_config=None, seo_mode="on"):
+    """Serve robots.txt over an *http* request (proxy strips TLS to plain http)."""
+    app.config["SEO_MODE"] = seo_mode
+    if cms_config is not None:
+        app.config_store = _FakeConfigStore(cms_config)
+    client = app.test_client()
+    return client.get("/robots.txt", base_url="http://vbwd.cc").get_data(as_text=True)
+
+
+def test_sitemap_line_uses_public_base_url_when_set(robots_app):
+    """The Sitemap directive must reflect the canonical https base, not the
+    (proxy-downgraded http) request scheme — same base the sitemap <loc>s use."""
+    body = _robots_body_http(robots_app, {"public_base_url": "https://vbwd.cc"})
+    assert "Sitemap: https://vbwd.cc/sitemap.xml" in body
+    assert "http://vbwd.cc/sitemap.xml" not in body
+
+
+def test_sitemap_line_strips_trailing_slash_on_public_base_url(robots_app):
+    body = _robots_body_http(robots_app, {"public_base_url": "https://vbwd.cc/"})
+    assert "Sitemap: https://vbwd.cc/sitemap.xml" in body
+
+
+def test_sitemap_line_falls_back_to_request_host_when_unset(robots_app):
+    """No public_base_url configured → preserve the legacy request-host behaviour."""
+    body = _robots_body_http(robots_app, {"public_base_url": ""})
+    assert "Sitemap: http://vbwd.cc/sitemap.xml" in body
