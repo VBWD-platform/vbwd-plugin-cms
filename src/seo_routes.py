@@ -11,6 +11,7 @@ the pre-move behaviour. The routes talk only to the cms-local
 Past ``SITEMAP_URL_CAP`` URLs the sitemap becomes an index pointing at numbered
 chunk files (``/sitemap-<n>.xml``), as the sitemaps.org protocol requires.
 """
+from datetime import datetime, timezone
 from xml.sax.saxutils import escape, quoteattr
 
 from flask import Response, current_app, request
@@ -75,10 +76,46 @@ def _xml_response(body: str) -> Response:
     return Response(body, status=200, mimetype="application/xml")
 
 
+def _w3c_lastmod(value):
+    """Coerce a provider ``lastmod`` to valid W3C Datetime, or drop it.
+
+    Google's Sitemaps report treats the whole file as unreadable when a
+    ``lastmod`` gives a time without a timezone, carries sub-second precision,
+    or is otherwise malformed. Prod ``cms_post.updated_at`` is naive, so its
+    ``.isoformat()`` (``...Thh:mm:ss.ffffff``, no zone) is exactly that. We
+    normalise every entry at this single render choke point:
+
+      * a parseable naive datetime -> assume UTC, drop micros, append ``Z``;
+      * a parseable aware datetime -> keep the offset, drop micros;
+      * a bare ``YYYY-MM-DD`` date -> pass through (already valid);
+      * anything unparseable       -> ``None`` so ``<lastmod>`` is omitted.
+    """
+    if not value:
+        return None
+    text = value.strip()
+    # A bare date is valid W3C Datetime on its own; keep it verbatim.
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        try:
+            datetime.strptime(text, "%Y-%m-%d")
+            return text
+        except ValueError:
+            return None
+    normalised = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalised)
+    except ValueError:
+        return None
+    parsed = parsed.replace(microsecond=0)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return parsed.isoformat()
+
+
 def _render_url_element(entry) -> str:
     parts = [f"  <url>\n    <loc>{escape(entry.loc)}</loc>"]
-    if entry.lastmod:
-        parts.append(f"    <lastmod>{escape(entry.lastmod)}</lastmod>")
+    lastmod = _w3c_lastmod(entry.lastmod)
+    if lastmod:
+        parts.append(f"    <lastmod>{escape(lastmod)}</lastmod>")
     if entry.changefreq:
         parts.append(f"    <changefreq>{escape(entry.changefreq)}</changefreq>")
     if entry.priority:
