@@ -182,6 +182,18 @@ class TestModelExchangersRoundTrip:
         )
         self._round_trip(db, "cms_layouts", slug, CmsLayout, "name")
 
+    def test_layout_head_html_round_trip(self, db):
+        slug = f"lay-head-{uuid.uuid4().hex[:8]}"
+        CmsLayoutRepository(db.session).save(
+            CmsLayout(
+                slug=slug,
+                name="Lay Head",
+                areas=[{"name": "content"}],
+                head_html="<script>window.tracked=1;</script><meta name='x'>",
+            )
+        )
+        self._round_trip(db, "cms_layouts", slug, CmsLayout, "head_html")
+
     def test_style_round_trip(self, db):
         slug = f"sty-{uuid.uuid4().hex[:8]}"
         CmsStyleRepository(db.session).save(

@@ -658,6 +658,7 @@ def build_cms_exchangers(
                 "sort_order",
                 "is_active",
                 "is_default",
+                "head_html",
             ],
             view_permission=PERM_PAGES_VIEW,
             manage_permission=PERM_LAYOUTS_MANAGE,

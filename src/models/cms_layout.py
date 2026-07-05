@@ -32,6 +32,9 @@ class CmsLayout(BaseModel):
     # At most one row has is_default=True, enforced by a partial unique
     # index created in migration 20260606_1100_cms_layout_default.
     is_default = db.Column(db.Boolean, nullable=False, default=False)
+    # Raw HTML injected before </head> on every page using this layout
+    # (scripts, styles, meta/link tags). Rendered verbatim by the public app.
+    head_html = db.Column(db.Text, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -43,6 +46,7 @@ class CmsLayout(BaseModel):
             "sort_order": self.sort_order,
             "is_active": self.is_active,
             "is_default": bool(self.is_default),
+            "head_html": self.head_html,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

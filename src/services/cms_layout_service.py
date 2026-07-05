@@ -122,6 +122,7 @@ class CmsLayoutService:
             "areas",
             "sort_order",
             "is_active",
+            "head_html",
         ):
             if field in data:
                 setattr(obj, field, data[field])
@@ -269,6 +270,7 @@ class CmsLayoutService:
         obj.sort_order = data.get("sort_order", 0)
         obj.is_active = data.get("is_active", True)
         obj.is_default = False
+        obj.head_html = data.get("head_html")
         return obj
 
     def _to_dto(

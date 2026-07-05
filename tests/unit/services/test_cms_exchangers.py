@@ -216,6 +216,7 @@ class TestLayoutsExchangerExportShape:
             sort_order=0,
             is_active=True,
             is_default=True,
+            head_html=None,
         )
         placements = [
             SimpleNamespace(area_name="footer", widget_id="w2", sort_order=0),
@@ -252,6 +253,7 @@ class TestLayoutsExchangerExportShape:
             sort_order=0,
             is_active=True,
             is_default=False,
+            head_html=None,
         )
         layout_widget_repo = MagicMock()
         layout_widget_repo.find_by_layout.return_value = [

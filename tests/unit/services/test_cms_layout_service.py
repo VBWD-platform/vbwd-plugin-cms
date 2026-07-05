@@ -118,6 +118,34 @@ class TestCreateLayout:
             svc.create_layout({"areas": VALID_AREAS})
 
 
+class TestHeadHtml:
+    def test_create_layout_persists_head_html(self):
+        svc, _, _ = _make_service()
+        result = svc.create_layout(
+            {
+                "name": "With Head",
+                "areas": VALID_AREAS,
+                "head_html": "<meta name='x' content='y'>",
+            }
+        )
+        assert result["head_html"] == "<meta name='x' content='y'>"
+
+    def test_create_layout_head_html_defaults_to_none(self):
+        svc, _, _ = _make_service()
+        result = svc.create_layout({"name": "No Head", "areas": VALID_AREAS})
+        assert result["head_html"] is None
+
+    def test_update_layout_persists_head_html(self):
+        layout = _layout()
+        svc, _, _ = _make_service(layouts=[layout])
+        result = svc.update_layout(
+            str(layout.id),
+            {"head_html": "<script>window.x=1;</script>"},
+        )
+        assert result["head_html"] == "<script>window.x=1;</script>"
+        assert layout.head_html == "<script>window.x=1;</script>"
+
+
 class TestWidgetAssignments:
     def test_set_widget_assignments_replaces_atomically(self):
         layout = _layout()
