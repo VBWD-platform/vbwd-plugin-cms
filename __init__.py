@@ -469,6 +469,7 @@ class CmsPlugin(BasePlugin):
             geo_block_mw = CmsGeoBlockMiddleware(
                 service=service,
                 token_signer=GeoBypassTokenSigner(secret),
+                session=db.session,
             )
             current_app.before_request(geo_block_mw.before_request)
         except Exception as exc:

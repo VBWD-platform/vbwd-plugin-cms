@@ -8,6 +8,7 @@ DRY; Liskov; clean code; no overengineering. Quality guard:
 ``bin/pre-commit-check.sh --plugin cms --full``.
 """
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from flask import Flask, g
@@ -155,7 +156,7 @@ def test_empty_slug_returns_451(app):
     assert result.headers["Cache-Control"] == "private, no-store"
 
 
-def _raising_config_middleware(exception):
+def _raising_config_middleware(exception, session=None):
     """Middleware whose service.get_config() raises (regression: prod outage)."""
 
     def _raise():
@@ -163,7 +164,9 @@ def _raising_config_middleware(exception):
 
     service = SimpleNamespace(get_config=_raise, allowed_codes=lambda: set())
     return CmsGeoBlockMiddleware(
-        service=service, token_signer=GeoBypassTokenSigner(SECRET)
+        service=service,
+        token_signer=GeoBypassTokenSigner(SECRET),
+        session=session,
     )
 
 
@@ -184,3 +187,30 @@ def test_config_read_failure_fails_open(app):
 def test_config_read_failure_fails_open_for_any_exception(app):
     mw = _raising_config_middleware(RuntimeError("boom"))
     assert _run(app, mw, "/api/v1/health", country=None) is None
+
+
+def test_config_read_failure_rolls_back_session(app):
+    """The poisoned transaction must be rolled back on the fail-open path.
+
+    Regression guard: a failing ``get_config()`` (e.g. missing
+    ``cms_geo_block_config`` table) left the scoped session in an aborted
+    transaction (``InFailedSqlTransaction``), so every subsequent query in the
+    same request — the currency lookup on ``/api/v1/config`` and the user lookup
+    on ``/api/v1/auth/login`` — then 500'd, taking down the whole API. Passing
+    through is not enough; the session must be cleaned up.
+    """
+    session = Mock()
+    mw = _raising_config_middleware(RuntimeError("boom"), session=session)
+
+    assert _run(app, mw, "/some-page", country="DE") is None
+    session.rollback.assert_called_once_with()
+
+
+def test_rollback_failure_is_swallowed_and_still_passes_through(app):
+    """A failing rollback must not propagate; the request still passes through."""
+    session = Mock()
+    session.rollback.side_effect = RuntimeError("rollback exploded")
+    mw = _raising_config_middleware(RuntimeError("boom"), session=session)
+
+    assert _run(app, mw, "/some-page", country="DE") is None
+    session.rollback.assert_called_once_with()

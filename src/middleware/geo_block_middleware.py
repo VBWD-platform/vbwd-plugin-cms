@@ -55,9 +55,10 @@ _STATIC_ASSET_EXTENSIONS = (
 class CmsGeoBlockMiddleware:
     """Enforces the singleton geo-block config on every public request."""
 
-    def __init__(self, service, token_signer) -> None:
+    def __init__(self, service, token_signer, session=None) -> None:
         self._service = service
         self._token_signer = token_signer
+        self._session = session
 
     def before_request(self) -> Optional[Any]:
         try:
@@ -72,6 +73,13 @@ class CmsGeoBlockMiddleware:
                 "(geo-blocking not enforced)",
                 exc_info=True,
             )
+            # A failed query leaves the scoped session in an aborted transaction
+            # (``InFailedSqlTransaction``). Every subsequent query in this same
+            # request (currency lookup on ``/api/v1/config``, user lookup on
+            # ``/api/v1/auth/login``) would then 500. Roll back to clear it so
+            # the request can proceed. Guard the rollback itself: if it fails we
+            # still pass through rather than propagate a new error.
+            self._rollback_poisoned_transaction()
             return None
 
         if not config.is_enabled:
@@ -96,6 +104,17 @@ class CmsGeoBlockMiddleware:
             return None
 
         return self._block_response(config)
+
+    def _rollback_poisoned_transaction(self) -> None:
+        if self._session is None:
+            return
+        try:
+            self._session.rollback()
+        except Exception:
+            logger.warning(
+                "Geo-block fail-open rollback failed; passing request through",
+                exc_info=True,
+            )
 
     # ── passthrough ───────────────────────────────────────────────────────────
 
