@@ -90,6 +90,31 @@ def _public_base_url() -> str:
         return ""
 
 
+_DEFAULT_HOME_SLUG = "index"
+
+
+def _home_slug() -> str:
+    """Resolve the cms ``home_slug`` from live config (lazy, S120).
+
+    Read per call (mirroring ``_public_base_url``) so the prerender derives the
+    ROOT canonical (``<base>/``) for the home post when its ``canonical_url``
+    column is empty. Defaults to ``index`` when no app/config is available.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return _DEFAULT_HOME_SLUG
+        cfg = config_store.get_config("cms") or {}
+        return str(cfg.get("home_slug") or _DEFAULT_HOME_SLUG).strip() or (
+            _DEFAULT_HOME_SLUG
+        )
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] home_slug lookup failed: %s", exc)
+        return _DEFAULT_HOME_SLUG
+
+
 def _global_head_html() -> str:
     """Resolve the cms ``global_head_html`` raw setting from live config (lazy).
 
@@ -379,6 +404,8 @@ def _build_writer() -> SeoPrerenderWriter:
         ),
         global_head_html_resolver=_global_head_html,
         minifier=PrerenderMinifier() if _minify_prerender_output() else None,
+        public_base_url=_public_base_url(),
+        home_slug=_home_slug(),
     )
 
 

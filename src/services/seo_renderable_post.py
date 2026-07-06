@@ -10,6 +10,8 @@ The meta-builder consumes the agnostic ``SeoRenderable`` protocol, never a
 from dataclasses import dataclass
 from typing import List, Optional
 
+from plugins.cms.src.services.seo_canonical import derive_canonical_url
+
 WEBPAGE_SCHEMA_TYPE = "WebPage"
 NOINDEX_ROBOTS = "noindex,nofollow"
 
@@ -30,6 +32,8 @@ class RenderablePost:
         post,
         siblings: Optional[List[RenderableSibling]] = None,
         robots_override: Optional[str] = None,
+        public_base_url: str = "",
+        home_slug: Optional[str] = None,
     ) -> None:
         self._post = post
         self.slug = post.slug
@@ -41,7 +45,14 @@ class RenderablePost:
         self.og_title = post.og_title
         self.og_description = post.og_description
         self.og_image_url = post.og_image_url
-        self.canonical_url = post.canonical_url
+        # A stored ``canonical_url`` is an OVERRIDE; when empty the effective
+        # canonical is ``public_base_url + <path>`` (the same rule the sitemap
+        # provider applies, so meta and sitemap agree). The pure meta-builder
+        # then just reads ``renderable.canonical_url`` — no ``public_base_url``
+        # plumbed into it.
+        self.canonical_url = derive_canonical_url(
+            post.canonical_url, post.slug, public_base_url, home_slug
+        )
         self.schema_json = post.schema_json
         self.schema_type = WEBPAGE_SCHEMA_TYPE
         self.robots = robots_override or post.robots

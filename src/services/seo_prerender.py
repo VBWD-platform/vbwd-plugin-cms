@@ -71,6 +71,8 @@ class SeoPrerenderWriter:
         full_page_renderer: Optional[IFullPageRenderer] = None,
         global_head_html_resolver: Optional[Callable[[], str]] = None,
         minifier: Optional[PrerenderMinifier] = None,
+        public_base_url: str = "",
+        home_slug: Optional[str] = None,
     ) -> None:
         self._filesystem_manager = filesystem_manager or LocalFilesystemManager(
             var_root=var_dir
@@ -97,6 +99,13 @@ class SeoPrerenderWriter:
         # before the write. Injected (DI) — absent/None ⇒ today's exact pretty-
         # printed bytes are emitted (behaviour-preserving default, Liskov-safe).
         self._minifier = minifier
+        # Used to derive the EFFECTIVE canonical URL for a post whose stored
+        # ``canonical_url`` column is empty: ``public_base_url + <path>`` (the
+        # SAME rule the sitemap provider applies, so meta and sitemap agree).
+        # Resolved here (where the base URL is available) and set on the
+        # renderable so the pure meta-builder stays base-URL agnostic.
+        self._public_base_url = public_base_url
+        self._home_slug = home_slug
 
     # ── event entry point ────────────────────────────────────────────────
 
@@ -159,9 +168,13 @@ class SeoPrerenderWriter:
             post,
             siblings=[RenderableSibling(s.language, s.canonical_url) for s in siblings],
             robots_override=robots_override,
+            public_base_url=self._public_base_url,
+            home_slug=self._home_slug,
         )
         head_tags, json_ld = build_meta(renderable)
-        document = self._render_document(post, head_tags, json_ld, robots_override)
+        document = self._render_document(
+            post, renderable, head_tags, json_ld, robots_override
+        )
         if self._minifier is not None:
             document = self._minifier.minify(document)
 
@@ -184,7 +197,7 @@ class SeoPrerenderWriter:
     # ── document template ────────────────────────────────────────────────
 
     def _render_document(
-        self, post, head_tags: List[str], json_ld: dict, robots_override
+        self, post, renderable, head_tags: List[str], json_ld: dict, robots_override
     ) -> str:
         payload = {
             "slug": post.slug,
@@ -192,7 +205,10 @@ class SeoPrerenderWriter:
             "content_html": post.content_html or "",
             "seo": {
                 "robots": robots_override or post.robots,
-                "canonical_url": post.canonical_url,
+                # The EFFECTIVE canonical (stored override, else derived) so the
+                # SPA's client meta-injection agrees with the server-rendered
+                # ``<link rel="canonical">`` instead of re-nulling it on hydrate.
+                "canonical_url": renderable.canonical_url,
                 "meta_description": post.meta_description,
             },
         }

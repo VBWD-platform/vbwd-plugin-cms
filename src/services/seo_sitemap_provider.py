@@ -13,6 +13,7 @@ without importing the ORM here.
 """
 from typing import Callable, List, Optional
 
+from plugins.cms.src.services.seo_canonical import derive_canonical_url
 from plugins.cms.src.services.seo_registry import SitemapEntry
 from plugins.cms.src.services.seo_scope import page_is_search_visible
 
@@ -73,10 +74,12 @@ class CmsSitemapProvider:
         return (self._public_base_url_provider() or "").rstrip("/")
 
     def _loc_for(self, canonical_url: Optional[str], slug: Optional[str]) -> str:
-        """Absolute URL for a post: stored canonical, else base + slug."""
-        if canonical_url:
-            return canonical_url
-        return f"{self._public_base_url()}/{(slug or '').lstrip('/')}"
+        """Absolute URL for a post: stored canonical, else base + slug.
+
+        Delegates to the shared ``derive_canonical_url`` rule (DRY) so the
+        sitemap ``loc`` and the prerender canonical/JSON-LD ``url`` agree.
+        """
+        return derive_canonical_url(canonical_url, slug, self._public_base_url())
 
     def _entry_for(self, post) -> SitemapEntry:
         siblings = self._post_loader.siblings_for(post)
