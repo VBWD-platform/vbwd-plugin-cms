@@ -72,6 +72,46 @@ def test_key_file_404_when_key_empty(client, _reset_indexnow_config):
     assert response.status_code == 404
 
 
+def test_key_file_not_shadowed_by_catch_all_routing_rule(
+    client, db, _reset_indexnow_config
+):
+    """A live catch-all rewrite rule must not shadow the IndexNow key file.
+
+    Reproduces the production bug: the ``default → /home`` middleware rewrite
+    matched ``GET /<key>.txt`` first and returned a 200 with an
+    ``X-Accel-Redirect: /home`` header, serving the home page instead of the
+    key. With the routing-middleware passthrough fix the request reaches the
+    ``indexnow_key_file`` route: 200, ``text/plain`` body == the key, and NO
+    ``X-Accel-Redirect`` header.
+    """
+    from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
+    from plugins.cms.src.repositories.routing_rule_repository import (
+        CmsRoutingRuleRepository,
+    )
+
+    _set_indexnow(_reset_indexnow_config, enabled=True, key=_KEY)
+
+    catch_all_rewrite = CmsRoutingRule(
+        name="catch-all-home",
+        is_active=True,
+        priority=0,
+        match_type="default",
+        match_value=None,
+        target_slug="/home",
+        redirect_code=302,
+        is_rewrite=True,
+        layer="middleware",
+    )
+    CmsRoutingRuleRepository(db.session).save(catch_all_rewrite)
+
+    response = client.get(f"/{_KEY}.txt")
+
+    assert response.status_code == 200
+    assert "text/plain" in response.content_type
+    assert response.get_data(as_text=True) == _KEY
+    assert "X-Accel-Redirect" not in response.headers
+
+
 def test_robots_txt_not_shadowed_by_key_file_route(client, _reset_indexnow_config):
     # Even with IndexNow enabled, the explicit /robots.txt route still wins.
     _set_indexnow(_reset_indexnow_config, enabled=True, key=_KEY)

@@ -1,4 +1,5 @@
 """CmsRoutingMiddleware — Flask before_request hook for URL routing."""
+import re
 from typing import Any, Optional
 
 from flask import request, redirect, Response, g
@@ -11,11 +12,23 @@ _PASSTHROUGH_PREFIXES = ("/api/", "/admin/", "/uploads/", "/_vbwd/")
 _PASSTHROUGH_EXACT = ("/robots.txt", "/sitemap.xml")
 _PASSTHROUGH_SITEMAP_CHUNK = "/sitemap-"
 
+# IndexNow verification file, served at the site root by ``indexnow_key_file``
+# (``cms_bp`` has no url_prefix). This MUST mirror the nginx location regex in
+# ``vbwd-fe-user/nginx.prod.conf.template`` EXACTLY — 8-128 chars of
+# ``[A-Za-z0-9-]`` then ``.txt`` — so a catch-all routing/geo rule can never
+# shadow it. All matching ``<key>.txt`` paths pass through here; the route
+# itself 404s any key that is not the configured one (exactly as nginx passes
+# every candidate to the backend). ``/robots.txt`` (6 chars) does not match, so
+# its explicit exact passthrough above still applies with no conflict.
+_INDEXNOW_KEY_FILE_PATTERN = re.compile(r"^/[A-Za-z0-9-]{8,128}\.txt$")
+
 
 def _is_passthrough(path: str) -> bool:
     if path in _PASSTHROUGH_EXACT:
         return True
     if path.startswith(_PASSTHROUGH_SITEMAP_CHUNK) and path.endswith(".xml"):
+        return True
+    if _INDEXNOW_KEY_FILE_PATTERN.match(path):
         return True
     return any(path.startswith(p) for p in _PASSTHROUGH_PREFIXES)
 

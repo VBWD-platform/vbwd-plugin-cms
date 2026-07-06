@@ -38,6 +38,31 @@ def test_is_passthrough_core_seo_endpoints():
     assert _is_passthrough("/sitemap-42.xml") is True
 
 
+def test_is_passthrough_indexnow_key_file():
+    """IndexNow key file ``/<key>.txt`` must reach its root route, not be routed.
+
+    Mirrors the nginx location regex ``^/[A-Za-z0-9-]{8,128}\\.txt$`` so a
+    catch-all rewrite rule can never shadow the ``indexnow_key_file`` route.
+    """
+    # A real 32-hex IndexNow key (the reproduced-live case).
+    assert _is_passthrough("/a58ccd1812b4da6e72036f9103fb2d65.txt") is True
+    # Minimum-length (8-char) and hyphen-bearing keys still pass through.
+    assert _is_passthrough("/abcd1234.txt") is True
+    assert _is_passthrough("/some-8char-key.txt") is True
+
+
+def test_is_passthrough_rejects_non_key_txt_paths():
+    """Only the strict 8-128 key pattern passes; ordinary slugs are still routed."""
+    # Too short (7 chars) — not a key file; must be routed like any slug.
+    assert _is_passthrough("/abcdef1.txt") is False
+    # A normal page slug is not a passthrough.
+    assert _is_passthrough("/some-page") is False
+    # A slug that merely ends in .txt but contains a dot/underscore is not the
+    # strict key pattern.
+    assert _is_passthrough("/my.page.txt") is False
+    assert _is_passthrough("/some_page.txt") is False
+
+
 # ── CmsRoutingMiddleware.before_request ───────────────────────────────────────
 
 
@@ -78,6 +103,28 @@ def test_middleware_redirect():
     assert result is not None
     assert result.status_code == 302
     assert "/home-de" in result.headers.get("Location", "")
+
+
+def test_middleware_does_not_shadow_indexnow_key_file():
+    """A catch-all rewrite must NOT shadow the ``/<key>.txt`` root route.
+
+    Before the passthrough fix, ``before_request`` evaluated the rule and
+    returned an ``X-Accel-Redirect`` 200, shadowing ``indexnow_key_file`` so the
+    key file served the home page. The path must now pass through untouched
+    (``evaluate`` never called).
+    """
+    svc = MagicMock()
+    svc.evaluate.return_value = RedirectInstruction(
+        location="/home",
+        code=200,
+        is_rewrite=True,
+    )
+    mw = CmsRoutingMiddleware(svc)
+    app = _make_app()
+    with app.test_request_context("/a58ccd1812b4da6e72036f9103fb2d65.txt"):
+        result = mw.before_request()
+    assert result is None
+    svc.evaluate.assert_not_called()
 
 
 def test_middleware_rewrite_returns_x_accel():
