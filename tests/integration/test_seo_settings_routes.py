@@ -162,6 +162,92 @@ def test_global_head_html_persists_and_merges(client, db, admin_headers):
     assert got["robots_txt"] == "User-agent: *\nDisallow: /keep\n"
 
 
+def test_serving_and_minify_settings_persist_and_merge(client, db, admin_headers):
+    """S117: the serve-to-humans + minify + exclude-prefixes keys round-trip
+    via GET/PUT and merge into the cms config without clobbering existing keys."""
+    store = current_app.config_store
+    config = store.get_config("cms") or {}
+    config["robots_txt"] = "User-agent: *\nDisallow: /keep\n"
+    config["global_head_html"] = '<meta name="msvalidate.01" content="KEEP" />'
+    store.save_config("cms", config)
+
+    payload = {
+        "seo_serve_to_humans": True,
+        "minify_prerender_output": True,
+        "seo_serve_exclude_prefixes": "dashboard,checkout,cart,account",
+    }
+    put = client.put(SETTINGS_URL, json=payload, headers=admin_headers)
+    assert put.status_code == 200
+    body = put.get_json()
+    assert body["seo_serve_to_humans"] is True
+    assert body["minify_prerender_output"] is True
+    assert body["seo_serve_exclude_prefixes"] == "dashboard,checkout,cart,account"
+
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["seo_serve_to_humans"] is True
+    assert got["minify_prerender_output"] is True
+    assert got["seo_serve_exclude_prefixes"] == "dashboard,checkout,cart,account"
+    # Existing SEO keys are untouched by the merge.
+    assert got["robots_txt"] == "User-agent: *\nDisallow: /keep\n"
+    assert got["global_head_html"] == '<meta name="msvalidate.01" content="KEEP" />'
+
+
+def test_serving_defaults_when_unset(client, db, admin_headers):
+    """The new serving keys default to the safe (behaviour-preserving) values."""
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["seo_serve_to_humans"] is False
+    assert got["minify_prerender_output"] is False
+    assert got["seo_serve_exclude_prefixes"] == "dashboard,checkout,cart"
+
+
+def test_dynamic_render_settings_persist_and_merge(client, db, admin_headers):
+    """S118: the dynamic-render keys round-trip via GET/PUT and merge into the
+    cms config without clobbering existing keys; the TTL is coerced to a
+    positive int (a non-positive/invalid value falls back to the default)."""
+    store = current_app.config_store
+    config = store.get_config("cms") or {}
+    config["robots_txt"] = "User-agent: *\nDisallow: /keep\n"
+    store.save_config("cms", config)
+
+    payload = {
+        "seo_dynamic_render_enabled": True,
+        "seo_render_internal_token": "shared-secret",
+        "seo_render_cache_ttl_seconds": 600,
+    }
+    put = client.put(SETTINGS_URL, json=payload, headers=admin_headers)
+    assert put.status_code == 200
+    body = put.get_json()
+    assert body["seo_dynamic_render_enabled"] is True
+    assert body["seo_render_internal_token"] == "shared-secret"
+    assert body["seo_render_cache_ttl_seconds"] == 600
+
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["seo_dynamic_render_enabled"] is True
+    assert got["seo_render_internal_token"] == "shared-secret"
+    assert got["seo_render_cache_ttl_seconds"] == 600
+    # The merge preserved the previously-saved robots_txt.
+    assert got["robots_txt"] == "User-agent: *\nDisallow: /keep\n"
+
+
+def test_dynamic_render_ttl_falls_back_on_invalid(client, db, admin_headers):
+    """A non-positive / non-numeric TTL is coerced to the shipped default."""
+    client.put(
+        SETTINGS_URL,
+        json={"seo_render_cache_ttl_seconds": 0},
+        headers=admin_headers,
+    )
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["seo_render_cache_ttl_seconds"] == 3600
+
+
+def test_dynamic_render_defaults_when_unset(client, db, admin_headers):
+    """The new dynamic-render keys default to the safe (disabled) values."""
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["seo_dynamic_render_enabled"] is False
+    assert got["seo_render_internal_token"] == ""
+    assert got["seo_render_cache_ttl_seconds"] == 3600
+
+
 def test_put_ignores_unknown_keys_and_coerces_types(client, db, admin_headers):
     payload = {
         "robots_txt": 123,

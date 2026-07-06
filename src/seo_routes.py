@@ -11,6 +11,7 @@ the pre-move behaviour. The routes talk only to the cms-local
 Past ``SITEMAP_URL_CAP`` URLs the sitemap becomes an index pointing at numbered
 chunk files (``/sitemap-<n>.xml``), as the sitemaps.org protocol requires.
 """
+import hmac
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape, quoteattr
 
@@ -18,6 +19,10 @@ from flask import Response, current_app, request
 
 from plugins.cms.src.routes import cms_bp
 from plugins.cms.src.services.seo_registry import aggregate_sitemap_entries
+
+# The header nginx (increment 2) injects with the shared secret when it routes a
+# bot request to the internal render route.
+_RENDER_TOKEN_HEADER = "X-VBWD-Render-Token"
 
 # sitemaps.org caps a single sitemap at 50,000 URLs; past that we emit an index.
 SITEMAP_URL_CAP = 50000
@@ -181,6 +186,40 @@ def sitemap_chunk(chunk: int):
     if chunk < 1 or chunk > len(chunks):
         return _xml_response(_render_urlset([]))
     return _xml_response(_render_urlset(chunks[chunk - 1]))
+
+
+@cms_bp.route("/api/v1/cms/_seo-render", methods=["GET"])
+def seo_dynamic_render():
+    """GET /_seo-render?path=… — on-demand full-page render for the nginx bot branch.
+
+    Renders (or serves from cache) the full static HTML of the fe-user SPA at
+    ``path``. On a render miss it returns **502** so nginx falls back to the SPA
+    shell (the site never 5xx's on a render miss).
+
+    Abuse guard: triggering headless renders from a public URL is a DoS vector,
+    so the route requires the ``X-VBWD-Render-Token`` shared secret (injected by
+    nginx). A missing/wrong token — or an empty configured token, or the feature
+    switched off / no renderer URL — returns **404** (the route is not revealed).
+    """
+    from plugins.cms.src.services.seo_wiring import (
+        build_dynamic_render_service,
+        seo_dynamic_render_available,
+        seo_render_internal_token,
+    )
+
+    token = seo_render_internal_token()
+    provided = request.headers.get(_RENDER_TOKEN_HEADER, "")
+    if not token or not hmac.compare_digest(provided, token):
+        return Response("", status=404)
+
+    if not seo_dynamic_render_available():
+        return Response("", status=404)
+
+    path = request.args.get("path") or "/"
+    html = build_dynamic_render_service().render(path)
+    if html is None:
+        return Response("", status=502)
+    return Response(html, status=200, mimetype="text/html")
 
 
 @cms_bp.route("/robots.txt", methods=["GET"])

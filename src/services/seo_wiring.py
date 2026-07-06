@@ -27,6 +27,9 @@ from plugins.cms.src.services.seo_asset_stamp import (
 from plugins.cms.src.services.seo_full_page_renderer import (
     HttpFullPageRenderer,
 )
+from plugins.cms.src.services.dynamic_render_service import DynamicRenderService
+from plugins.cms.src.services.render_cache import InMemoryTtlRenderCache
+from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
 from plugins.cms.src.services.seo_post_loader import SeoPostLoader
 from plugins.cms.src.services.seo_prerender import SeoPrerenderWriter
 from plugins.cms.src.services.seo_sitemap_provider import CmsSitemapProvider
@@ -181,6 +184,129 @@ def _seo_prerender_enabled() -> bool:
         return True
 
 
+def _minify_prerender_output() -> bool:
+    """Resolve the cms ``minify_prerender_output`` toggle from live config (lazy).
+
+    Read per call (mirroring ``_seo_prerender_enabled``) so flipping the admin
+    checkbox takes effect on the next prerender without re-enabling the plugin.
+    When on, the writer minifies the inline ``<style>``/``<script>`` blocks and
+    collapses inter-tag whitespace in the emitted file. Defaults to ``False``
+    when no app/config is available so existing behaviour (pretty output) is
+    preserved.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return False
+        cfg = config_store.get_config("cms") or {}
+        return bool(cfg.get("minify_prerender_output", False))
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] minify_prerender_output lookup failed: %s", exc)
+        return False
+
+
+_DEFAULT_RENDER_CACHE_TTL_SECONDS = 3600
+
+
+def _seo_dynamic_render_enabled() -> bool:
+    """Resolve the cms ``seo_dynamic_render_enabled`` toggle from live config.
+
+    Master switch (read per call) for the on-demand full-page render served by
+    the internal ``/_seo-render`` route. Defaults to ``False`` (off) so the
+    route is disabled unless an operator opts in.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return False
+        cfg = config_store.get_config("cms") or {}
+        return bool(cfg.get("seo_dynamic_render_enabled", False))
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] seo_dynamic_render_enabled lookup failed: %s", exc)
+        return False
+
+
+def _seo_render_internal_token() -> str:
+    """Resolve the cms ``seo_render_internal_token`` shared secret (live config).
+
+    nginx (increment 2) injects it as ``X-VBWD-Render-Token`` when it routes a
+    bot to the internal render route; an empty token disables the route (there
+    is no valid secret to match). Read per call. Returns ``""`` when no
+    app/config is available.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return ""
+        cfg = config_store.get_config("cms") or {}
+        return str(cfg.get("seo_render_internal_token", "") or "")
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] seo_render_internal_token lookup failed: %s", exc)
+        return ""
+
+
+def _seo_render_cache_ttl_seconds() -> int:
+    """Resolve the cms ``seo_render_cache_ttl_seconds`` from live config (lazy).
+
+    TTL applied to a cached on-demand render. Read per call so an admin's change
+    takes effect on the next cache write. Falls back to the shipped default when
+    unset or non-numeric.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return _DEFAULT_RENDER_CACHE_TTL_SECONDS
+        cfg = config_store.get_config("cms") or {}
+        return int(
+            cfg.get("seo_render_cache_ttl_seconds", _DEFAULT_RENDER_CACHE_TTL_SECONDS)
+        )
+    except (TypeError, ValueError):
+        return _DEFAULT_RENDER_CACHE_TTL_SECONDS
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] seo_render_cache_ttl_seconds lookup failed: %s", exc)
+        return _DEFAULT_RENDER_CACHE_TTL_SECONDS
+
+
+# One process-wide render cache shared by every DynamicRenderService instance so
+# a hit on one request is served to the next (the service itself is cheap and
+# rebuilt per call; the cache is the stateful collaborator).
+_render_cache = InMemoryTtlRenderCache()
+
+
+def seo_render_internal_token() -> str:
+    """Public accessor: the shared secret the internal render route validates."""
+    return _seo_render_internal_token()
+
+
+def seo_dynamic_render_available() -> bool:
+    """True when on-demand render is enabled AND a renderer URL is configured.
+
+    The internal render route serves 404 (disabled) unless both hold.
+    """
+    return _seo_dynamic_render_enabled() and bool(_prerender_service_url())
+
+
+def build_dynamic_render_service() -> DynamicRenderService:
+    """Assemble the on-demand render service (shared cache, lazy config)."""
+    return DynamicRenderService(
+        render_client=HttpFullPageRenderer(
+            prerender_service_url=_prerender_service_url()
+        ),
+        cache=_render_cache,
+        minifier=PrerenderMinifier(),
+        minify_enabled=_minify_prerender_output,
+        cache_ttl_seconds=_seo_render_cache_ttl_seconds,
+    )
+
+
 def _canonical_is_rewritten(slug: str) -> bool:
     """True if an active rewrite rule targets this canonical slug (cloaking).
 
@@ -250,6 +376,7 @@ def _build_writer() -> SeoPrerenderWriter:
             prerender_service_url=_prerender_service_url()
         ),
         global_head_html_resolver=_global_head_html,
+        minifier=PrerenderMinifier() if _minify_prerender_output() else None,
     )
 
 
@@ -318,6 +445,97 @@ def _on_content_changed(_event_name: str, data: dict) -> None:
         logger.warning("[cms.seo] prerender failed for %s: %s", data, exc)
 
 
+# ── on-demand render-cache invalidation (S118 Track B, increment 4) ──────────
+#
+# The same process-wide cache the ``/_seo-render`` route serves from is purged on
+# a domain change so a bot never receives a stale page. The invalidation
+# subscribers are a no-op unless on-demand render is available (enabled AND a
+# renderer URL is configured) — mirroring how the writer guards on its toggle.
+
+# Payload keys another vertical MAY carry a canonical public path in. The cms
+# plugin never COMPUTES another vertical's URL (core-agnostic); it only reads a
+# path the emitter chose to publish, else purges coarsely.
+_RENDER_PATH_PAYLOAD_KEYS = ("path", "url", "canonical")
+
+# Other verticals' change events that should purge the render cache. Subscribed
+# by NAME string only (no cross-plugin import), so the cms plugin stays agnostic.
+# ``booking.*``/``dataset.*`` list the VERIFIED emitter names plus the sprint's
+# documented ``<domain>.changed`` alias; ``product.changed``/``ghrm.changed`` are
+# the documented contract names (no emitter today — see the increment report).
+_VERTICAL_CHANGE_EVENTS = (
+    "product.changed",
+    "booking.changed",
+    "booking.created",
+    "booking.cancelled",
+    "booking.cancelled_by_provider",
+    "booking.rescheduled",
+    "booking.completed",
+    "dataset.changed",
+    "dataset.new",
+    "dataset.updated",
+    "ghrm.changed",
+)
+
+
+def _public_path_for_slug(slug: Optional[str]) -> str:
+    """Derive a post's public path the same way the prerender writer keys files.
+
+    ``/`` for the home/empty slug, else ``/<slug>`` (leading/trailing slashes
+    normalised). ``DynamicRenderService`` re-normalises the key, so equivalent
+    forms collapse to one cache entry.
+    """
+    cleaned = (slug or "").strip().strip("/")
+    return "/" + cleaned if cleaned else "/"
+
+
+def _render_path_from_payload(data: Optional[dict]) -> Optional[str]:
+    """First non-empty canonical path an event payload carries, else ``None``."""
+    if not data:
+        return None
+    for key in _RENDER_PATH_PAYLOAD_KEYS:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
+def _on_content_changed_invalidate(_event_name: str, data: dict) -> None:
+    """Purge the render cache for a changed CMS post's public path (precise)."""
+    if not seo_dynamic_render_available():
+        return
+    try:
+        path = _public_path_for_slug((data or {}).get("slug"))
+        build_dynamic_render_service().invalidate(path)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("[cms.seo] render-cache invalidate failed for %s: %s", data, exc)
+
+
+def _on_vertical_changed_invalidate(event_name: str, data: dict) -> None:
+    """Purge the render cache on another vertical's change (best-effort).
+
+    The cms plugin cannot compute another vertical's URL, so it purges just the
+    canonical path the payload carries; when none is present it falls back to a
+    coarse ``invalidate_all`` (logged) so a stale price/availability page is
+    never served. Missing keys ⇒ coarse purge, never a crash (Liskov-safe).
+    """
+    if not seo_dynamic_render_available():
+        return
+    try:
+        service = build_dynamic_render_service()
+        path = _render_path_from_payload(data)
+        if path:
+            service.invalidate(path)
+        else:
+            logger.info(
+                "[cms.seo] '%s' carried no public path; purging all render-cache "
+                "entries.",
+                event_name,
+            )
+            service.invalidate_all()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("[cms.seo] render-cache invalidate failed for %s: %s", data, exc)
+
+
 # Track the registered provider so a repeat enable (e.g. per-test app) replaces
 # rather than accumulates it.
 _active_provider: Optional[CmsSitemapProvider] = None
@@ -327,6 +545,12 @@ def register_seo_pipeline() -> CmsSitemapProvider:
     """Subscribe the prerender writer + register the sitemap provider."""
     global _active_provider
     event_bus.subscribe(CONTENT_CHANGED_EVENT, _on_content_changed)
+    # Render-cache invalidation (increment 4): precise on CMS content, best-effort
+    # on other verticals. The EventBus dedups identical (name, callback) pairs, so
+    # re-enabling (per-test app) never double-subscribes these module-level fns.
+    event_bus.subscribe(CONTENT_CHANGED_EVENT, _on_content_changed_invalidate)
+    for vertical_event_name in _VERTICAL_CHANGE_EVENTS:
+        event_bus.subscribe(vertical_event_name, _on_vertical_changed_invalidate)
     if _active_provider is not None:
         unregister_sitemap_provider(_active_provider)
     _active_provider = CmsSitemapProvider(
@@ -342,6 +566,9 @@ def unregister_seo_pipeline() -> None:
     """Unsubscribe the writer + unregister the provider (plugin disable)."""
     global _active_provider
     event_bus.unsubscribe(CONTENT_CHANGED_EVENT, _on_content_changed)
+    event_bus.unsubscribe(CONTENT_CHANGED_EVENT, _on_content_changed_invalidate)
+    for vertical_event_name in _VERTICAL_CHANGE_EVENTS:
+        event_bus.unsubscribe(vertical_event_name, _on_vertical_changed_invalidate)
     if _active_provider is not None:
         unregister_sitemap_provider(_active_provider)
         _active_provider = None

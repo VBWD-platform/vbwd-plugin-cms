@@ -59,6 +59,36 @@
     "default": "",
     "description": "Base URL of an external full-page renderer; when set, the COMPLETE page HTML (layout + content) is saved. Empty = content-only document (default)."
   },
+  "minify_prerender_output": {
+    "type": "boolean",
+    "default": false,
+    "description": "Minify emitted prerender HTML (inline CSS/JS + inter-tag whitespace); JSON-LD and the __POST__ payload are byte-preserved. Takes effect on the next prerender/regenerate."
+  },
+  "seo_serve_to_humans": {
+    "type": "boolean",
+    "default": false,
+    "description": "Operator intent to serve the prerender to human visitors on public routes (not only crawlers). Mapped to the fe-user nginx SEO_DEFAULT_PREFIX at deploy time; requires an fe-user restart to take effect."
+  },
+  "seo_serve_exclude_prefixes": {
+    "type": "string",
+    "default": "dashboard,checkout,cart",
+    "description": "Comma-separated URL prefixes always served the SPA shell (never the anonymous prerender), even when serve-to-humans is on."
+  },
+  "seo_dynamic_render_enabled": {
+    "type": "boolean",
+    "default": false,
+    "description": "Master switch for on-demand full-page rendering (render-on-miss + cache) served to bots via the internal /_seo-render route. Requires prerender_service_url."
+  },
+  "seo_render_cache_ttl_seconds": {
+    "type": "number",
+    "default": 3600,
+    "description": "Time-to-live (seconds) for a cached on-demand render before it is re-rendered."
+  },
+  "seo_render_internal_token": {
+    "type": "string",
+    "default": "",
+    "description": "Shared secret nginx injects as X-VBWD-Render-Token when routing a bot to the internal render route. Empty = the route is disabled (404)."
+  },
   "debug_mode": {
     "type": "boolean",
     "default": false,

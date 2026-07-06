@@ -1,9 +1,11 @@
-"""S-SEO full-page renderer port — the HTTP adapter that asks an external
-renderer for the COMPLETE page HTML (layout + content) so the static SEO file
-served to anonymous visitors carries the public layout, not just the content.
+"""S118 Track B — the full-page render HTTP client.
 
-Best-effort by contract: a disabled (empty URL) / non-200 / malformed / failed
-call returns ``None`` so the writer falls back to the content-only document.
+The client calls the self-hosted render service at
+``GET <base>/render?path=<url-encoded path>`` and returns the full static HTML
+of the fe-user SPA at that path. Best-effort by contract: a disabled (empty
+URL) / non-200 / non-HTML / failed call returns ``None`` so the caller falls
+back deterministically (the writer to its content-only document, the dynamic
+render route to a 502 → SPA shell). No real network — the transport is faked.
 """
 import logging
 from unittest.mock import MagicMock, patch
@@ -26,74 +28,93 @@ def _response(status_code=200, text=_FULL_HTML):
     return response
 
 
-def test_empty_url_returns_none_and_makes_no_http_call():
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
-        renderer = HttpFullPageRenderer(prerender_service_url="")
-        assert renderer.render_full_page("pricing", "en") is None
-        post.assert_not_called()
-
-
-def test_http_200_with_html_body_returns_text_and_posts_slug_language():
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
-        post.return_value = _response()
-        renderer = HttpFullPageRenderer(prerender_service_url="http://render:9000/")
-        result = renderer.render_full_page("pricing", "en")
+def test_render_path_builds_correct_url_and_returns_html():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _response()
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000/")
+        result = renderer.render_path("/shop/product/widget")
 
     assert result == _FULL_HTML
-    post.assert_called_once()
-    _args, kwargs = post.call_args
-    # The trailing slash is normalised; /prerender is appended.
-    assert post.call_args[0][0] == "http://render:9000/prerender"
-    assert kwargs["json"] == {"slug": "pricing", "language": "en"}
+    get.assert_called_once()
+    # The trailing slash is normalised; /render is appended; path is a param
+    # (requests URL-encodes it).
+    assert get.call_args[0][0] == "http://renderer:3000/render"
+    kwargs = get.call_args[1]
+    assert kwargs["params"] == {"path": "/shop/product/widget"}
     assert kwargs["timeout"] == 20
 
 
-def test_custom_timeout_is_passed_through():
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
-        post.return_value = _response()
-        renderer = HttpFullPageRenderer(
-            prerender_service_url="http://render:9000", timeout_seconds=5
-        )
-        renderer.render_full_page("pricing", None)
-
-    assert post.call_args[1]["timeout"] == 5
+def test_render_path_none_when_service_url_empty():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        renderer = HttpFullPageRenderer(prerender_service_url="")
+        assert renderer.render_path("/pricing") is None
+        get.assert_not_called()
 
 
-def test_non_200_returns_none_and_logs(caplog):
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
-        post.return_value = _response(status_code=502, text=_FULL_HTML)
-        renderer = HttpFullPageRenderer(prerender_service_url="http://render:9000")
+def test_render_path_none_on_non_200(caplog):
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _response(status_code=502, text=_FULL_HTML)
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000")
         with caplog.at_level(logging.WARNING):
-            assert renderer.render_full_page("pricing", "en") is None
+            assert renderer.render_path("/pricing") is None
     assert caplog.records
 
 
-def test_body_without_html_tag_returns_none():
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
-        post.return_value = _response(text="just a plain error string")
-        renderer = HttpFullPageRenderer(prerender_service_url="http://render:9000")
-        assert renderer.render_full_page("pricing", "en") is None
+def test_render_path_none_on_non_html_body():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _response(text="just a plain error string")
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000")
+        assert renderer.render_path("/pricing") is None
 
 
-def test_empty_body_returns_none():
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
-        post.return_value = _response(text="")
-        renderer = HttpFullPageRenderer(prerender_service_url="http://render:9000")
-        assert renderer.render_full_page("pricing", "en") is None
+def test_render_path_none_on_exception(caplog):
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.side_effect = RuntimeError("boom")
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000")
+        with caplog.at_level(logging.WARNING):
+            assert renderer.render_path("/pricing") is None
+    assert caplog.records
 
 
-def test_html_tag_match_is_case_insensitive():
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
+def test_render_path_none_on_empty_body():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _response(text="")
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000")
+        assert renderer.render_path("/pricing") is None
+
+
+def test_render_path_html_marker_is_case_insensitive():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
         upper = "<!DOCTYPE HTML><HTML><BODY>X</BODY></HTML>"
-        post.return_value = _response(text=upper)
-        renderer = HttpFullPageRenderer(prerender_service_url="http://render:9000")
-        assert renderer.render_full_page("pricing", "en") == upper
+        get.return_value = _response(text=upper)
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000")
+        assert renderer.render_path("/pricing") == upper
 
 
-def test_request_exception_returns_none_and_logs(caplog):
-    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.post") as post:
-        post.side_effect = RuntimeError("boom")
-        renderer = HttpFullPageRenderer(prerender_service_url="http://render:9000")
-        with caplog.at_level(logging.WARNING):
-            assert renderer.render_full_page("pricing", "en") is None
-    assert caplog.records
+def test_render_path_custom_timeout_is_passed_through():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _response()
+        renderer = HttpFullPageRenderer(
+            prerender_service_url="http://renderer:3000", timeout_seconds=5
+        )
+        renderer.render_path("/pricing")
+    assert get.call_args[1]["timeout"] == 5
+
+
+# ── render_full_page (writer call site) derives the path and delegates ────────
+
+
+def test_render_full_page_delegates_to_render_path_with_slug_path():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _response()
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000")
+        assert renderer.render_full_page("pricing", "en") == _FULL_HTML
+    assert get.call_args[1]["params"] == {"path": "/pricing"}
+
+
+def test_render_full_page_empty_slug_maps_to_root_path():
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _response()
+        renderer = HttpFullPageRenderer(prerender_service_url="http://renderer:3000")
+        renderer.render_full_page("", None)
+    assert get.call_args[1]["params"] == {"path": "/"}

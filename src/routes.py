@@ -1669,6 +1669,9 @@ def admin_cleanup_seo():
     return jsonify({"removed": count}), 200
 
 
+# Default TTL (seconds) for a cached on-demand render (S118 Track B).
+_DEFAULT_RENDER_CACHE_TTL_SECONDS = 3600
+
 # The admin-editable SEO settings (S56) stored in the cms config blob.
 # ``global_head_html`` is a raw-text setting (like ``robots_txt``): its value is
 # baked verbatim into every server-side prerender, just before ``</head>``, so
@@ -1680,6 +1683,18 @@ _SEO_SETTINGS_DEFAULTS = {
     "sitemap_excluded_slugs": [],
     "sitemap_include_terms": [],
     "sitemap_exclude_terms": [],
+    # S117 — serve-side + minify toggles. Serving to humans is a deploy-level
+    # switch (nginx re-render), so the operator intent is stored here and mapped
+    # into the fe-user container env at deploy time; minify is applied by the
+    # writer on the next prerender.
+    "minify_prerender_output": False,
+    "seo_serve_to_humans": False,
+    "seo_serve_exclude_prefixes": "dashboard,checkout,cart",
+    # S118 Track B — on-demand full-page render (render-on-miss + cache) served
+    # to bots via the internal ``/_seo-render`` route.
+    "seo_dynamic_render_enabled": False,
+    "seo_render_cache_ttl_seconds": _DEFAULT_RENDER_CACHE_TTL_SECONDS,
+    "seo_render_internal_token": "",
 }
 
 
@@ -1697,6 +1712,15 @@ def _coerce_str_list(value) -> list:
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
+def _coerce_positive_int(value, fallback: int) -> int:
+    """Coerce a body value to a positive int, else the (safe) default."""
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return coerced if coerced > 0 else fallback
+
+
 def _typed_seo_settings(body: dict) -> dict:
     """Validate/type the SEO keys from the request body (ignore unknowns)."""
     typed: dict = {}
@@ -1706,6 +1730,25 @@ def _typed_seo_settings(body: dict) -> dict:
         typed["global_head_html"] = str(body["global_head_html"] or "")
     if "sitemap_include_pages" in body:
         typed["sitemap_include_pages"] = bool(body["sitemap_include_pages"])
+    if "minify_prerender_output" in body:
+        typed["minify_prerender_output"] = bool(body["minify_prerender_output"])
+    if "seo_serve_to_humans" in body:
+        typed["seo_serve_to_humans"] = bool(body["seo_serve_to_humans"])
+    if "seo_serve_exclude_prefixes" in body:
+        typed["seo_serve_exclude_prefixes"] = str(
+            body["seo_serve_exclude_prefixes"] or ""
+        )
+    if "seo_dynamic_render_enabled" in body:
+        typed["seo_dynamic_render_enabled"] = bool(body["seo_dynamic_render_enabled"])
+    if "seo_render_internal_token" in body:
+        typed["seo_render_internal_token"] = str(
+            body["seo_render_internal_token"] or ""
+        )
+    if "seo_render_cache_ttl_seconds" in body:
+        typed["seo_render_cache_ttl_seconds"] = _coerce_positive_int(
+            body["seo_render_cache_ttl_seconds"],
+            _DEFAULT_RENDER_CACHE_TTL_SECONDS,
+        )
     for key in (
         "sitemap_excluded_slugs",
         "sitemap_include_terms",

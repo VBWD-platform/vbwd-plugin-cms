@@ -27,6 +27,7 @@ from plugins.cms.src.services.seo_asset_stamp import (
     SeoAssetStamper,
     render_asset_block,
 )
+from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
 from plugins.cms.src.services.seo_full_page_renderer import IFullPageRenderer
 from plugins.cms.src.services.seo_meta_builder import build_meta
 from plugins.cms.src.services.seo_renderable_post import (
@@ -69,6 +70,7 @@ class SeoPrerenderWriter:
         filesystem_manager: Optional[Any] = None,
         full_page_renderer: Optional[IFullPageRenderer] = None,
         global_head_html_resolver: Optional[Callable[[], str]] = None,
+        minifier: Optional[PrerenderMinifier] = None,
     ) -> None:
         self._filesystem_manager = filesystem_manager or LocalFilesystemManager(
             var_root=var_dir
@@ -91,6 +93,10 @@ class SeoPrerenderWriter:
         # so non-JS crawlers see it. Read lazily (per render). Injected (DI) —
         # absent/empty ⇒ nothing is spliced (no stray marker).
         self._global_head_html_resolver = global_head_html_resolver
+        # Optional minifier applied to the final content-only document just
+        # before the write. Injected (DI) — absent/None ⇒ today's exact pretty-
+        # printed bytes are emitted (behaviour-preserving default, Liskov-safe).
+        self._minifier = minifier
 
     # ── event entry point ────────────────────────────────────────────────
 
@@ -137,6 +143,10 @@ class SeoPrerenderWriter:
             else None
         )
         if isinstance(rendered, str) and rendered:
+            # The full render is HTML too, so honour the same minify toggle the
+            # content-only branch below applies (DRY: one minifier, both paths).
+            if self._minifier is not None:
+                rendered = self._minifier.minify(rendered)
             self._filesystem_manager.write_text(
                 SEO_NAMESPACE, self._relative_path_for(post.slug), rendered
             )
@@ -152,6 +162,8 @@ class SeoPrerenderWriter:
         )
         head_tags, json_ld = build_meta(renderable)
         document = self._render_document(post, head_tags, json_ld, robots_override)
+        if self._minifier is not None:
+            document = self._minifier.minify(document)
 
         # The slug becomes a confined relative path within the ``seo``
         # namespace; the manager rejects ``..``/absolute/traversal rather than

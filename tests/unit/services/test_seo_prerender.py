@@ -332,6 +332,118 @@ def test_content_document_unchanged_when_no_renderer_injected(tmp_path):
     assert 'id="__POST__"' in html
 
 
+_FULL_PAGE_HTML_PRETTY = (
+    "<!doctype html>\n"
+    '<html lang="en">\n'
+    "  <head>\n"
+    "    <title>Pricing</title>\n"
+    "    <style>  .hero {\n    color: red;\n  }\n</style>\n"
+    "  </head>\n"
+    "  <body>\n"
+    "    <header>NAV</header>\n"
+    "    <main><p>Plans</p></main>\n"
+    "  </body>\n"
+    "</html>\n"
+)
+
+
+def test_full_render_output_is_minified_when_flag_on(tmp_path):
+    """S118: the full-render HTML is minified too when the minify flag is on."""
+    from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
+
+    post = _Post()
+    renderer = _StubFullPageRenderer(_FULL_PAGE_HTML_PRETTY)
+    writer = _writer(
+        tmp_path, [post], full_page_renderer=renderer, minifier=PrerenderMinifier()
+    )
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    # Inter-tag whitespace collapsed (no indented head line survives) ...
+    assert "\n  <head>\n" not in html
+    # ... and the inline style body is CSS-minified (structural whitespace gone).
+    assert ".hero{" in html
+    assert "  color: red;\n  }" not in html
+
+
+def test_full_render_output_untouched_when_flag_off(tmp_path):
+    """No minifier injected ⇒ the full render is written byte-for-byte as-is."""
+    post = _Post()
+    renderer = _StubFullPageRenderer(_FULL_PAGE_HTML_PRETTY)
+    writer = _writer(tmp_path, [post], full_page_renderer=renderer)  # minifier None
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert html == _FULL_PAGE_HTML_PRETTY
+
+
+def test_writer_emits_pretty_html_when_minify_off(tmp_path):
+    """No minifier injected ⇒ today's pretty-printed, indented document."""
+    post = _Post()
+    writer = _writer(tmp_path, [post])  # minifier defaults to None
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    # The baseline document keeps its newlines + indentation (unchanged).
+    assert "\n  <head>\n" in html
+    assert html.endswith("</html>\n")
+
+
+def test_writer_emits_minified_html_when_minify_on(tmp_path):
+    from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
+
+    post = _Post()
+    writer = _writer(
+        tmp_path,
+        [post],
+        style_css_resolver=lambda p: "  .hero {\n    color: red;\n  }\n",
+        minifier=PrerenderMinifier(),
+    )
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    # Inter-tag whitespace collapsed (no indented head line survives) ...
+    assert "\n  <head>\n" not in html
+    # ... and the inline SSR style body is CSS-minified.
+    assert ".hero{" in html
+    # The page still boots the SPA (payload preserved).
+    assert 'id="__POST__"' in html
+
+
+def test_global_head_html_still_injected_under_minify(tmp_path):
+    from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
+
+    snippet = '<meta name="msvalidate.01" content="TESTKEY" />'
+    post = _Post()
+    writer = _writer(
+        tmp_path,
+        [post],
+        global_head_html_resolver=lambda: snippet,
+        minifier=PrerenderMinifier(),
+    )
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    # The verification snippet survives minification byte-exact, in <head>.
+    assert snippet in html
+    assert html.index("<head>") < html.index(snippet) < html.index("</head>")
+
+
+def test_ld_json_and_post_payload_survive_minify_byte_exact(tmp_path):
+    from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
+
+    post = _Post(content_html="<p>  spaced  body  </p>")
+    writer = _writer(tmp_path, [post], minifier=PrerenderMinifier())
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    payload_start = html.index('id="__POST__">') + len('id="__POST__">')
+    payload_end = html.index("</script>", payload_start)
+    payload = json.loads(html[payload_start:payload_end])
+    assert payload["slug"] == "pricing"
+    assert payload["content_html"] == "<p>  spaced  body  </p>"
+
+
 def test_missing_post_is_a_noop(tmp_path):
     writer = _writer(tmp_path, [])
     # Event references a post the loader can't find (e.g. hard-deleted).
