@@ -1,10 +1,10 @@
 # CMS Plugin (Backend)
 
-Headless CMS — pages, categories, images, widgets, layouts, styles, routing rules, and a contact form submission endpoint.
+Headless CMS — pages, categories, images, widgets, layouts, styles, routing rules, geo-blocking (country access control), and a contact form submission endpoint.
 
 ## Purpose
 
-Provides a full headless CMS for creating and managing static/dynamic content pages, organised into categories, with support for images, reusable widgets, layout templates, global style configuration, URL routing rules, and a server-side contact form processor.
+Provides a full headless CMS for creating and managing static/dynamic content pages, organised into categories, with support for images, reusable widgets, layout templates, global style configuration, URL routing rules, country-level geo-blocking, and a server-side contact form processor.
 
 ## Configuration (`plugins/config.json`)
 
@@ -83,6 +83,12 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | GET / POST | `/api/v1/admin/cms/routing-rules` | List / create routing rules |
 | GET / PUT / DELETE | `/api/v1/admin/cms/routing-rules/<id>` | Rule detail / update / delete |
 | POST | `/api/v1/admin/cms/routing-rules/reload` | Force nginx config reload |
+
+#### Geo-Blocking
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/admin/cms/geo-block` | `cms.configure` | Geo-block config + derived allowed-country set |
+| PUT | `/api/v1/admin/cms/geo-block` | `cms.configure` | Update config (also republishes the nginx `geo-block.json`) |
 
 > Import / export of CMS content is served by the unified data-exchange
 > framework at `/api/v1/admin/data-exchange/*`. The former bespoke CMS
@@ -233,6 +239,18 @@ The former bespoke CMS export/import routes have been retired.
 
 ---
 
+## Geo-Blocking
+
+Country access control: block visitors whose GeoIP country is not in the allowed
+list (derived from core `vbwd_country.is_enabled`), redirect them to a `/locked`
+CMS page, with a GET-param → HMAC-signed cookie bypass. Configured from the
+**"Blocked countries"** tab at `/admin/cms/routing-rules`; enforced at **two
+layers** — the fe-user nginx via an njs handler (the real page-load block) and the
+Flask `CmsGeoBlockMiddleware`. Off by default; fail-open on a missing GeoIP DB.
+See [`docs/developer/geo-blocking.md`](docs/developer/geo-blocking.md).
+
+---
+
 ## Events
 
 | Event | Emitted by | Payload |
@@ -255,6 +273,7 @@ Consumed by the **email plugin** to dispatch notification emails.
 | `cms_layout_widget` | M2M: layout areas → widgets |
 | `cms_style` | Global CSS style presets |
 | `cms_routing_rule` | URL routing/redirect rules |
+| `cms_geo_block_config` | Singleton geo-blocking settings (S120) |
 
 Migration: `alembic/versions/20260302_create_cms_tables.py`
 
