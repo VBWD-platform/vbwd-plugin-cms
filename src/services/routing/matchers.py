@@ -64,6 +64,20 @@ class PathPrefixMatcher:
         return ctx.path.startswith(rule.match_value or "")
 
 
+class PathExactMatcher:
+    """Match a single exact request path (S120).
+
+    Distinct from ``PathPrefixMatcher`` (startswith): a canonical redirect like
+    ``/home → /`` must fire ONLY for ``/home`` and never for the sibling demo
+    page ``/home2`` — which a prefix match would wrongly catch.
+    """
+
+    def matches(self, rule, ctx: RequestContext) -> bool:
+        if rule.match_type != "path_exact":
+            return False
+        return ctx.path == (rule.match_value or "")
+
+
 class CookieMatcher:
     def matches(self, rule, ctx: RequestContext) -> bool:
         if rule.match_type != "cookie":
@@ -78,6 +92,7 @@ _MATCHERS = {
     "ip_range": IpRangeMatcher(),
     "country": CountryMatcher(),
     "path_prefix": PathPrefixMatcher(),
+    "path_exact": PathExactMatcher(),
     "cookie": CookieMatcher(),
 }
 

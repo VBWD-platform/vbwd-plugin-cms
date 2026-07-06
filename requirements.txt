@@ -1,0 +1,5 @@
+# CMS plugin runtime dependencies.
+# geoip2 backs the S120 geo-block country resolver (MaxMind GeoLite2-Country
+# .mmdb lookup). The DB itself ships in the plugin filespace, not the image; a
+# missing DB fails open (no block) with a logged warning.
+geoip2>=4.7,<5

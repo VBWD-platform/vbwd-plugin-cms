@@ -346,6 +346,11 @@ class CmsPlugin(BasePlugin):
 
         register_access_level_content_provider(CmsAccessContentProvider())
 
+        # S120: the geo-IP resolver must run BEFORE the routing middleware (it
+        # populates g.geoip_country, which the routing CountryMatcher reads), so
+        # register it first. Flask runs before_request hooks in registration order.
+        self._register_geo_resolver()
+
         try:
             from flask import current_app
             from plugins.cms.src.middleware.routing_middleware import (
@@ -386,6 +391,89 @@ class CmsPlugin(BasePlugin):
         except Exception as exc:
             logging.getLogger(__name__).warning(
                 f"CMS routing middleware not initialized: {exc}"
+            )
+
+        # S120: geo-block enforcement runs AFTER the routing middleware.
+        self._register_geo_block_enforcement()
+
+    def _geo_block_mmdb_path(self) -> str:
+        """Resolve the plugin-filespace path to the GeoLite2-Country .mmdb.
+
+        Falls back to the conventional relative path if the filesystem manager
+        is unavailable — a missing/unreadable DB fails open in the resolver, so a
+        wrong path never locks anyone out.
+        """
+        from flask import current_app
+
+        relative_path = "geoip/GeoLite2-Country.mmdb"
+        try:
+            manager = current_app.container.filesystem_manager()
+            return manager.for_plugin("cms").resolve(relative_path)
+        except Exception:
+            return f"var/cms/{relative_path}"
+
+    def _register_geo_resolver(self) -> None:
+        """Register the before_request that populates ``g.geoip_country`` (S120)."""
+        import logging
+
+        try:
+            from flask import current_app, g
+            from plugins.cms.src.services.geo.geoip_resolver import GeoIpResolver
+
+            geo_cfg = (self._config or {}).get("geo_block", {})
+            resolver = GeoIpResolver(
+                mmdb_path=self._geo_block_mmdb_path(),
+                trusted_header=geo_cfg.get("trusted_country_header") or None,
+                trusted_proxy_count=int(geo_cfg.get("trusted_proxy_count", 1)),
+            )
+
+            def _resolve_geoip_country():
+                g.geoip_country = resolver.resolve_country()
+                return None
+
+            current_app.before_request(_resolve_geoip_country)
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                f"CMS geo-IP resolver not initialized: {exc}"
+            )
+
+    def _register_geo_block_enforcement(self) -> None:
+        """Register the geo-block enforcement before_request (S120)."""
+        import logging
+
+        try:
+            from flask import current_app
+            from vbwd.extensions import db
+            from vbwd.repositories.country_repository import CountryRepository
+            from plugins.cms.src.repositories.geo_block_config_repository import (
+                CmsGeoBlockConfigRepository,
+            )
+            from plugins.cms.src.services.geo.geo_block_service import (
+                CmsGeoBlockService,
+            )
+            from plugins.cms.src.services.geo.bypass_token import (
+                GeoBypassTokenSigner,
+            )
+            from plugins.cms.src.middleware.geo_block_middleware import (
+                CmsGeoBlockMiddleware,
+            )
+
+            geo_cfg = (self._config or {}).get("geo_block", {})
+            secret = geo_cfg.get("secret") or current_app.config.get(
+                "JWT_SECRET_KEY", ""
+            )
+            service = CmsGeoBlockService(
+                config_repo=CmsGeoBlockConfigRepository(db.session),
+                country_repo=CountryRepository(db.session),
+            )
+            geo_block_mw = CmsGeoBlockMiddleware(
+                service=service,
+                token_signer=GeoBypassTokenSigner(secret),
+            )
+            current_app.before_request(geo_block_mw.before_request)
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                f"CMS geo-block middleware not initialized: {exc}"
             )
 
     def on_disable(self) -> None:

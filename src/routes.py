@@ -447,6 +447,27 @@ def _cms_config() -> dict:
     }
 
 
+@cms_bp.route("/api/v1/cms/config", methods=["GET"])
+def public_cms_config():
+    """GET /api/v1/cms/config — public, no-auth CMS config the SPA reads at boot.
+
+    S120: exposes ``home_slug`` (the canonical homepage slug) as the single
+    source of truth so ``Home.vue`` renders the home post at ``/`` without a
+    client redirect and never diverges from the seed / prerender. Only
+    non-sensitive keys are projected here.
+    """
+    config = _cms_config()
+    return (
+        jsonify(
+            {
+                "home_slug": str(config.get("home_slug") or _DEFAULT_HOME_SLUG).strip()
+                or _DEFAULT_HOME_SLUG,
+            }
+        ),
+        200,
+    )
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # CONTACT FORM — public POST endpoint
 # ════════════════════════════════════════════════════════════════════════════
@@ -1355,6 +1376,48 @@ def admin_delete_routing_rule(rule_id: str):
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# Geo-block (S120) — singleton "Blocked countries" config
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def _geo_block_svc():
+    from plugins.cms.src.repositories.geo_block_config_repository import (
+        CmsGeoBlockConfigRepository,
+    )
+    from plugins.cms.src.services.geo.geo_block_service import CmsGeoBlockService
+    from vbwd.repositories.country_repository import CountryRepository
+
+    return CmsGeoBlockService(
+        config_repo=CmsGeoBlockConfigRepository(db.session),
+        country_repo=CountryRepository(db.session),
+    )
+
+
+@cms_bp.route("/api/v1/admin/cms/geo-block", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.configure")
+def admin_get_geo_block_config():
+    """GET /api/v1/admin/cms/geo-block — config + derived allowed-country set."""
+    return jsonify(_geo_block_svc().config_dict()), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/geo-block", methods=["PUT"])
+@require_auth
+@require_admin
+@require_permission("cms.configure")
+def admin_update_geo_block_config():
+    """PUT /api/v1/admin/cms/geo-block — validate + persist the config."""
+    data = request.get_json()
+    if data is None:
+        return jsonify({"error": "JSON body required"}), 400
+    try:
+        return jsonify(_geo_block_svc().update_config(data)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # S47.0 — Unified posts + terms (admin CRUD)
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -1674,6 +1737,11 @@ def admin_cleanup_seo():
 # Default TTL (seconds) for a cached on-demand render (S118 Track B).
 _DEFAULT_RENDER_CACHE_TTL_SECONDS = 3600
 
+# S120 — the canonical homepage slug. The post with this slug is rendered at
+# ``/`` (its prerender writes ``index.html``). Single source of truth exposed on
+# the public config surface so the fe SPA never diverges from the seed.
+_DEFAULT_HOME_SLUG = "index"
+
 # IndexNow defaults + key format. The default endpoint fans out to Bing/Yandex/
 # Seznam; a key is 8–128 chars of ``[A-Za-z0-9-]`` (IndexNow spec).
 _DEFAULT_INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow"
@@ -1686,6 +1754,9 @@ _INDEXNOW_KEY_PATTERN = re.compile(r"^[A-Za-z0-9-]{8,128}$")
 _SEO_SETTINGS_DEFAULTS = {
     "robots_txt": "",
     "global_head_html": "",
+    # S120 — canonical homepage slug (single source of truth; also on the public
+    # config surface the fe SPA reads at boot).
+    "home_slug": _DEFAULT_HOME_SLUG,
     "sitemap_include_pages": True,
     "sitemap_excluded_slugs": [],
     "sitemap_include_terms": [],
@@ -1740,6 +1811,10 @@ def _typed_seo_settings(body: dict) -> dict:
         typed["robots_txt"] = str(body["robots_txt"] or "")
     if "global_head_html" in body:
         typed["global_head_html"] = str(body["global_head_html"] or "")
+    if "home_slug" in body:
+        # An empty/blank slug falls back to the shipped default so ``/`` never
+        # points at a non-existent home post.
+        typed["home_slug"] = str(body["home_slug"] or "").strip() or _DEFAULT_HOME_SLUG
     if "sitemap_include_pages" in body:
         typed["sitemap_include_pages"] = bool(body["sitemap_include_pages"])
     if "minify_prerender_output" in body:

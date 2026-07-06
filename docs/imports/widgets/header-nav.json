@@ -16,8 +16,8 @@
           "id": "820d6a80-4e6d-4663-9cdc-f162ab6b2c58",
           "parent_id": null,
           "label": "Home",
-          "url": null,
-          "page_slug": "home1",
+          "url": "/",
+          "page_slug": null,
           "target": "_self",
           "icon": null,
           "sort_order": 0

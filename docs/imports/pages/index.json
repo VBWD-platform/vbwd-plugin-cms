@@ -4,8 +4,8 @@
   "cms_posts": [
     {
       "type": "page",
-      "slug": "home1",
-      "title": "Home — Version 1",
+      "slug": "index",
+      "title": "Home",
       "excerpt": null,
       "content_json": {
         "type": "doc",
@@ -17,7 +17,7 @@
       "sort_order": 10,
       "layout_slug": "home-v1",
       "style_slug": null,
-      "meta_title": "Home — Version 1",
+      "meta_title": "Home",
       "meta_description": "Welcome to our platform. Build something amazing today.",
       "meta_keywords": null,
       "og_title": null,

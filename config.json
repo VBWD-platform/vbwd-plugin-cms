@@ -19,6 +19,11 @@
     "default": "image/jpeg,image/png,image/webp,image/gif,image/svg+xml",
     "description": "Comma-separated list of allowed image MIME types"
   },
+  "home_slug": {
+    "type": "string",
+    "default": "index",
+    "description": "Canonical slug of the homepage post rendered at '/'. Single source of truth the fe-user SPA reads at boot (public GET /api/v1/cms/config) so Home.vue, the seed, the routing rule and the prerender can't diverge (S120)."
+  },
   "default_robots": {
     "type": "string",
     "default": "index,follow",

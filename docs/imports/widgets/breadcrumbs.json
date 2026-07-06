@@ -14,7 +14,7 @@
         "component_name": "CmsBreadcrumb",
         "separator": "/",
         "root_name": "Home",
-        "root_slug": "/home1",
+        "root_slug": "/",
         "show_category": false,
         "max_label_length": 60,
         "category_label": "Software",

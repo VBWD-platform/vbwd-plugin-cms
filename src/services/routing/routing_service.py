@@ -24,6 +24,7 @@ class CmsRoutingService:
         "ip_range",
         "country",
         "path_prefix",
+        "path_exact",
         "cookie",
     }
     VALID_REDIRECT_CODES = {301, 302}
@@ -106,7 +107,7 @@ class CmsRoutingService:
         conf_path = routing_cfg.get(
             "nginx_conf_path", "/etc/nginx/conf.d/cms_routing.conf"
         )
-        default_slug = routing_cfg.get("default_slug", "home1")
+        default_slug = routing_cfg.get("default_slug", "index")
         rules = self._rule_repo.find_all_active_for_layer("nginx")
         conf_str = self._conf_generator.generate(rules, default_slug)
         try:

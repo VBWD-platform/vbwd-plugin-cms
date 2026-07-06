@@ -239,6 +239,24 @@ def test_excluded_post_still_writes_with_noindex(tmp_path):
     assert 'content="noindex,nofollow"' in html
 
 
+def test_prerender_maps_home_slug_post_to_root(tmp_path):
+    """S120: the home post (slug == ``home_slug`` default ``index``) is written to
+    ``index.html`` — the document a web server serves at ``/``. The writer is
+    purely slug-driven (``<slug>.html``); no hardcoded home special-case. So the
+    post whose slug matches ``home_slug`` lands at the canonical root."""
+    home_slug = "index"
+    post = _Post(
+        slug=home_slug, title="Home", meta_title="Home", canonical_url="https://x/"
+    )
+    writer = _writer(tmp_path, [post])
+    writer.handle_content_changed(_event(post))
+
+    root_document = _seo_file(tmp_path, "index")
+    assert root_document.exists()
+    assert root_document.name == "index.html"
+    assert "<title>Home</title>" in root_document.read_text()
+
+
 def test_keyed_by_canonical_slug_with_nested_path(tmp_path):
     post = _Post(slug="about/team", canonical_url="https://x/about/team")
     writer = _writer(tmp_path, [post])

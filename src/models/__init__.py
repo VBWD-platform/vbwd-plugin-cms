@@ -6,6 +6,9 @@ from plugins.cms.src.models.cms_widget import CmsWidget  # noqa: F401
 from plugins.cms.src.models.cms_layout_widget import CmsLayoutWidget  # noqa: F401
 from plugins.cms.src.models.cms_menu_item import CmsMenuItem  # noqa: F401
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule  # noqa: F401
+from plugins.cms.src.models.cms_geo_block_config import (  # noqa: F401
+    CmsGeoBlockConfig,
+)
 from plugins.cms.src.models.cms_post import CmsPost  # noqa: F401
 from plugins.cms.src.models.cms_post_widget import CmsPostWidget  # noqa: F401
 from plugins.cms.src.models.cms_post_content_block import (  # noqa: F401

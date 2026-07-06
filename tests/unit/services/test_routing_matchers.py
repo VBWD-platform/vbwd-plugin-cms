@@ -7,6 +7,7 @@ from plugins.cms.src.services.routing.matchers import (
     IpRangeMatcher,
     CountryMatcher,
     PathPrefixMatcher,
+    PathExactMatcher,
     CookieMatcher,
     matcher_for,
 )
@@ -131,6 +132,27 @@ def test_path_prefix_matcher_no_match():
     assert m.matches(_rule("path_prefix", "/old-pricing"), ctx) is False
 
 
+# ── PathExactMatcher (S120 — canonical redirects that must NOT collide) ───────
+
+
+def test_path_exact_matcher_matches():
+    m = PathExactMatcher()
+    ctx = _ctx(path="/index")
+    assert m.matches(_rule("path_exact", "/index"), ctx) is True
+
+
+def test_path_exact_matcher_rejects_prefix_sibling():
+    """The whole point over path_prefix: ``/home`` must NOT catch ``/home2``."""
+    m = PathExactMatcher()
+    ctx = _ctx(path="/home2")
+    assert m.matches(_rule("path_exact", "/home"), ctx) is False
+
+
+def test_path_exact_matcher_wrong_type():
+    m = PathExactMatcher()
+    assert m.matches(_rule("path_prefix", "/index"), _ctx(path="/index")) is False
+
+
 # ── CookieMatcher ─────────────────────────────────────────────────────────────
 
 
@@ -155,6 +177,7 @@ def test_matcher_for_returns_correct_instance():
     assert isinstance(matcher_for("ip_range"), IpRangeMatcher)
     assert isinstance(matcher_for("country"), CountryMatcher)
     assert isinstance(matcher_for("path_prefix"), PathPrefixMatcher)
+    assert isinstance(matcher_for("path_exact"), PathExactMatcher)
     assert isinstance(matcher_for("cookie"), CookieMatcher)
 
 

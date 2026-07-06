@@ -9,7 +9,8 @@ Creates:
                      pricing-embed-demo, pricing-native-plans, contact-form (vue-component) (html)
   - 8 layouts: contact-form, ghrm-software-catalogue, ghrm-software-detail,
                home-v1, home-v2, landing, content-page, native-pricing-page
-  - 19 pages: home1, home2, landing2, landing3, about, privacy, terms, contact,
+  - 19 pages: index (the canonical homepage rendered at /), home2, landing2,
+               landing3, about, privacy, terms, contact,
                features, pricing-embedded, pricing-native, we-are-launching-soon,
                ghrm-software-catalogue, ghrm-software-detail, software, category,
                category/backend, category/fe-user, category/fe-admin
@@ -603,7 +604,7 @@ BREADCRUMBS_CONFIG = {
     "component_name": "CmsBreadcrumb",
     "separator": "/",
     "root_name": "Home",
-    "root_slug": "/home1",
+    "root_slug": "/",
     "show_category": False,
     "max_label_length": 60,
     "category_label": "Software",
@@ -1554,6 +1555,65 @@ def _seed_unified_demo_content(post_service, term_service) -> None:
     )
 
 
+# S120 — canonical homepage. The home post is seeded under slug ``index`` and
+# rendered at ``/`` directly by the fe (no client redirect), so the old
+# ``default → home1`` middleware redirect is redundant + harmful (it 404'd on a
+# fresh install). Instead we retire any stale ``default`` rule and seed exact
+# 301 redirects that consolidate the duplicate slug-URLs onto the canonical ``/``.
+_HOME_REDIRECTS = (
+    ("home-index-redirect", "/index"),
+    ("home-legacy-redirect", "/home"),
+)
+
+
+def _get_or_create_exact_redirect(name: str, source_path: str) -> None:
+    """Idempotently seed a ``path_exact`` 301 → ``/`` middleware routing rule.
+
+    Exact (not prefix) match so ``/home`` never catches the ``/home2`` demo page.
+    Keyed on ``(match_type, match_value)`` so a re-seed never duplicates.
+    """
+    existing = (
+        db.session.query(CmsRoutingRule)
+        .filter_by(match_type="path_exact", match_value=source_path)
+        .first()
+    )
+    if existing:
+        print(f"  ~ redirect: {source_path} → / (exists)")
+        return
+    db.session.add(
+        CmsRoutingRule(
+            name=name,
+            match_type="path_exact",
+            match_value=source_path,
+            target_slug="/",
+            is_active=True,
+            priority=0,
+            layer="middleware",
+            redirect_code=301,
+            is_rewrite=False,
+        )
+    )
+    print(f"  + redirect: {source_path} → / (301)")
+
+
+def _seed_home_routing_rules() -> None:
+    """Converge routing rules onto the S120 canonical-home model.
+
+    Retires any legacy ``default`` middleware rule (the fe now renders the home
+    post at ``/`` directly) and seeds the ``/index`` + ``/home`` → ``/`` 301s.
+    """
+    retired = (
+        db.session.query(CmsRoutingRule)
+        .filter_by(match_type="default", layer="middleware")
+        .delete()
+    )
+    if retired:
+        print(f"  - retired {retired} legacy 'default' middleware routing rule(s)")
+    for name, source_path in _HOME_REDIRECTS:
+        _get_or_create_exact_redirect(name, source_path)
+    db.session.commit()
+
+
 def populate_cms() -> None:
     print("\n── Styles ──────────────────────────────────────────────────────")
     style_map: dict[str, "CmsStyle"] = {}
@@ -1601,7 +1661,7 @@ def populate_cms() -> None:
     _add_menu_items(
         header_nav,
         [
-            {"label": "Home", "page_slug": "home1"},
+            {"label": "Home", "url": "/"},
             {
                 "label": "Features",
                 "page_slug": "features",
@@ -1826,27 +1886,7 @@ def populate_cms() -> None:
     db.session.commit()
 
     print("\n── Routing Rules ───────────────────────────────────────────────")
-    rule = (
-        db.session.query(CmsRoutingRule)
-        .filter_by(match_type="default", layer="middleware")
-        .first()
-    )
-    if not rule:
-        rule = CmsRoutingRule(
-            name="home",
-            match_type="default",
-            target_slug="home1",
-            is_active=True,
-            priority=0,
-            layer="middleware",
-            redirect_code=302,
-            is_rewrite=False,
-        )
-        db.session.add(rule)
-        db.session.commit()
-        print("  + routing rule: default → home1")
-    else:
-        print(f"  ~ routing rule: default → {rule.target_slug} (exists)")
+    _seed_home_routing_rules()
 
     print("\n── Unified demo content (cms_post / cms_term) ──────────────────")
     _seed_unified_demo_content(post_service, term_service)
@@ -1860,15 +1900,17 @@ def populate_cms() -> None:
     print(f"  Layouts     : {len(LAYOUTS)}")
     print("  Categories  : about, blog, static-pages, ghrm")
     print(
-        "  Pages       : 19 (home1, home2, landing2, landing3, about, privacy, terms,"
+        "  Pages       : 19 (index [home], home2, landing2, landing3, about, privacy,"
     )
-    print("                    contact, features, pricing-embedded, pricing-native,")
+    print(
+        "                    terms, contact, features, pricing-embedded, pricing-native,"
+    )
     print("                    we-are-launching-soon, ghrm-software-catalogue,")
     print(
         "                    ghrm-software-detail, software, category, category/backend,"
     )
     print("                    category/fe-user, category/fe-admin)")
-    print("  Routing     : default → home1")
+    print("  Routing     : /index → / (301), /home → / (301)")
     print("  Header nav  : Home | Features | Pricing (submenu) | About | Software")
     print("=" * 55)
 
