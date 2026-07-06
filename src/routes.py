@@ -31,6 +31,8 @@ Admin endpoints (require_admin):
 import json
 import logging
 import mimetypes
+import re
+from typing import Optional
 from flask import (
     Blueprint,
     jsonify,
@@ -1672,6 +1674,11 @@ def admin_cleanup_seo():
 # Default TTL (seconds) for a cached on-demand render (S118 Track B).
 _DEFAULT_RENDER_CACHE_TTL_SECONDS = 3600
 
+# IndexNow defaults + key format. The default endpoint fans out to Bing/Yandex/
+# Seznam; a key is 8–128 chars of ``[A-Za-z0-9-]`` (IndexNow spec).
+_DEFAULT_INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow"
+_INDEXNOW_KEY_PATTERN = re.compile(r"^[A-Za-z0-9-]{8,128}$")
+
 # The admin-editable SEO settings (S56) stored in the cms config blob.
 # ``global_head_html`` is a raw-text setting (like ``robots_txt``): its value is
 # baked verbatim into every server-side prerender, just before ``</head>``, so
@@ -1695,6 +1702,11 @@ _SEO_SETTINGS_DEFAULTS = {
     "seo_dynamic_render_enabled": False,
     "seo_render_cache_ttl_seconds": _DEFAULT_RENDER_CACHE_TTL_SECONDS,
     "seo_render_internal_token": "",
+    # IndexNow — instant crawl-freshness ping to Bing/Yandex/Seznam on publish.
+    # Empty key ⇒ feature disabled even when the toggle is on.
+    "indexnow_enabled": False,
+    "indexnow_key": "",
+    "indexnow_endpoint": _DEFAULT_INDEXNOW_ENDPOINT,
 }
 
 
@@ -1749,6 +1761,14 @@ def _typed_seo_settings(body: dict) -> dict:
             body["seo_render_cache_ttl_seconds"],
             _DEFAULT_RENDER_CACHE_TTL_SECONDS,
         )
+    if "indexnow_enabled" in body:
+        typed["indexnow_enabled"] = bool(body["indexnow_enabled"])
+    if "indexnow_key" in body:
+        typed["indexnow_key"] = str(body["indexnow_key"] or "").strip()
+    if "indexnow_endpoint" in body:
+        typed["indexnow_endpoint"] = str(
+            body["indexnow_endpoint"] or _DEFAULT_INDEXNOW_ENDPOINT
+        )
     for key in (
         "sitemap_excluded_slugs",
         "sitemap_include_terms",
@@ -1757,6 +1777,24 @@ def _typed_seo_settings(body: dict) -> dict:
         if key in body:
             typed[key] = _coerce_str_list(body[key])
     return typed
+
+
+def _indexnow_settings_error(config: dict) -> Optional[str]:
+    """Validate the IndexNow key against its format when the feature is enabled.
+
+    Returns an error message when IndexNow is enabled AND a (non-empty) key
+    fails the ``^[A-Za-z0-9-]{8,128}$`` format, else ``None``. An empty key
+    while enabled is allowed — per the spec that simply leaves the feature a
+    no-op (nothing to authorize with).
+    """
+    if not config.get("indexnow_enabled"):
+        return None
+    key = str(config.get("indexnow_key", "") or "")
+    if not key:
+        return None
+    if not _INDEXNOW_KEY_PATTERN.match(key):
+        return "indexnow_key must match ^[A-Za-z0-9-]{8,128}$"
+    return None
 
 
 @cms_bp.route("/api/v1/admin/cms/seo/settings", methods=["GET"])
@@ -1785,6 +1823,9 @@ def admin_update_seo_settings():
     body = request.get_json(silent=True) or {}
     config = config_store.get_config("cms") or {}
     config.update(_typed_seo_settings(body))
+    validation_error = _indexnow_settings_error(config)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
     config_store.save_config("cms", config)
     return jsonify(_seo_settings_view(config)), 200
 

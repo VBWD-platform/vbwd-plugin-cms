@@ -15,6 +15,8 @@ from vbwd.events.bus import event_bus
 from vbwd.services.filesystem.local import LocalFilesystemManager
 
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
+from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED
+from plugins.cms.src.services.indexnow_service import IndexNowSubmitter
 from plugins.cms.src.services.seo_registry import (
     register_sitemap_provider,
     unregister_sitemap_provider,
@@ -536,6 +538,98 @@ def _on_vertical_changed_invalidate(event_name: str, data: dict) -> None:
         logger.warning("[cms.seo] render-cache invalidate failed for %s: %s", data, exc)
 
 
+# ── IndexNow submission (instant crawl-freshness ping) ───────────────────────
+#
+# On a published-post change the plugin POSTs the canonical URL to IndexNow so
+# Bing/Yandex/Seznam recrawl it immediately ("Discovered but not crawled" fix).
+# Streaming/per-change (Bing guidance) and best-effort — a failed ping never
+# breaks the publish flow. The verification key file is served at the site root
+# by ``seo_routes.indexnow_key_file``.
+
+_DEFAULT_INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow"
+
+
+def _indexnow_enabled() -> bool:
+    """Resolve the cms ``indexnow_enabled`` toggle from live config (lazy).
+
+    Read per call (mirroring ``_seo_prerender_enabled``). Defaults to ``False``
+    (off) so nothing is submitted unless an operator opts in.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return False
+        cfg = config_store.get_config("cms") or {}
+        return bool(cfg.get("indexnow_enabled", False))
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.indexnow] indexnow_enabled lookup failed: %s", exc)
+        return False
+
+
+def _indexnow_key() -> str:
+    """Resolve the cms ``indexnow_key`` from live config (lazy). Empty ⇒ off."""
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return ""
+        cfg = config_store.get_config("cms") or {}
+        return str(cfg.get("indexnow_key", "") or "")
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.indexnow] indexnow_key lookup failed: %s", exc)
+        return ""
+
+
+def _indexnow_endpoint() -> str:
+    """Resolve the cms ``indexnow_endpoint`` from live config, else the default."""
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return _DEFAULT_INDEXNOW_ENDPOINT
+        cfg = config_store.get_config("cms") or {}
+        return str(cfg.get("indexnow_endpoint", "") or _DEFAULT_INDEXNOW_ENDPOINT)
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.indexnow] indexnow_endpoint lookup failed: %s", exc)
+        return _DEFAULT_INDEXNOW_ENDPOINT
+
+
+def indexnow_available() -> bool:
+    """True when IndexNow is enabled AND a key AND a ``public_base_url`` are set.
+
+    The subscriber is a no-op unless all three hold (mirroring
+    ``seo_dynamic_render_available``): without a base URL there is no absolute
+    URL to submit, and without a key there is nothing to authorize with.
+    """
+    return _indexnow_enabled() and bool(_indexnow_key()) and bool(_public_base_url())
+
+
+def build_indexnow_submitter() -> IndexNowSubmitter:
+    """Assemble the IndexNow submitter from live config (lazy per call)."""
+    return IndexNowSubmitter(
+        public_base_url=_public_base_url(),
+        key=_indexnow_key(),
+        endpoint=_indexnow_endpoint(),
+    )
+
+
+def _on_content_changed_indexnow(_event_name: str, data: dict) -> None:
+    """Ping IndexNow with a published CMS post's canonical URL (best-effort)."""
+    if not indexnow_available():
+        return
+    if (data or {}).get("status") != POST_STATUS_PUBLISHED:
+        return
+    try:
+        path = _public_path_for_slug((data or {}).get("slug"))
+        build_indexnow_submitter().submit(path)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("[cms.indexnow] submit for %s failed: %s", data, exc)
+
+
 # Track the registered provider so a repeat enable (e.g. per-test app) replaces
 # rather than accumulates it.
 _active_provider: Optional[CmsSitemapProvider] = None
@@ -549,6 +643,9 @@ def register_seo_pipeline() -> CmsSitemapProvider:
     # on other verticals. The EventBus dedups identical (name, callback) pairs, so
     # re-enabling (per-test app) never double-subscribes these module-level fns.
     event_bus.subscribe(CONTENT_CHANGED_EVENT, _on_content_changed_invalidate)
+    # IndexNow ping on a published-post change. Same EventBus dedup guarantee,
+    # so re-enabling (per-test app) never double-subscribes this module-level fn.
+    event_bus.subscribe(CONTENT_CHANGED_EVENT, _on_content_changed_indexnow)
     for vertical_event_name in _VERTICAL_CHANGE_EVENTS:
         event_bus.subscribe(vertical_event_name, _on_vertical_changed_invalidate)
     if _active_provider is not None:
@@ -567,6 +664,7 @@ def unregister_seo_pipeline() -> None:
     global _active_provider
     event_bus.unsubscribe(CONTENT_CHANGED_EVENT, _on_content_changed)
     event_bus.unsubscribe(CONTENT_CHANGED_EVENT, _on_content_changed_invalidate)
+    event_bus.unsubscribe(CONTENT_CHANGED_EVENT, _on_content_changed_indexnow)
     for vertical_event_name in _VERTICAL_CHANGE_EVENTS:
         event_bus.unsubscribe(vertical_event_name, _on_vertical_changed_invalidate)
     if _active_provider is not None:

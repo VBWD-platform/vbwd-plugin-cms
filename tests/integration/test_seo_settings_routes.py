@@ -248,6 +248,64 @@ def test_dynamic_render_defaults_when_unset(client, db, admin_headers):
     assert got["seo_render_cache_ttl_seconds"] == 3600
 
 
+def test_indexnow_settings_persist_and_merge(client, db, admin_headers):
+    """The three IndexNow keys round-trip via GET/PUT and merge into the cms
+    config without clobbering existing keys."""
+    store = current_app.config_store
+    config = store.get_config("cms") or {}
+    config["robots_txt"] = "User-agent: *\nDisallow: /keep\n"
+    store.save_config("cms", config)
+
+    payload = {
+        "indexnow_enabled": True,
+        "indexnow_key": "abcdef0123456789key",
+        "indexnow_endpoint": "https://api.indexnow.org/indexnow",
+    }
+    put = client.put(SETTINGS_URL, json=payload, headers=admin_headers)
+    assert put.status_code == 200
+    body = put.get_json()
+    assert body["indexnow_enabled"] is True
+    assert body["indexnow_key"] == "abcdef0123456789key"
+    assert body["indexnow_endpoint"] == "https://api.indexnow.org/indexnow"
+
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["indexnow_enabled"] is True
+    assert got["indexnow_key"] == "abcdef0123456789key"
+    assert got["indexnow_endpoint"] == "https://api.indexnow.org/indexnow"
+    # The merge preserved the previously-saved robots_txt.
+    assert got["robots_txt"] == "User-agent: *\nDisallow: /keep\n"
+
+
+def test_indexnow_defaults_when_unset(client, db, admin_headers):
+    """The IndexNow keys default to safe (disabled) values."""
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["indexnow_enabled"] is False
+    assert got["indexnow_key"] == ""
+    assert got["indexnow_endpoint"] == "https://api.indexnow.org/indexnow"
+
+
+def test_indexnow_rejects_bad_key_when_enabled(client, db, admin_headers):
+    """Enabling IndexNow with a key that violates the format ⇒ 400, no persist."""
+    put = client.put(
+        SETTINGS_URL,
+        json={"indexnow_enabled": True, "indexnow_key": "bad key!"},
+        headers=admin_headers,
+    )
+    assert put.status_code == 400
+    after = current_app.config_store.get_config("cms") or {}
+    assert after.get("indexnow_key", "") != "bad key!"
+
+
+def test_indexnow_allows_empty_key_when_enabled(client, db, admin_headers):
+    """Empty key while enabled is a no-op (feature disabled), not an error."""
+    put = client.put(
+        SETTINGS_URL,
+        json={"indexnow_enabled": True, "indexnow_key": ""},
+        headers=admin_headers,
+    )
+    assert put.status_code == 200
+
+
 def test_put_ignores_unknown_keys_and_coerces_types(client, db, admin_headers):
     payload = {
         "robots_txt": 123,

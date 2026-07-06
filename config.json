@@ -89,6 +89,21 @@
     "default": "",
     "description": "Shared secret nginx injects as X-VBWD-Render-Token when routing a bot to the internal render route. Empty = the route is disabled (404)."
   },
+  "indexnow_enabled": {
+    "type": "boolean",
+    "default": false,
+    "description": "Ping IndexNow (Bing/Yandex/Seznam) with the canonical URL whenever a CMS post is published/updated, for instant recrawl. Requires public_base_url + indexnow_key."
+  },
+  "indexnow_key": {
+    "type": "string",
+    "default": "",
+    "description": "IndexNow verification key (8-128 chars of [A-Za-z0-9-]). Served at the site root as /<key>.txt. Empty = feature disabled even when the toggle is on."
+  },
+  "indexnow_endpoint": {
+    "type": "string",
+    "default": "https://api.indexnow.org/indexnow",
+    "description": "IndexNow submission endpoint. The default fans out to all participating search engines."
+  },
   "debug_mode": {
     "type": "boolean",
     "default": false,

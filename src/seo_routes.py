@@ -222,6 +222,40 @@ def seo_dynamic_render():
     return Response(html, status=200, mimetype="text/html")
 
 
+def _indexnow_key_config() -> tuple:
+    """Resolve the IndexNow (enabled, key) pair from the live cms config.
+
+    Read lazily/defensively from the same cms config blob the other SEO
+    settings use; a missing store/key yields ``(False, "")`` so the key-file
+    route 404s (feature off).
+    """
+    config_store = getattr(current_app, "config_store", None)
+    if config_store is None:
+        return (False, "")
+    cfg = config_store.get_config("cms") or {}
+    enabled = bool(cfg.get("indexnow_enabled", False))
+    key = cfg.get("indexnow_key", "")
+    return (enabled, key if isinstance(key, str) else "")
+
+
+@cms_bp.route("/<key>.txt", methods=["GET"])
+def indexnow_key_file(key: str):
+    """GET /<key>.txt — the IndexNow verification file, served at the site root.
+
+    IndexNow authorizes submitting any URL on the host only when the key file is
+    hosted at the site root, so this lives on ``cms_bp`` (prefix ``""``) beside
+    ``/robots.txt`` + ``/sitemap.xml``. The body is exactly the configured key,
+    returned as ``text/plain`` ONLY when IndexNow is enabled, the key is
+    non-empty, AND the requested ``<key>`` matches it; otherwise **404** (so an
+    arbitrary ``<x>.txt`` is never revealed and the explicit ``/robots.txt`` /
+    ``/sitemap.xml`` routes keep precedence).
+    """
+    enabled, configured_key = _indexnow_key_config()
+    if not enabled or not configured_key or key != configured_key:
+        return Response("", status=404)
+    return Response(configured_key, status=200, mimetype="text/plain")
+
+
 @cms_bp.route("/robots.txt", methods=["GET"])
 def robots():
     """Block app surfaces + name the sitemap; ``seo.mode=off`` blocks all."""
