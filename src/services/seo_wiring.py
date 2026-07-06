@@ -85,6 +85,29 @@ def _public_base_url() -> str:
         return ""
 
 
+def _global_head_html() -> str:
+    """Resolve the cms ``global_head_html`` raw setting from live config (lazy).
+
+    Read per call (mirroring ``_public_base_url``) so an admin's saved head HTML
+    (site-verification tags, analytics snippets) takes effect on the next
+    prerender without re-enabling the plugin. The prerender writer splices this
+    string into every page's ``<head>`` just before ``</head>`` so non-JS
+    crawlers see it. Returns ``""`` when no app/config is available (nothing is
+    spliced).
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        if config_store is None:
+            return ""
+        cfg = config_store.get_config("cms") or {}
+        return cfg.get("global_head_html", "") or ""
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] global_head_html lookup failed: %s", exc)
+        return ""
+
+
 def _prerender_service_url() -> str:
     """Resolve the cms ``prerender_service_url`` from the live config (lazy).
 
@@ -226,6 +249,7 @@ def _build_writer() -> SeoPrerenderWriter:
         full_page_renderer=HttpFullPageRenderer(
             prerender_service_url=_prerender_service_url()
         ),
+        global_head_html_resolver=_global_head_html,
     )
 
 

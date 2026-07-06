@@ -68,6 +68,7 @@ class SeoPrerenderWriter:
         style_css_resolver: Optional[Callable[[object], str]] = None,
         filesystem_manager: Optional[Any] = None,
         full_page_renderer: Optional[IFullPageRenderer] = None,
+        global_head_html_resolver: Optional[Callable[[], str]] = None,
     ) -> None:
         self._filesystem_manager = filesystem_manager or LocalFilesystemManager(
             var_root=var_dir
@@ -85,6 +86,11 @@ class SeoPrerenderWriter:
         # (layout + content) captured from the live SPA. When it yields a page
         # we write it as-is; absent/None ⇒ the content-only document is used.
         self._full_page_renderer = full_page_renderer
+        # Resolves the site-wide raw ``<head>`` HTML (site-verification tags,
+        # analytics snippets) baked into every prerender just before ``</head>``
+        # so non-JS crawlers see it. Read lazily (per render). Injected (DI) —
+        # absent/empty ⇒ nothing is spliced (no stray marker).
+        self._global_head_html_resolver = global_head_html_resolver
 
     # ── event entry point ────────────────────────────────────────────────
 
@@ -199,6 +205,14 @@ class SeoPrerenderWriter:
             if css:
                 style_block = f'\n    <style data-seo="ssr-style">{css}</style>'
 
+        # Site-wide raw <head> HTML (site-verification/analytics), baked in just
+        # before </head> so non-JS crawlers see it. Empty ⇒ nothing spliced.
+        global_head_block = ""
+        if self._global_head_html_resolver is not None:
+            raw_head_html = (self._global_head_html_resolver() or "").strip()
+            if raw_head_html:
+                global_head_block = f"\n    {raw_head_html}"
+
         return (
             "<!DOCTYPE html>\n"
             '<html lang="' + (post.language or "en") + '">\n'
@@ -207,7 +221,8 @@ class SeoPrerenderWriter:
             f"    {head}\n"
             f"    {json_ld_block}\n"
             f"    {asset_block}"
-            f"{style_block}\n"
+            f"{style_block}"
+            f"{global_head_block}\n"
             "  </head>\n"
             "  <body>\n"
             f'    <div id="app">{post.content_html or ""}</div>\n'

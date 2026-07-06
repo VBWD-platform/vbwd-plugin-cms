@@ -155,6 +155,42 @@ def test_published_embeds_entry_tags_between_markers(tmp_path):
     assert "seo" in payload
 
 
+def test_global_head_html_injected_before_head_close(tmp_path):
+    """A configured global head snippet is spliced into <head> before </head>.
+
+    This is the crawler-visible home for site-verification tags (Bing
+    ``msvalidate.01``) and analytics snippets: baked into the static bytes,
+    site-wide, so non-JS bots see it (unlike the client-injected layout
+    ``head_html``).
+    """
+    snippet = '<meta name="msvalidate.01" content="TESTKEY" />'
+    post = _Post()
+    writer = _writer(tmp_path, [post], global_head_html_resolver=lambda: snippet)
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert snippet in html
+    assert html.index("<head>") < html.index(snippet) < html.index("</head>")
+
+
+def test_global_head_html_empty_leaves_head_unchanged(tmp_path):
+    post = _Post()
+    writer = _writer(tmp_path, [post], global_head_html_resolver=lambda: "")
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert "msvalidate" not in html
+
+
+def test_no_global_head_html_block_without_resolver(tmp_path):
+    post = _Post()
+    writer = _writer(tmp_path, [post])  # no resolver injected
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert "msvalidate" not in html
+
+
 def test_private_writes_nothing(tmp_path):
     post = _Post(status=POST_STATUS_PRIVATE)
     writer = _writer(tmp_path, [post])

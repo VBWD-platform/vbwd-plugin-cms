@@ -1669,9 +1669,13 @@ def admin_cleanup_seo():
     return jsonify({"removed": count}), 200
 
 
-# The five admin-editable SEO settings (S56) stored in the cms config blob.
+# The admin-editable SEO settings (S56) stored in the cms config blob.
+# ``global_head_html`` is a raw-text setting (like ``robots_txt``): its value is
+# baked verbatim into every server-side prerender, just before ``</head>``, so
+# non-JS crawlers see site-verification tags / analytics snippets.
 _SEO_SETTINGS_DEFAULTS = {
     "robots_txt": "",
+    "global_head_html": "",
     "sitemap_include_pages": True,
     "sitemap_excluded_slugs": [],
     "sitemap_include_terms": [],
@@ -1680,7 +1684,7 @@ _SEO_SETTINGS_DEFAULTS = {
 
 
 def _seo_settings_view(config: dict) -> dict:
-    """Project the five SEO settings out of the full cms config (with defaults)."""
+    """Project the SEO settings out of the full cms config (with defaults)."""
     return {
         key: config.get(key, default) for key, default in _SEO_SETTINGS_DEFAULTS.items()
     }
@@ -1694,10 +1698,12 @@ def _coerce_str_list(value) -> list:
 
 
 def _typed_seo_settings(body: dict) -> dict:
-    """Validate/type the five SEO keys from the request body (ignore unknowns)."""
+    """Validate/type the SEO keys from the request body (ignore unknowns)."""
     typed: dict = {}
     if "robots_txt" in body:
         typed["robots_txt"] = str(body["robots_txt"] or "")
+    if "global_head_html" in body:
+        typed["global_head_html"] = str(body["global_head_html"] or "")
     if "sitemap_include_pages" in body:
         typed["sitemap_include_pages"] = bool(body["sitemap_include_pages"])
     for key in (

@@ -141,6 +141,27 @@ def test_put_merges_without_clobbering_other_keys(client, db, admin_headers):
     assert after["uploads_base_path"] == "/app/uploads"
 
 
+def test_global_head_html_persists_and_merges(client, db, admin_headers):
+    """The new ``global_head_html`` raw-text setting persists via GET/PUT and
+    merges into the cms config without clobbering existing SEO keys."""
+    store = current_app.config_store
+    config = store.get_config("cms") or {}
+    config["robots_txt"] = "User-agent: *\nDisallow: /keep\n"
+    store.save_config("cms", config)
+
+    snippet = '<meta name="msvalidate.01" content="TESTKEY" />'
+    put = client.put(
+        SETTINGS_URL, json={"global_head_html": snippet}, headers=admin_headers
+    )
+    assert put.status_code == 200
+    assert put.get_json()["global_head_html"] == snippet
+
+    got = client.get(SETTINGS_URL, headers=admin_headers).get_json()
+    assert got["global_head_html"] == snippet
+    # The merge preserved the previously-saved robots_txt.
+    assert got["robots_txt"] == "User-agent: *\nDisallow: /keep\n"
+
+
 def test_put_ignores_unknown_keys_and_coerces_types(client, db, admin_headers):
     payload = {
         "robots_txt": 123,
