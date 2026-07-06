@@ -1381,16 +1381,28 @@ def admin_delete_routing_rule(rule_id: str):
 
 
 def _geo_block_svc():
-    from plugins.cms.src.repositories.geo_block_config_repository import (
-        CmsGeoBlockConfigRepository,
-    )
-    from plugins.cms.src.services.geo.geo_block_service import CmsGeoBlockService
-    from vbwd.repositories.country_repository import CountryRepository
+    from plugins.cms.src.services.geo.geo_block_wiring import build_geo_block_service
 
-    return CmsGeoBlockService(
-        config_repo=CmsGeoBlockConfigRepository(db.session),
-        country_repo=CountryRepository(db.session),
-    )
+    return build_geo_block_service()
+
+
+def _publish_geo_block_nginx_config():
+    """(Re)write the fe-user nginx geo-block JSON after a config change (S120.1).
+
+    The fe-user nginx serves public pages statically, so an njs handler enforces
+    the block by reading ``${VAR_DIR}/cms/nginx/geo-block.json``. Regenerating it
+    here keeps the allowed-country list + toggles live. A write failure must not
+    fail the admin save (the config is already persisted); log and continue so a
+    filespace hiccup never 500s the operator — matching the fail-open design.
+    """
+    from plugins.cms.src.services.geo.geo_block_wiring import build_geo_block_writer
+
+    try:
+        build_geo_block_writer().write()
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Failed to publish geo-block nginx config after save", exc_info=True
+        )
 
 
 @cms_bp.route("/api/v1/admin/cms/geo-block", methods=["GET"])
@@ -1412,9 +1424,11 @@ def admin_update_geo_block_config():
     if data is None:
         return jsonify({"error": "JSON body required"}), 400
     try:
-        return jsonify(_geo_block_svc().update_config(data)), 200
+        result = _geo_block_svc().update_config(data)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+    _publish_geo_block_nginx_config()
+    return jsonify(result), 200
 
 
 # ════════════════════════════════════════════════════════════════════════════

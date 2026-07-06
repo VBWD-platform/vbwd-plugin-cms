@@ -396,6 +396,9 @@ class CmsPlugin(BasePlugin):
         # S120: geo-block enforcement runs AFTER the routing middleware.
         self._register_geo_block_enforcement()
 
+        # S120.1: `flask cms geo-block sync` re-publishes the nginx JSON.
+        self._register_cli_commands()
+
     def _geo_block_mmdb_path(self) -> str:
         """Resolve the plugin-filespace path to the GeoLite2-Country .mmdb.
 
@@ -435,6 +438,25 @@ class CmsPlugin(BasePlugin):
         except Exception as exc:
             logging.getLogger(__name__).warning(
                 f"CMS geo-IP resolver not initialized: {exc}"
+            )
+
+    def _register_cli_commands(self) -> None:
+        """Add the cms click group to the live app's CLI (S120.1).
+
+        Guarded + idempotent so re-enabling a per-test app never double-registers.
+        Core declares no plugin commands; the plugin contributes its own group.
+        """
+        import logging
+
+        try:
+            from flask import current_app
+            from plugins.cms.src.cli import cms_cli
+
+            if "cms" not in current_app.cli.commands:
+                current_app.cli.add_command(cms_cli)
+        except Exception as cli_error:  # pragma: no cover — operational guard
+            logging.getLogger(__name__).warning(
+                "[cms] Failed to register CLI commands: %s", cli_error
             )
 
     def _register_geo_block_enforcement(self) -> None:

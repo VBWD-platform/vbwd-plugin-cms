@@ -10,11 +10,30 @@ Engineering requirements (binding, restated): TDD-first; DevOps-first (cold loca
 import uuid
 
 import pytest
+from dependency_injector import providers
 
 from vbwd.models.country import Country
+from vbwd.services.filesystem.local import LocalFilesystemManager
 
 
 GEO_BLOCK_URL = "/api/v1/admin/cms/geo-block"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_geo_block_nginx_writes(app, tmp_path):
+    """Keep a successful PUT's nginx-JSON publish out of the real ``var/``.
+
+    A saved geo-block config now (S120.1) regenerates
+    ``${VAR_DIR}/cms/nginx/geo-block.json`` via the container filesystem_manager.
+    Pin that manager to ``tmp_path`` so these route tests never write the repo
+    ``var/`` tree.
+    """
+    manager = LocalFilesystemManager(var_root=str(tmp_path))
+    app.container.filesystem_manager.override(providers.Object(manager))
+    try:
+        yield
+    finally:
+        app.container.filesystem_manager.reset_override()
 
 
 @pytest.fixture
