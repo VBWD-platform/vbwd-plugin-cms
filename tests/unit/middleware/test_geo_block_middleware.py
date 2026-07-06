@@ -153,3 +153,34 @@ def test_empty_slug_returns_451(app):
     result = _run(app, mw, "/page", country="DE")
     assert result.status_code == 451
     assert result.headers["Cache-Control"] == "private, no-store"
+
+
+def _raising_config_middleware(exception):
+    """Middleware whose service.get_config() raises (regression: prod outage)."""
+
+    def _raise():
+        raise exception
+
+    service = SimpleNamespace(get_config=_raise, allowed_codes=lambda: set())
+    return CmsGeoBlockMiddleware(
+        service=service, token_signer=GeoBypassTokenSigner(SECRET)
+    )
+
+
+def test_config_read_failure_fails_open(app):
+    """If get_config raises (e.g. table missing), the request passes through.
+
+    Regression guard: a ProgrammingError from the missing ``cms_geo_block_config``
+    table must NOT propagate out of before_request and 500 every request
+    (including ``/api/v1/health``), which took the prod API container down.
+    """
+    from sqlalchemy.exc import ProgrammingError
+
+    error = ProgrammingError("SELECT ...", {}, Exception("UndefinedTable"))
+    mw = _raising_config_middleware(error)
+    assert _run(app, mw, "/some-page", country="DE") is None
+
+
+def test_config_read_failure_fails_open_for_any_exception(app):
+    mw = _raising_config_middleware(RuntimeError("boom"))
+    assert _run(app, mw, "/api/v1/health", country=None) is None

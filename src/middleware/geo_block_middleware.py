@@ -15,6 +15,7 @@ Reuses ``routing_middleware._is_passthrough`` (DRY). Block responses are
 ``Cache-Control: private, no-store`` so a CDN/prerender never caches a block for
 an allowed visitor (or vice-versa).
 """
+import logging
 from typing import Any, Optional
 from urllib.parse import urlencode
 
@@ -22,6 +23,8 @@ from flask import Response, g, redirect, request
 
 from plugins.cms.src.middleware.routing_middleware import _is_passthrough
 
+
+logger = logging.getLogger(__name__)
 
 BYPASS_COOKIE_NAME = "vbwd_geo_bypass"
 
@@ -57,7 +60,20 @@ class CmsGeoBlockMiddleware:
         self._token_signer = token_signer
 
     def before_request(self) -> Optional[Any]:
-        config = self._service.get_config()
+        try:
+            config = self._service.get_config()
+        except Exception:
+            # Fail open: geo-blocking is non-critical enforcement and must never
+            # take down the whole API. A missing ``cms_geo_block_config`` table
+            # (migration not yet applied) or any DB error simply means the gate
+            # is not enforced for this request — allow it through.
+            logger.warning(
+                "Geo-block config unavailable; passing request through "
+                "(geo-blocking not enforced)",
+                exc_info=True,
+            )
+            return None
+
         if not config.is_enabled:
             return None
 
