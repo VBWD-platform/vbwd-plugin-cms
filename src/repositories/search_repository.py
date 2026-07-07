@@ -35,6 +35,7 @@ class SearchRepository:
         query: str,
         status: Optional[str] = None,
         post_type: Optional[str] = None,
+        post_types: Optional[List[str]] = None,
         term_type: Optional[str] = None,
         term_slug: Optional[str] = None,
         page: int = 1,
@@ -46,7 +47,11 @@ class SearchRepository:
         )
         if status:
             base = base.filter(CmsPost.status == status)
-        if post_type:
+        # ``post_types`` (multi) wins over the legacy single ``post_type``.
+        # Empty/None for both → no type filter (all published types).
+        if post_types:
+            base = base.filter(CmsPost.type.in_(post_types))
+        elif post_type:
             base = base.filter(CmsPost.type == post_type)
         if term_type and term_slug:
             if term_type == TAG_TERM_TYPE:

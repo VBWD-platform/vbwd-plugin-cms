@@ -7,7 +7,7 @@ page shape PostService emits, so the Search-results widget reuses PostList (DRY)
 """
 import html
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED
 
@@ -66,6 +66,7 @@ class SearchService:
         query: Optional[str],
         *,
         post_type: Optional[str] = None,
+        post_types: Optional[List[str]] = None,
         term_filter: Optional[Tuple[str, str]] = None,
         page: int = 1,
         per_page: int = 20,
@@ -78,6 +79,7 @@ class SearchService:
             query=query.strip(),
             status=POST_STATUS_PUBLISHED,
             post_type=post_type,
+            post_types=post_types,
             term_type=term_type,
             term_slug=term_slug,
             page=page,

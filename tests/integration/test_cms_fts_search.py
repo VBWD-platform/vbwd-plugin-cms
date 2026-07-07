@@ -312,6 +312,155 @@ class TestCategoryCardEnrichment:
         assert "og_image_url" in item
 
 
+class TestMultiTypeFilter:
+    """Multi-type filtering: ``post_types`` (service/repo) and the ``types``
+    comma-separated query param (route). Backward-compatible with the single
+    ``post_type`` / ``type`` param; empty/None means all published types.
+    """
+
+    def _register_custom_type(self, key):
+        post_type_registry.register_post_type(
+            PostType(key=key, label=key.title(), routable=True, hierarchical=False)
+        )
+
+    def _publish(self, db, post_type, marker, slug_suffix):
+        return _post_service(db).create_post(
+            {
+                "type": post_type,
+                "title": f"Hospitality {slug_suffix} {marker}",
+                "slug": f"hosp-{slug_suffix}-{marker}",
+                "status": POST_STATUS_PUBLISHED,
+            }
+        )
+
+    def test_service_post_types_returns_page_and_post_excludes_others(self, db, seeded):
+        marker = seeded["marker"]
+        self._register_custom_type("guide")
+        guide = self._publish(db, "guide", marker, "guide")
+        result = _search_service(db).search(
+            "hospitality", post_types=["page", "post"], page=1, per_page=50
+        )
+        slugs = _slugs(result)
+        assert seeded["page_match"]["slug"] in slugs
+        assert seeded["title_match"]["slug"] in slugs
+        assert seeded["body_match"]["slug"] in slugs
+        # The custom "guide" type is excluded — not named in post_types.
+        assert guide["slug"] not in slugs
+        # Drafts never surface.
+        assert seeded["draft_match"]["slug"] not in slugs
+
+    def test_service_single_element_post_types_equals_legacy_single(self, db, seeded):
+        multi = _search_service(db).search(
+            "hospitality", post_types=["page"], page=1, per_page=50
+        )
+        legacy = _search_service(db).search(
+            "hospitality", post_type="page", page=1, per_page=50
+        )
+        assert set(_slugs(multi)) == set(_slugs(legacy))
+        assert seeded["page_match"]["slug"] in _slugs(multi)
+        assert seeded["title_match"]["slug"] not in _slugs(multi)
+
+    def test_service_post_types_wins_over_post_type(self, db, seeded):
+        # When both are given, post_types wins (page only, ignoring type=post).
+        result = _search_service(db).search(
+            "hospitality",
+            post_type="post",
+            post_types=["page"],
+            page=1,
+            per_page=50,
+        )
+        slugs = _slugs(result)
+        assert seeded["page_match"]["slug"] in slugs
+        assert seeded["title_match"]["slug"] not in slugs
+
+    def test_service_empty_post_types_means_all_published_types(self, db, seeded):
+        result = _search_service(db).search(
+            "hospitality", post_types=[], page=1, per_page=50
+        )
+        slugs = _slugs(result)
+        assert seeded["page_match"]["slug"] in slugs
+        assert seeded["title_match"]["slug"] in slugs
+        assert seeded["draft_match"]["slug"] not in slugs
+
+    def test_service_custom_type_included_only_when_named(self, db, seeded):
+        marker = seeded["marker"]
+        self._register_custom_type("guide")
+        guide = self._publish(db, "guide", marker, "guide")
+        without = _search_service(db).search(
+            "hospitality", post_types=["page", "post"], page=1, per_page=50
+        )
+        assert guide["slug"] not in _slugs(without)
+        with_guide = _search_service(db).search(
+            "hospitality", post_types=["guide"], page=1, per_page=50
+        )
+        assert guide["slug"] in _slugs(with_guide)
+        assert seeded["page_match"]["slug"] not in _slugs(with_guide)
+
+    def _route_slugs(self, client, query):
+        resp = client.get(query)
+        assert resp.status_code == 200
+        return [item["slug"] for item in resp.get_json()["items"]]
+
+    def test_route_types_page_and_post_returns_both_excludes_others(
+        self, client, db, seeded
+    ):
+        marker = seeded["marker"]
+        self._register_custom_type("guide")
+        guide = self._publish(db, "guide", marker, "guide")
+        slugs = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&types=page,post&per_page=50"
+        )
+        assert seeded["page_match"]["slug"] in slugs
+        assert seeded["title_match"]["slug"] in slugs
+        assert seeded["body_match"]["slug"] in slugs
+        assert guide["slug"] not in slugs
+        assert seeded["draft_match"]["slug"] not in slugs
+
+    def test_route_types_single_equals_legacy_type(self, client, db, seeded):
+        multi = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&types=page&per_page=50"
+        )
+        legacy = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&type=page&per_page=50"
+        )
+        assert set(multi) == set(legacy)
+        assert seeded["page_match"]["slug"] in multi
+        assert seeded["title_match"]["slug"] not in multi
+
+    def test_route_absent_types_and_type_returns_all_published(
+        self, client, db, seeded
+    ):
+        slugs = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&per_page=50"
+        )
+        assert seeded["page_match"]["slug"] in slugs
+        assert seeded["title_match"]["slug"] in slugs
+        assert seeded["body_match"]["slug"] in slugs
+        assert seeded["draft_match"]["slug"] not in slugs
+
+    def test_route_types_dedupes_and_ignores_blank_keys(self, client, db, seeded):
+        # "page,,page, " → de-duped, blank-stripped → just ["page"].
+        slugs = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&types=page,,page,%20&per_page=50"
+        )
+        assert seeded["page_match"]["slug"] in slugs
+        assert seeded["title_match"]["slug"] not in slugs
+
+    def test_route_custom_type_included_only_when_named(self, client, db, seeded):
+        marker = seeded["marker"]
+        self._register_custom_type("guide")
+        guide = self._publish(db, "guide", marker, "guide")
+        without = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&types=page,post&per_page=50"
+        )
+        assert guide["slug"] not in without
+        with_guide = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&types=guide&per_page=50"
+        )
+        assert guide["slug"] in with_guide
+        assert seeded["page_match"]["slug"] not in with_guide
+
+
 class TestScopeToTypeMapping:
     """S121 regression guard — locks the widget ``scope`` → ``/cms/search``
     request mapping the two frontends rely on (no production code; the FTS

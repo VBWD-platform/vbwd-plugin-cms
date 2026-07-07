@@ -2204,17 +2204,38 @@ def public_embed_manifest():
     )
 
 
+def _parse_comma_separated_keys(raw_value):
+    """Parse a comma-separated query value into a de-duped list of non-blank keys.
+
+    Preserves first-seen order, strips whitespace, drops empties. ``None`` or an
+    all-blank value yields an empty list (caller treats that as "no filter").
+    """
+    if not raw_value:
+        return []
+    seen = set()
+    keys = []
+    for candidate in raw_value.split(","):
+        key = candidate.strip()
+        if key and key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
 @cms_bp.route("/api/v1/cms/search", methods=["GET"])
 def public_search_posts():
     """GET /api/v1/cms/search — full-text search over published posts (S47.4).
 
-    Query params: ``q`` (search text), ``type`` (optional post type),
-    ``term_type``+``term_slug`` (optional "search within category"),
-    ``page``/``per_page``. Blank ``q`` yields an empty result, never all posts.
-    Returns the same paginated summary shape as /cms/posts (so PostList reuses).
+    Query params: ``q`` (search text), ``type`` (optional single post type),
+    ``types`` (optional comma-separated post types, e.g. ``types=page,post`` —
+    wins over ``type`` when given), ``term_type``+``term_slug`` (optional
+    "search within category"), ``page``/``per_page``. Blank ``q`` yields an empty
+    result, never all posts. Returns the same paginated summary shape as
+    /cms/posts (so PostList reuses).
     """
     query = request.args.get("q", "")
     post_type = request.args.get("type")
+    post_types = _parse_comma_separated_keys(request.args.get("types"))
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
     term_type = request.args.get("term_type")
@@ -2224,6 +2245,7 @@ def public_search_posts():
     result = _search_service().search(
         query,
         post_type=post_type,
+        post_types=post_types,
         term_filter=term_filter,
         page=page,
         per_page=per_page,
