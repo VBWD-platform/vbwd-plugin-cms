@@ -35,6 +35,45 @@ class TestApplyEdgeAlign:
         result = apply_edge_align(PRE_CSS)
         assert ".cms-area--content .container" in result
 
+    def test_shared_edge_inset_group_excludes_content_container(self):
+        # The shared edge-align group (hero/cta/nav/vue/breadcrumb) must NOT
+        # include .cms-area--content .container — that selector gets its own
+        # dedicated rule with a fixed 1.5rem gutter, not var(--edge-inset).
+        result = apply_edge_align(PRE_CSS)
+        block = result.split(EDGE_ALIGN_START_MARKER)[1]
+        shared_group_selector = (
+            ".cms-area--hero, .cms-area--cta,\n"
+            ".cms-widget--header-nav, .cms-widget--footer-nav, "
+            ".cms-widget--vue,\n"
+            ".cms-breadcrumb {"
+        )
+        assert shared_group_selector in block
+        assert ".cms-breadcrumb, .cms-area--content .container {" not in block
+
+    def test_content_container_uses_fixed_gutter_not_edge_inset(self):
+        result = apply_edge_align(PRE_CSS)
+        block = result.split(EDGE_ALIGN_START_MARKER)[1]
+        content_rule_start = block.index(".cms-area--content .container {")
+        content_rule_end = block.index("}", content_rule_start)
+        content_rule = block[content_rule_start:content_rule_end]
+        assert "padding-left: 1.5rem !important;" in content_rule
+        assert "padding-right: 1.5rem !important;" in content_rule
+        assert "var(--edge-inset)" not in content_rule
+        assert "max-width: var(--container-max, 1200px) !important;" in content_rule
+
+    def test_widget_nav_breadcrumb_rules_still_use_edge_inset(self):
+        result = apply_edge_align(PRE_CSS)
+        block = result.split(EDGE_ALIGN_START_MARKER)[1]
+        shared_group_start = block.index(".cms-area--hero, .cms-area--cta,")
+        shared_group_end = block.index("}", shared_group_start)
+        shared_group_rule = block[shared_group_start:shared_group_end]
+        assert "padding-left: var(--edge-inset) !important;" in shared_group_rule
+        assert "padding-right: var(--edge-inset) !important;" in shared_group_rule
+        assert (
+            ".cms-breadcrumb { gap: 0 !important; "
+            "padding-left: var(--edge-inset) !important; }"
+        ) in block
+
     def test_appended_block_flushes_first_header_link(self):
         result = apply_edge_align(PRE_CSS)
         assert (

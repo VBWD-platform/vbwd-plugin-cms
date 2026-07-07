@@ -117,14 +117,28 @@ BASE_CSS = dedent(
     .cms-widget--header-nav,
     .cms-widget--footer-nav,
     .cms-widget--vue,
-    .cms-breadcrumb,
-    .cms-area--content .container {
+    .cms-breadcrumb {
       max-width: var(--container-max) !important;
       width: 100% !important;
       margin-left: auto !important;
       margin-right: auto !important;
       padding-left: var(--edge-inset) !important;
       padding-right: var(--edge-inset) !important;
+      box-sizing: border-box !important;
+    }
+
+    /* The main content container is NOT in the edge-inset group above: body
+     * copy must never kiss the container edge, so it keeps a fixed 1.5rem
+     * gutter at every theme width rather than the widget/nav edge-inset
+     * (which is 0 on narrow / 1200 themes). Mirrors the runtime
+     * VBWD_EDGE_ALIGN block in style_edge_align.py. */
+    .cms-area--content .container {
+      max-width: var(--container-max, 1200px) !important;
+      width: 100% !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+      padding-left: 1.5rem !important;
+      padding-right: 1.5rem !important;
       box-sizing: border-box !important;
     }
 
