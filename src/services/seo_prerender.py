@@ -121,9 +121,16 @@ class SeoPrerenderWriter:
 
         post, terms, siblings = loaded
         canonical_slug = post.slug
+        # On a permalink rename (S122 §5a) the post's URL MOVED; the old static
+        # file must not keep serving 200 (duplicate content competing with the
+        # new page + its 301). Removed only AFTER the new file is written, so
+        # there is never a window with neither file present.
+        previous_slug = event_data.get("previous_slug")
 
         if post.status != POST_STATUS_PUBLISHED:
             self._remove(canonical_slug)
+            if previous_slug and previous_slug != canonical_slug:
+                self._remove(previous_slug)
             return
 
         if self._rewrite_checker and self._rewrite_checker(canonical_slug):
@@ -135,6 +142,8 @@ class SeoPrerenderWriter:
             return
 
         self._write(post, terms, siblings)
+        if previous_slug and previous_slug != canonical_slug:
+            self._remove(previous_slug)
 
     # ── file ops ─────────────────────────────────────────────────────────
 

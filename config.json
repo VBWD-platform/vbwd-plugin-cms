@@ -109,6 +109,31 @@
     "default": "https://api.indexnow.org/indexnow",
     "description": "IndexNow submission endpoint. The default fans out to all participating search engines."
   },
+  "posts_permalink_mode": {
+    "type": "string",
+    "default": "off",
+    "description": "Post-permalink engine master switch: 'off' (slug used verbatim, zero behaviour change), 'structured' (guided /<root>/[<year>/]<category-path>/<slug>), or 'template' (free-form %token% string). Applies to type=post only; pages are never transformed (S122)."
+  },
+  "posts_root": {
+    "type": "string",
+    "default": "blog",
+    "description": "The posts root segment rendered by the %root% token (structured-mode leading segment). Default 'blog' (S122)."
+  },
+  "posts_permalink_include_year": {
+    "type": "boolean",
+    "default": false,
+    "description": "Structured mode only: insert the publish %year% segment after the root (S122)."
+  },
+  "posts_permalink_uncategorized_slug": {
+    "type": "string",
+    "default": "uncategorized",
+    "description": "Category segment used when a post has no primary category, so a category segment is always present in structured mode (S122)."
+  },
+  "posts_permalink_template": {
+    "type": "string",
+    "default": "%root%/%category%/%slug%",
+    "description": "Template-mode string with %token% placeholders: %root% %slug% %category% %subcategory% %category_path% %year% %month% %day% %timestamp% %YYYYMMDDHHmmss% %id%. Ignored unless posts_permalink_mode='template' (S122)."
+  },
   "debug_mode": {
     "type": "boolean",
     "default": false,

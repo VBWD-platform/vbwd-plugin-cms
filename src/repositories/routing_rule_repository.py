@@ -33,6 +33,22 @@ class CmsRoutingRuleRepository:
             .all()
         )
 
+    def find_by_match(self, match_type: str, match_value: str) -> List[CmsRoutingRule]:
+        """All rules with the given (match_type, match_value).
+
+        Used by the permalink engine to emit an *idempotent* 301 on a slug
+        rename — it checks whether a rule already redirects the old path before
+        creating a new one (S122).
+        """
+        return (
+            self.session.query(CmsRoutingRule)
+            .filter(
+                CmsRoutingRule.match_type == match_type,
+                CmsRoutingRule.match_value == match_value,
+            )
+            .all()
+        )
+
     def find_by_id(self, rule_id: str) -> Optional[CmsRoutingRule]:
         return (
             self.session.query(CmsRoutingRule)

@@ -27,8 +27,15 @@ from plugins.cms.src.models.cms_post import (
     POST_STATUS_TRASH,
 )
 from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE, TAG_TERM_TYPE
+from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
 from plugins.cms.src.services import post_type_registry
-from plugins.cms.src.services._slug import slugify
+from plugins.cms.src.services._slug import slugify, unique_slug
+from plugins.cms.src.services.permalink import (
+    PermalinkRenderer,
+    PrimaryCategory,
+    PERMALINK_MODE_OFF,
+)
+from plugins.cms.src.services.seo_canonical import derive_canonical_url
 
 
 CONTENT_CHANGED_EVENT = "content.changed"
@@ -141,6 +148,9 @@ class PostService:
         style_repo=None,
         content_block_repo=None,
         layout_widget_repo=None,
+        routing_rule_repo=None,
+        permalink_config=None,
+        renderer=None,
     ) -> None:
         self._repo = repo
         self._term_repo = term_repo
@@ -165,6 +175,14 @@ class PostService:
         # page renders chrome + body instead of blank. Absent → an explicit
         # layout is always honoured (the disabled-feature path).
         self._layout_widget_repo = layout_widget_repo
+        # Permalink engine (S122). Optional — absent/``off`` config keeps today's
+        # behaviour exactly (``slug`` used verbatim). ``routing_rule_repo`` backs
+        # the auto-301 on a published-post rename; ``None`` disables the emission
+        # (the disabled-feature path). ``permalink_config`` is the live cms config
+        # blob (permalink keys + public_base_url + home_slug).
+        self._routing_rule_repo = routing_rule_repo
+        self._permalink_config = permalink_config or {}
+        self._renderer = renderer or PermalinkRenderer()
 
     # ── reads ────────────────────────────────────────────────────────────
 
@@ -386,10 +404,15 @@ class PostService:
         if not title:
             raise ValueError("title is required")
 
-        slug = (data.get("slug") or slugify(title)).strip("/")
-        if self._repo.find_by_type_and_slug(post_type, slug):
+        slug_base = (data.get("slug") or slugify(title)).strip("/")
+        full_slug, primary_term_id = self._compute_full_slug(
+            post_type=post_type, slug_base=slug_base, data=data, post=None
+        )
+        if self._is_permalink_engine(post_type):
+            full_slug = self._unique_computed_slug(post_type, full_slug, post_id=None)
+        elif self._repo.find_by_type_and_slug(post_type, full_slug):
             raise PostSlugConflictError(
-                f"A '{post_type}' post with slug '{slug}' already exists"
+                f"A '{post_type}' post with slug '{full_slug}' already exists"
             )
 
         parent_id = data.get("parent_id")
@@ -398,7 +421,9 @@ class PostService:
 
         post = CmsPost()
         post.type = post_type
-        post.slug = slug
+        post.slug = full_slug
+        post.slug_base = slug_base
+        post.primary_term_id = primary_term_id
         post.title = title
         post.excerpt = data.get("excerpt")
         post.featured_image_url = data.get("featured_image_url")
@@ -428,14 +453,9 @@ class PostService:
         if not post:
             raise PostNotFoundError(f"Post '{post_id}' not found")
 
-        if "slug" in data:
-            new_slug = (data["slug"] or "").strip("/")
-            existing = self._repo.find_by_type_and_slug(post.type, new_slug)
-            if existing and str(existing.id) != str(post.id):
-                raise PostSlugConflictError(
-                    f"A '{post.type}' post with slug '{new_slug}' already exists"
-                )
-            post.slug = new_slug
+        # Capture the pre-write slug so a rename can emit a 301 + carry
+        # ``previous_slug`` for the SEO subscribers (prerender / cache / IndexNow).
+        old_slug = post.slug
 
         if "parent_id" in data:
             parent_id = data["parent_id"]
@@ -466,16 +486,70 @@ class PostService:
         self._apply_layout_style(post, data)
 
         # Status is part of the editor's Save payload; route it through the same
-        # validated transition as change_status so the state machine holds.
+        # validated transition as change_status so the state machine holds. Done
+        # before the slug (re)compute so a publish-with-date materialises the
+        # date-token segments of a computed permalink.
         status_changed = False
         if "status" in data and data["status"]:
             status_changed = self._transition_status(post, data["status"])
 
+        # Slug (re)computation: engine posts re-render from slug_base + primary;
+        # pages / mode-off keep the verbatim slug (today's behaviour + conflict).
+        self._apply_slug_on_update(post, data)
+
+        slug_changed = post.slug != old_slug
+        if (
+            slug_changed
+            and post.type == "post"
+            and post.status == POST_STATUS_PUBLISHED
+        ):
+            self._emit_slug_redirect(old_slug, post.slug)
+
         self._repo.save(post)
         self._apply_content_blocks(post.id, data)
-        if status_changed or any(field in data for field in _CONTENT_FIELDS):
-            self._emit_content_changed(post, reason="updated")
+        previous_slug = old_slug if slug_changed else None
+        if (
+            status_changed
+            or slug_changed
+            or any(field in data for field in _CONTENT_FIELDS)
+        ):
+            self._emit_content_changed(
+                post, reason="updated", previous_slug=previous_slug
+            )
         return post.to_dict()
+
+    def _apply_slug_on_update(self, post: CmsPost, data: Dict[str, Any]) -> None:
+        """Recompute + apply the slug on update.
+
+        Engine posts (``type=post`` + mode≠off) re-render the full path from the
+        post's own ``slug_base`` and its primary category, suffixing on collision.
+        Everything else keeps the verbatim slug the editor supplied (today's
+        behaviour), raising on a genuine conflict.
+        """
+        if self._is_permalink_engine(post.type):
+            slug_base = self._effective_slug_base(data, post)
+            full_slug, primary_term_id = self._compute_full_slug(
+                post_type=post.type, slug_base=slug_base, data=data, post=post
+            )
+            full_slug = self._unique_computed_slug(
+                post.type, full_slug, post_id=post.id
+            )
+            post.slug = full_slug
+            post.slug_base = slug_base
+            post.primary_term_id = primary_term_id
+            return
+
+        if "slug" in data:
+            new_slug = (data["slug"] or "").strip("/")
+            existing = self._repo.find_by_type_and_slug(post.type, new_slug)
+            if existing and str(existing.id) != str(post.id):
+                raise PostSlugConflictError(
+                    f"A '{post.type}' post with slug '{new_slug}' already exists"
+                )
+            post.slug = new_slug
+            post.slug_base = new_slug.rsplit("/", 1)[-1]
+        if "primary_term_id" in data:
+            post.primary_term_id = self._validated_term_id(data.get("primary_term_id"))
 
     def _transition_status(self, post: CmsPost, target_status: str) -> bool:
         """Validate + apply a status transition in place. No-op if unchanged.
@@ -737,18 +811,205 @@ class PostService:
             "pages": result.get("pages", 1),
         }
 
-    def _emit_content_changed(self, post: CmsPost, reason: str) -> None:
+    def _emit_content_changed(
+        self, post: CmsPost, reason: str, previous_slug: Optional[str] = None
+    ) -> None:
         if self._event_dispatcher is None:
             return
-        self._event_dispatcher.dispatch(
-            Event(
-                name=CONTENT_CHANGED_EVENT,
-                data={
-                    "post_id": str(post.id),
-                    "type": post.type,
-                    "slug": post.slug,
-                    "status": post.status,
-                    "reason": reason,
-                },
-            )
+        payload: Dict[str, Any] = {
+            "post_id": str(post.id),
+            "type": post.type,
+            "slug": post.slug,
+            "status": post.status,
+            "reason": reason,
+        }
+        # ``previous_slug`` is carried ONLY on a real rename (S122 §5a) so the SEO
+        # subscribers can drop the orphaned prerender, invalidate the old render
+        # cache, and re-ping IndexNow for the old URL. Absent on create and on any
+        # save that did not move the slug — no spurious removals/submits.
+        if previous_slug and previous_slug != post.slug:
+            payload["previous_slug"] = previous_slug
+        self._event_dispatcher.dispatch(Event(name=CONTENT_CHANGED_EVENT, data=payload))
+
+    # ── permalink engine (S122) ──────────────────────────────────────────
+
+    def preview_permalink(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Compute the ``{path, url}`` a post WOULD get, without persisting.
+
+        Backs the admin live-preview endpoint so the editor reuses the exact
+        backend renderer (DRY — no JS re-implementation).
+        """
+        post_type = (data.get("type") or "post").strip()
+        title = (data.get("title") or "").strip()
+        slug_base = (data.get("slug") or slugify(title)).strip("/")
+        full_slug, _ = self._compute_full_slug(
+            post_type=post_type, slug_base=slug_base, data=data, post=None
         )
+        home_slug = self._permalink_config.get("home_slug")
+        public_base_url = self._permalink_config.get("public_base_url", "")
+        url = derive_canonical_url(None, full_slug, public_base_url, home_slug)
+        return {"path": full_slug, "url": url}
+
+    def _permalink_mode(self) -> str:
+        return self._permalink_config.get("posts_permalink_mode") or PERMALINK_MODE_OFF
+
+    def _is_permalink_engine(self, post_type: str) -> bool:
+        """True when the permalink engine transforms this write (posts + mode on)."""
+        return post_type == "post" and self._permalink_mode() != PERMALINK_MODE_OFF
+
+    def _compute_full_slug(
+        self,
+        *,
+        post_type: str,
+        slug_base: str,
+        data: Dict[str, Any],
+        post: Optional[CmsPost],
+    ) -> tuple:
+        """Return ``(full_slug, primary_term_id)`` for a create/update/preview.
+
+        Engine path: render the full path from ``slug_base`` + the resolved
+        primary category. Non-engine path: the slug is verbatim ``slug_base`` and
+        an explicitly-provided ``primary_term_id`` round-trips (never auto-picked).
+        """
+        assigned_ids = self._assigned_term_ids(data, post)
+        if self._is_permalink_engine(post_type):
+            primary_id = self._resolve_render_primary_id(data, assigned_ids, post)
+            primary = self._primary_category_for(primary_id)
+            published_at = (
+                post.published_at
+                if post is not None
+                else _parse_datetime(data.get("published_at"))
+            )
+            rendered = self._renderer.render(
+                self._permalink_mode(),
+                self._permalink_config,
+                slug_base=slug_base,
+                primary_term=primary,
+                published_at=published_at,
+                post_id=str(post.id) if post is not None and post.id else None,
+            )
+            return (rendered or slug_base), primary_id
+
+        if "primary_term_id" in data:
+            return slug_base, self._validated_term_id(data.get("primary_term_id"))
+        if post is not None and post.primary_term_id:
+            return slug_base, str(post.primary_term_id)
+        return slug_base, None
+
+    def _assigned_term_ids(
+        self, data: Dict[str, Any], post: Optional[CmsPost]
+    ) -> List[str]:
+        """The term ids assigned to the post — from the payload if present, else
+        the persisted junction (an unsaved/new post has none)."""
+        if "term_ids" in data and data["term_ids"] is not None:
+            return [str(term_id) for term_id in data["term_ids"]]
+        if post is not None and post.id is not None:
+            return [
+                str(link.term_id)
+                for link in self._post_term_repo.find_by_post(str(post.id))
+            ]
+        return []
+
+    def _resolve_render_primary_id(
+        self,
+        data: Dict[str, Any],
+        assigned_ids: List[str],
+        post: Optional[CmsPost],
+    ) -> Optional[str]:
+        """Primary-term precedence: explicit-among-assigned → existing-among-
+        assigned → first assigned category → None."""
+        if "primary_term_id" in data:
+            explicit = data.get("primary_term_id")
+            if explicit and str(explicit) in assigned_ids:
+                return str(explicit)
+        elif post is not None and post.primary_term_id:
+            existing = str(post.primary_term_id)
+            if existing in assigned_ids:
+                return existing
+        for term_id in assigned_ids:
+            term = self._term_repo.find_by_id(term_id)
+            if term is not None and term.term_type == CATEGORY_TERM_TYPE:
+                return term_id
+        return None
+
+    @staticmethod
+    def _validated_term_id(value: Any) -> Optional[str]:
+        return str(value) if value else None
+
+    def _primary_category_for(
+        self, primary_id: Optional[str]
+    ) -> Optional[PrimaryCategory]:
+        if not primary_id:
+            return None
+        ancestor_slugs = self._term_ancestor_slugs(primary_id)
+        if not ancestor_slugs:
+            return None
+        return PrimaryCategory(ancestor_slugs=tuple(ancestor_slugs))
+
+    def _term_ancestor_slugs(self, primary_id: str) -> List[str]:
+        """The primary term's slug chain root→leaf via ``parent_id`` walk."""
+        slugs: List[str] = []
+        seen: set = set()
+        current = self._term_repo.find_by_id(str(primary_id))
+        while current is not None and str(current.id) not in seen:
+            slugs.append(current.slug)
+            seen.add(str(current.id))
+            parent_id = getattr(current, "parent_id", None)
+            current = self._term_repo.find_by_id(str(parent_id)) if parent_id else None
+        slugs.reverse()
+        return slugs
+
+    def _effective_slug_base(self, data: Dict[str, Any], post: CmsPost) -> str:
+        """The post's own tail segment for a re-render: a supplied ``slug`` wins,
+        else the stored ``slug_base``, else the last segment of the current slug
+        (backfill for a post that predates the column)."""
+        if "slug" in data:
+            title = data.get("title", post.title)
+            return (data["slug"] or slugify(title or "")).strip("/")
+        if post.slug_base:
+            return post.slug_base
+        return (post.slug or "").rsplit("/", 1)[-1]
+
+    def _unique_computed_slug(self, post_type: str, slug: str, post_id: Any) -> str:
+        """Suffix ``-2``/``-3`` on a computed-slug collision (excluding self)."""
+
+        def _exists(candidate: str) -> bool:
+            found = self._repo.find_by_type_and_slug(post_type, candidate)
+            return found is not None and (
+                post_id is None or str(found.id) != str(post_id)
+            )
+
+        return unique_slug(slug, _exists)
+
+    def _emit_slug_redirect(self, old_slug: str, new_slug: str) -> None:
+        """Emit an idempotent 301 (old path_prefix → new target) on a rename."""
+        if self._routing_rule_repo is None:
+            return
+        old_path = self._redirect_path(old_slug)
+        target = self._redirect_path(new_slug)
+        if old_path == target:
+            return
+        for rule in self._routing_rule_repo.find_by_match("path_prefix", old_path):
+            if (
+                getattr(rule, "target_slug", None) == target
+                and getattr(rule, "redirect_code", None) == 301
+            ):
+                return
+        rule = CmsRoutingRule()
+        # Fixed short name — the old/new paths live in match_value/target_slug
+        # (the ``name`` column is 120 chars and a nested path would overflow).
+        rule.name = "Permalink rename 301"
+        rule.match_type = "path_prefix"
+        rule.match_value = old_path
+        rule.target_slug = target
+        rule.redirect_code = 301
+        rule.is_rewrite = False
+        rule.is_active = True
+        rule.layer = "middleware"
+        rule.priority = 0
+        self._routing_rule_repo.save(rule)
+
+    @staticmethod
+    def _redirect_path(slug: Optional[str]) -> str:
+        cleaned = (slug or "").strip("/")
+        return "/" + cleaned if cleaned else "/"

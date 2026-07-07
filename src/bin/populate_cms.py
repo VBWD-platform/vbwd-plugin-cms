@@ -1033,6 +1033,14 @@ _LAYOUT_WIDGET_PLACEMENTS: dict[str, list[tuple[str, str]]] = {
         ("archive", "tag-archive"),
         ("footer", "footer-nav"),
     ],
+    # Posts archive (blog index): the PostArchive widget lists ALL published
+    # posts (no term filter) through the existing GET /cms/posts?type=post path.
+    "posts-archive": [
+        ("header", "header-nav"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("archive", "posts-archive"),
+        ("footer", "footer-nav"),
+    ],
     # S121 — demo search layouts. The Search / SearchResults widgets are placed
     # at PAGE level (via config_override on the docs/search demo pages), so only
     # the structural header/footer are layout-level placements here.
@@ -1296,6 +1304,66 @@ def _get_or_create_layout(data: dict, widget_map: dict) -> "CmsLayout":
         db.session.add(lw)
     print(f"  + layout '{slug}'")
     return layout
+
+
+# ─── Posts archive (blog index) ─────────────────────────────────────────────────
+# The archive is a cms_post(type=page) seeded at the config-driven ``posts_root``
+# slug whose layout hosts the PostArchive widget. Constants shared with the
+# integration oracle so the layout/widget slugs cannot drift.
+POSTS_ARCHIVE_LAYOUT_SLUG = "posts-archive"
+POSTS_ARCHIVE_WIDGET_SLUG = "posts-archive"
+
+
+def _resolve_posts_root() -> str:
+    """Resolve the archive slug (``posts_root``) from the aggregated CMS config.
+
+    Reads the SAME source the runtime reads — ``current_app.config_store
+    .get_config('cms')`` (the operator's saved overrides) — falling back to the
+    bundled default ``blog`` (``DEFAULT_POSTS_ROOT``). Reading the aggregated
+    config, not only the bundled ``config.json`` default, keeps the seeded
+    archive page slug in lock-step with the runtime ``%root%`` permalink segment
+    and avoids the "seed reads bundled config, runtime reads aggregated → 404"
+    trap.
+    """
+    from flask import current_app
+    from plugins.cms.src.services.permalink import DEFAULT_POSTS_ROOT
+
+    config_store = getattr(current_app, "config_store", None)
+    if config_store is not None:
+        cms_config = config_store.get_config("cms") or {}
+        posts_root = str(cms_config.get("posts_root") or "").strip()
+        if posts_root:
+            return posts_root
+    return DEFAULT_POSTS_ROOT
+
+
+def _seed_posts_archive_page(
+    post_service, post_repo, layout_map: dict[str, "CmsLayout"]
+) -> Optional[dict]:
+    """Seed the posts-archive (blog index) page at the configured ``posts_root``.
+
+    Create-only / idempotent by slug via ``_get_or_create_unified_page`` — never
+    overwrites an existing operator page. The page body is empty; its layout
+    hosts the PostArchive widget that renders the listing.
+    """
+    posts_root = _resolve_posts_root()
+    archive_layout = layout_map.get(POSTS_ARCHIVE_LAYOUT_SLUG)
+    if archive_layout is None:
+        print(
+            f"  ! layout '{POSTS_ARCHIVE_LAYOUT_SLUG}' missing — archive page skipped"
+        )
+        return None
+    return _get_or_create_unified_page(
+        post_service,
+        post_repo,
+        posts_root,
+        "Blog",
+        archive_layout,
+        None,
+        content_json={"type": "doc", "content": []},
+        meta_description="All published blog posts.",
+        is_published=True,
+    )
 
 
 def _get_or_create_category_term(
@@ -1917,6 +1985,21 @@ def populate_cms() -> None:
         content_json={"component": "TagArchive"},
         config={"type": "post", "term_type": "tag", "mode": "excerpt"},
     )
+    # Posts archive (blog index) widget — lists ALL published posts (no term
+    # filter) via GET /cms/posts?type=post. Placed on the posts-archive layout.
+    widget_map[POSTS_ARCHIVE_WIDGET_SLUG] = _get_or_create_widget(
+        POSTS_ARCHIVE_WIDGET_SLUG,
+        "Posts Archive (Blog Index)",
+        "vue-component",
+        content_json={"component": "PostArchive", "mode": "category", "type": "post"},
+        config={
+            "component_name": "PostArchive",
+            "type": "post",
+            "mode": "category",
+            "posts_per_page": 20,
+            "paginate": True,
+        },
+    )
     widget_map["addon-catalog"] = _get_or_create_widget(
         "addon-catalog",
         "Addon Catalog",
@@ -2007,6 +2090,10 @@ def populate_cms() -> None:
     _repoint_docs_page_to_docs_layout(
         post_repo, post_widget_repo, layout_map, widget_map
     )
+    db.session.commit()
+
+    print("\n── Posts archive page (blog index) ─────────────────────────────")
+    _seed_posts_archive_page(post_service, post_repo, layout_map)
     db.session.commit()
 
     print("\n── Routing Rules ───────────────────────────────────────────────")

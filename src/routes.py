@@ -84,6 +84,9 @@ from plugins.cms.src.services.contact_form_service import (
 from plugins.cms.src.repositories.post_repository import PostRepository
 from plugins.cms.src.repositories.term_repository import TermRepository
 from plugins.cms.src.repositories.post_term_repository import PostTermRepository
+from plugins.cms.src.repositories.routing_rule_repository import (
+    CmsRoutingRuleRepository,
+)
 from plugins.cms.src.repositories.search_repository import SearchRepository
 from plugins.cms.src.services.search_service import SearchService
 from plugins.cms.src.services.post_service import (
@@ -288,6 +291,11 @@ def _post_service() -> PostService:
         # Detects an explicit-but-unseeded layout (0 placements) so the public
         # resolver falls back to the default layout instead of rendering blank.
         layout_widget_repo=CmsLayoutWidgetRepository(db.session),
+        # Permalink engine (S122): the routing-rule repo backs the auto-301 on a
+        # published-post rename; the live cms config supplies the mode/template
+        # and the public_base_url/home_slug for the preview surface.
+        routing_rule_repo=CmsRoutingRuleRepository(db.session),
+        permalink_config=_cms_config(),
     )
 
 
@@ -1531,6 +1539,22 @@ def admin_create_post():
         return jsonify({"error": str(e)}), 422
     except PostSlugConflictError as e:
         return jsonify({"error": str(e)}), 409
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/permalink-preview", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_permalink_preview():
+    """POST /api/v1/admin/cms/posts/permalink-preview — compute {path, url}.
+
+    Runs the SAME PermalinkRenderer + canonical-URL rule the write path uses, so
+    the fe-admin editor's live preview stays DRY with the real engine. No
+    persistence. Body: ``{type, title, slug, primary_term_id, term_ids,
+    published_at}``.
+    """
+    data = request.get_json() or {}
+    return jsonify(_post_service().preview_permalink(data)), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/posts/<post_id>", methods=["GET"])

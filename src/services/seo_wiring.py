@@ -533,8 +533,13 @@ def _on_content_changed_invalidate(_event_name: str, data: dict) -> None:
     if not seo_dynamic_render_available():
         return
     try:
-        path = _public_path_for_slug((data or {}).get("slug"))
-        build_dynamic_render_service().invalidate(path)
+        service = build_dynamic_render_service()
+        service.invalidate(_public_path_for_slug((data or {}).get("slug")))
+        # A permalink rename (S122 §5a) also strands the render cache keyed on the
+        # OLD path — purge it too so a stale full-page render is never served.
+        previous_slug = (data or {}).get("previous_slug")
+        if previous_slug:
+            service.invalidate(_public_path_for_slug(previous_slug))
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("[cms.seo] render-cache invalidate failed for %s: %s", data, exc)
 
@@ -651,8 +656,13 @@ def _on_content_changed_indexnow(_event_name: str, data: dict) -> None:
     if (data or {}).get("status") != POST_STATUS_PUBLISHED:
         return
     try:
-        path = _public_path_for_slug((data or {}).get("slug"))
-        build_indexnow_submitter().submit(path)
+        submitter = build_indexnow_submitter()
+        submitter.submit(_public_path_for_slug((data or {}).get("slug")))
+        # On a permalink rename (S122 §5a) also ping the OLD URL so engines
+        # recrawl it and pick up the 301 to the new URL.
+        previous_slug = (data or {}).get("previous_slug")
+        if previous_slug:
+            submitter.submit(_public_path_for_slug(previous_slug))
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("[cms.indexnow] submit for %s failed: %s", data, exc)
 

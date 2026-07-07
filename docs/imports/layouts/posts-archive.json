@@ -1,0 +1,36 @@
+{
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
+    {
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "",
+          "name": "breadcrumbs",
+          "type": "vue"
+        },
+        {
+          "label": "Archive",
+          "name": "archive",
+          "type": "vue"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Posts archive (blog index): breadcrumbs plus the PostArchive widget listing all published posts, paginated.",
+      "is_active": true,
+      "is_default": false,
+      "name": "Posts Archive",
+      "slug": "posts-archive",
+      "sort_order": 12
+    }
+  ]
+}

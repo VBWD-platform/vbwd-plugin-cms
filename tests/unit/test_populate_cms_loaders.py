@@ -79,6 +79,7 @@ class TestLayoutLoader:
             "testimonials",
             "pricing-native-plans",
             "tag-archive",
+            "posts-archive",
             "addon-catalog",
             "cookie-consent",
         }

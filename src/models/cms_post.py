@@ -63,6 +63,20 @@ class CmsPost(BaseModel):
 
     type = db.Column(db.String(64), nullable=False, index=True)
     slug = db.Column(db.String(512), nullable=False, index=True)
+    # The post's OWN final path segment (``%slug%`` for the permalink engine).
+    # ``slug`` stays the full computed lookup path; ``slug_base`` is the tail the
+    # engine (re)assembles the path from. Nullable — pages/other types may omit
+    # it (S122).
+    slug_base = db.Column(db.String(512), nullable=True)
+    # The chosen primary category. Its ancestor chain (``parent_id`` walk) feeds
+    # ``%category%`` / ``%subcategory%`` / ``%category_path%``. ``SET NULL`` so
+    # deleting a category never deletes the post (S122).
+    primary_term_id = db.Column(
+        db.UUID,
+        db.ForeignKey("cms_term.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     title = db.Column(db.String(255), nullable=False)
     excerpt = db.Column(db.Text, nullable=True)
     featured_image_url = db.Column(db.String(512), nullable=True)
@@ -140,6 +154,10 @@ class CmsPost(BaseModel):
             "id": str(self.id),
             "type": self.type,
             "slug": self.slug,
+            "slug_base": self.slug_base,
+            "primary_term_id": (
+                str(self.primary_term_id) if self.primary_term_id else None
+            ),
             "title": self.title,
             "excerpt": self.excerpt,
             "featured_image_url": self.featured_image_url,
