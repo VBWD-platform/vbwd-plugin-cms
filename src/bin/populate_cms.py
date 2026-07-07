@@ -900,8 +900,11 @@ _STANDALONE_VUE_WIDGETS = [
             # S121 — ``scope`` (pages | posts | both) replaces the legacy
             # free-text ``type``. ``both`` omits the post-type filter server-side.
             "scope": "both",
-            "mode": "titles",
-            "per_page": 10,
+            # S120 — default the fresh-install results to the WordPress-archive
+            # ``category`` card (fe-user SearchResults supports mode='category');
+            # existing widgets are untouched (this only shapes newly-created rows).
+            "mode": "category",
+            "per_page": 8,
         },
     },
     # Pure-frontend catalog widgets — they consume EXISTING public catalog APIs

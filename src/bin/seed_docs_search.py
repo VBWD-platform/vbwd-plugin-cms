@@ -75,6 +75,17 @@ _SEARCH_WIDGET_SLUGS = ("search", "search-results")
 _DOCS_PAGE_SLUG = "docs"
 _DOCS_LAYOUT_SLUG = "docs"
 
+# S120 — the /search page's SearchResults placement must render in the
+# WordPress-archive ``category`` card on ALL instances (including already-
+# populated prod). The base ``search-results`` widget config is NEVER touched
+# (operators may have customized it); instead a per-placement ``config_override``
+# — which the fe-user renderer merges over the base config under ``config`` —
+# carries the category mode. These name the results placement to heal.
+_SEARCH_RESULTS_WIDGET_SLUG = "search-results"
+_SEARCH_RESULTS_AREA = "results"
+_SEARCH_RESULTS_CATEGORY_MODE = "category"
+_SEARCH_RESULTS_PER_PAGE = 8
+
 
 def _build_widget_map() -> dict[str, "CmsWidget"]:
     """Return ``{slug: CmsWidget}`` for the EXISTING widget rows (read-only).
@@ -141,6 +152,82 @@ def _create_layout_if_absent(data: dict, widget_map: dict) -> "CmsLayout":
     return _get_or_create_layout(data, widget_map)
 
 
+def _ensure_search_results_category_mode(
+    post_repo, post_widget_repo, widget_map
+) -> str:
+    """Idempotently ensure the ``/search`` page's SearchResults placement renders
+    in the WordPress-archive ``category`` card via a per-placement
+    ``config_override`` — WITHOUT ever overwriting the base ``search-results``
+    widget's ``config`` (an operator may have customized it).
+
+    Narrow, append-only and non-destructive (mirrors
+    ``_repoint_docs_page_to_docs_layout``): it preserves every OTHER placement and
+    every OTHER override key, and on the results placement it only sets
+    ``config.mode == 'category'`` (+ ``per_page``), merged over whatever the
+    override already carries (e.g. ``scope``). A re-run — where the override is
+    already ``category`` — is a no-op (no rewrite, no duplicate placement). It
+    NEVER queries or mutates a ``CmsWidget`` row, so the base widget config is
+    structurally out of reach here.
+
+    Returns a human-readable outcome for the summary. Degrades to a skip (never a
+    false success) when the ``/search`` page, the ``search-results`` widget, or
+    the results placement is absent.
+    """
+    search_page = post_repo.find_by_type_and_slug("page", _SEARCH_PAGE_SLUG)
+    results_widget = widget_map.get(_SEARCH_RESULTS_WIDGET_SLUG)
+    if search_page is None or results_widget is None:
+        return "skipped ('/search' page or 'search-results' widget unavailable)"
+
+    existing = post_widget_repo.find_by_post(str(search_page.id))
+
+    def _is_results_placement(row) -> bool:
+        return (
+            str(row.widget_id) == str(results_widget.id)
+            and row.area_name == _SEARCH_RESULTS_AREA
+        )
+
+    def _is_category(override) -> bool:
+        return (
+            isinstance(override, dict)
+            and isinstance(override.get("config"), dict)
+            and override["config"].get("mode") == _SEARCH_RESULTS_CATEGORY_MODE
+        )
+
+    results_rows = [row for row in existing if _is_results_placement(row)]
+    if not results_rows:
+        return "skipped (no SearchResults placement on '/search')"
+    # Idempotent: a results placement already in category mode needs no change.
+    if all(_is_category(row.config_override) for row in results_rows):
+        return "already 'category' mode"
+
+    # Preserve every existing placement; on the results placement, MERGE the
+    # category mode over the existing nested override (keeping e.g. ``scope``).
+    rows: list[dict] = []
+    for row in existing:
+        override = row.config_override
+        if _is_results_placement(row) and not _is_category(override):
+            nested = (
+                dict(override["config"])
+                if isinstance(override, dict)
+                and isinstance(override.get("config"), dict)
+                else {}
+            )
+            nested["mode"] = _SEARCH_RESULTS_CATEGORY_MODE
+            nested["per_page"] = _SEARCH_RESULTS_PER_PAGE
+            override = {"config": nested}
+        rows.append(
+            {
+                "widget_id": str(row.widget_id),
+                "area_name": row.area_name,
+                "sort_order": row.sort_order,
+                "required_access_level_ids": row.required_access_level_ids,
+                "config_override": override,
+            }
+        )
+    post_widget_repo.replace_for_post(str(search_page.id), rows)
+    return "SearchResults set to 'category' mode (per-placement override)"
+
+
 def seed_docs_search() -> None:
     """Land the S121 docs/search demo non-destructively (see module docstring)."""
     (
@@ -199,6 +286,17 @@ def seed_docs_search() -> None:
             _set_unified_page_widgets(post_widget_repo, post, assignments, widget_map)
     db.session.commit()
 
+    # (4b) Heal the /search page's SearchResults placement to the category card
+    # on ALREADY-populated instances (where the page + placement pre-date the
+    # category fixture, so step (4) skipped its per-page widgets). Append-only,
+    # idempotent, and it NEVER touches the base widget config.
+    print("\n── Search results category mode (append-only heal) ─────────────")
+    search_results_outcome = _ensure_search_results_category_mode(
+        post_repo, post_widget_repo, widget_map
+    )
+    print(f"  {search_results_outcome}")
+    db.session.commit()
+
     # (5) Re-point the EXISTING /docs page onto the docs layout (append-only).
     # Track the ACTUAL outcome so the summary reports it truthfully.
     print("\n── Docs re-point (append-only) ─────────────────────────────────")
@@ -225,9 +323,10 @@ def seed_docs_search() -> None:
     # (6) Summary — reports the ACTUAL outcome, not an optimistic constant.
     print("\n" + "=" * 55)
     print("✓ Safe docs/search seed complete (create-only / append-only)")
-    print(f"  Layouts     : {sorted(layout_map.keys())}")
-    print(f"  Search page : '{_SEARCH_PAGE_SLUG}' (create-only)")
-    print(f"  Docs        : {docs_outcome}")
+    print(f"  Layouts       : {sorted(layout_map.keys())}")
+    print(f"  Search page   : '{_SEARCH_PAGE_SLUG}' (create-only)")
+    print(f"  Search results: {search_results_outcome}")
+    print(f"  Docs          : {docs_outcome}")
     print("=" * 55)
 
 

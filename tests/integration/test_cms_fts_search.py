@@ -130,6 +130,13 @@ def _slugs(result):
     return [item["slug"] for item in result["items"]]
 
 
+def _item_by_slug(result, slug):
+    for item in result["items"]:
+        if item["slug"] == slug:
+            return item
+    raise AssertionError(f"slug {slug!r} not in search results")
+
+
 class TestMatching:
     def test_matches_title_excerpt_and_body(self, db, seeded):
         result = _search_service(db).search("hospitality", page=1, per_page=50)
@@ -228,6 +235,81 @@ class TestSearchRoute:
         slugs = [item["slug"] for item in resp.get_json()["items"]]
         assert seeded["title_match"]["slug"] in slugs
         assert seeded["body_match"]["slug"] not in slugs
+
+
+class TestCategoryCardEnrichment:
+    """S12x — each search result item carries category-card fields:
+    ``primary_category`` (first ``category`` term or null), ``excerpt_effective``
+    (stored excerpt, else an HTML-stripped/truncated content fallback), and the
+    already-serialized ``featured_image_url`` / ``og_image_url``.
+    """
+
+    def test_item_has_primary_category_when_categorized(self, db, seeded):
+        result = _search_service(db).search("hospitality", page=1, per_page=50)
+        item = _item_by_slug(result, seeded["title_match"]["slug"])
+        assert item["primary_category"] == {
+            "slug": seeded["news_slug"],
+            "name": "News",
+        }
+
+    def test_item_primary_category_null_when_uncategorized(self, db, seeded):
+        result = _search_service(db).search("hospitality", page=1, per_page=50)
+        item = _item_by_slug(result, seeded["body_match"]["slug"])
+        assert item["primary_category"] is None
+
+    def test_excerpt_effective_uses_stored_excerpt(self, db, seeded):
+        result = _search_service(db).search("hospitality", page=1, per_page=50)
+        item = _item_by_slug(result, seeded["excerpt_match"]["slug"])
+        assert item["excerpt_effective"] == seeded["excerpt_match"]["excerpt"]
+
+    def test_excerpt_effective_falls_back_to_stripped_content(self, db, seeded):
+        marker = seeded["marker"]
+        long_html = (
+            "<p>" + " ".join(f"hospitality word{index}" for index in range(40)) + "</p>"
+        )
+        long_post = _post_service(db).create_post(
+            {
+                "type": "post",
+                "title": f"Long body {marker}",
+                "slug": f"hosp-long-{marker}",
+                "content_html": long_html,
+                "status": POST_STATUS_PUBLISHED,
+            }
+        )
+        result = _search_service(db).search("hospitality", page=1, per_page=50)
+        item = _item_by_slug(result, long_post["slug"])
+        effective = item["excerpt_effective"]
+        # Derived, not stored — the persisted excerpt stays empty.
+        assert not (long_post["excerpt"] or "")
+        # Fallback: HTML stripped, truncated on a word boundary, ellipsis added.
+        assert "<" not in effective and ">" not in effective
+        assert len(effective) <= 161
+        assert effective.endswith("…")
+
+    def test_excerpt_effective_decodes_html_entities(self, db, seeded):
+        marker = seeded["marker"]
+        entity_post = _post_service(db).create_post(
+            {
+                "type": "post",
+                "title": f"Entities {marker}",
+                "slug": f"hosp-entities-{marker}",
+                "content_html": (
+                    f"<p>hospitality tips &amp; tricks &lt;script&gt; {marker}</p>"
+                ),
+                "status": POST_STATUS_PUBLISHED,
+            }
+        )
+        result = _search_service(db).search("hospitality", page=1, per_page=50)
+        effective = _item_by_slug(result, entity_post["slug"])["excerpt_effective"]
+        assert "&" in effective and "<script>" in effective
+        assert "&amp;" not in effective
+        assert "&lt;" not in effective and "&gt;" not in effective
+
+    def test_item_exposes_image_keys(self, db, seeded):
+        result = _search_service(db).search("hospitality", page=1, per_page=50)
+        item = _item_by_slug(result, seeded["title_match"]["slug"])
+        assert "featured_image_url" in item
+        assert "og_image_url" in item
 
 
 class TestScopeToTypeMapping:

@@ -54,7 +54,8 @@
           "sort_order": 0,
           "config_override": {
             "config": {
-              "scope": "both"
+              "mode": "category",
+              "per_page": 8
             }
           }
         }

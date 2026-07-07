@@ -209,11 +209,19 @@ class TestSearchWidgetScopeConfig:
         config = self._by_slug()["search-results"]["config"]
         # Existing keys are preserved.
         assert config["component_name"] == "SearchResults"
-        assert config["mode"] == "titles"
-        assert config["per_page"] == 10
+        # S120 — a fresh install defaults the results to the WordPress-archive
+        # ``category`` card (was ``titles``); per_page tightened to 8.
+        assert config["mode"] == "category"
+        assert config["per_page"] == 8
         # ``type`` is replaced by the constrained ``scope`` (default ``both``).
         assert "type" not in config
         assert config["scope"] == "both"
+
+    def test_search_results_default_mode_is_category(self):
+        # S120 — the fresh-install SearchResults renders the category archive
+        # card by default (fe-user SearchResults ``mode: 'category'``).
+        config = self._by_slug()["search-results"]["config"]
+        assert config["mode"] == "category"
 
 
 class TestCatalogCollectionWidgets:
@@ -377,4 +385,8 @@ class TestSearchDemoLayouts:
         assert box["config_override"]["config"]["scope"] == "both"
         results = self._assignment(search_page, "results")
         assert results["widget_slug"] == "search-results"
-        assert results["config_override"]["config"]["scope"] == "both"
+        # S120 — the results placement carries a per-placement override that
+        # switches the SearchResults card to WordPress-archive ``category`` mode
+        # (nested under ``config`` so the fe-user renderer merges it).
+        assert results["config_override"]["config"]["mode"] == "category"
+        assert results["config_override"]["config"]["per_page"] == 8

@@ -85,6 +85,55 @@ def _sidebar_search_rows(db, docs_post):
     )
 
 
+# Simulates an ALREADY-populated instance: a ``/search`` page whose
+# ``search-results`` placement pre-dates the category fixture (stale, no
+# ``mode``). The create-only page path leaves it as-is, so only the heal step
+# can upgrade it — exactly the prod scenario S120 targets.
+_STALE_RESULTS_OVERRIDE = {"config": {"scope": "both"}}
+
+
+def _seed_preexisting_search_page_with_stale_results(db) -> CmsWidget:
+    """Create a real ``/search`` page whose SearchResults placement carries a
+    STALE (no-``mode``) override, returning the base ``search-results`` widget.
+
+    The page is created THROUGH the unified service and the placement THROUGH the
+    repo (never raw SQL), mirroring the state a live instance is in before S120.
+    """
+    post_service, _term, _post_repo, _tr, post_widget_repo = _build_unified_services()
+    post_service.create_post(
+        {
+            "type": "page",
+            "slug": "search",
+            "title": "Search",
+            "language": "en",
+            "status": "published",
+            "layout_id": None,
+        }
+    )
+    results_widget = db.session.query(CmsWidget).filter_by(slug="search-results").one()
+    search_page = db.session.query(CmsPost).filter_by(type="page", slug="search").one()
+    post_widget_repo.replace_for_post(
+        str(search_page.id),
+        [
+            {
+                "widget_id": str(results_widget.id),
+                "area_name": "results",
+                "sort_order": 0,
+                "config_override": dict(_STALE_RESULTS_OVERRIDE),
+            }
+        ],
+    )
+    return results_widget
+
+
+def _results_placement_rows(db, search_page):
+    return (
+        db.session.query(CmsPostWidget)
+        .filter_by(post_id=search_page.id, area_name="results")
+        .all()
+    )
+
+
 class TestCreatesLayoutsAndRepointsWhenAbsent:
     def test_creates_layouts_and_repoints_when_absent(self, db):
         _seed_search_widgets()
@@ -288,3 +337,94 @@ class TestDoesNotOverwriteExistingSearchWidget:
         sidebar = _sidebar_search_rows(db, docs)
         assert len(sidebar) == 1
         assert str(sidebar[0].widget_id) == str(after.id)
+
+
+class TestSearchResultsGetsCategoryOverride:
+    """S120 — on an already-populated instance the ``/search`` page's
+    SearchResults placement (stale, no ``mode``) must be healed to the
+    WordPress-archive ``category`` card via a per-placement ``config_override``
+    — the base widget config is left alone (a separate test proves that)."""
+
+    def test_search_results_placement_gets_category_override(self, db):
+        _seed_search_widgets()
+        _seed_preexisting_search_page_with_stale_results(db)
+        db.session.commit()
+
+        seed_docs_search()
+
+        search_page = (
+            db.session.query(CmsPost).filter_by(type="page", slug="search").one()
+        )
+        results = _results_placement_rows(db, search_page)
+        assert len(results) == 1, "SearchResults placement lost/duplicated"
+        nested = results[0].config_override["config"]
+        assert nested["mode"] == "category"
+        assert nested["per_page"] == 8
+        # The pre-existing override key survives the merge.
+        assert nested["scope"] == "both"
+
+
+class TestDoesNotOverwriteBaseSearchResultsWidgetConfig:
+    """The critical safety test: the heal writes ONLY a per-placement override —
+    the base ``search-results`` widget's ``config`` (which an operator may have
+    customized) must survive byte-for-byte."""
+
+    _CUSTOM_CONFIG = {
+        "component_name": "SearchResults",
+        "mode": "titles",
+        "scope": "pages",
+        "per_page": 25,
+        "foo": "bar",
+    }
+
+    def test_does_NOT_overwrite_base_search_results_widget_config(self, db):
+        operator_widget = CmsWidget(
+            slug="search-results",
+            name="OPERATOR CUSTOM RESULTS",
+            widget_type="vue-component",
+            content_json={"component": "SearchResults"},
+            config=dict(self._CUSTOM_CONFIG),
+            sort_order=0,
+            is_active=True,
+        )
+        db.session.add(operator_widget)
+        db.session.commit()
+        _seed_preexisting_search_page_with_stale_results(db)
+        db.session.commit()
+
+        seed_docs_search()
+
+        # BASE widget config is 100% untouched (only the placement carries mode).
+        after = db.session.query(CmsWidget).filter_by(slug="search-results").one()
+        assert after.config == self._CUSTOM_CONFIG, "base widget config overwritten"
+        assert after.name == "OPERATOR CUSTOM RESULTS", "base widget name overwritten"
+        assert db.session.query(CmsWidget).filter_by(slug="search-results").count() == 1
+
+        # The placement (and only the placement) now carries category mode.
+        search_page = (
+            db.session.query(CmsPost).filter_by(type="page", slug="search").one()
+        )
+        results = _results_placement_rows(db, search_page)
+        assert len(results) == 1
+        assert results[0].config_override["config"]["mode"] == "category"
+
+
+class TestSearchResultsModeHealIsIdempotent:
+    def test_search_results_mode_heal_is_idempotent(self, db):
+        _seed_search_widgets()
+        _seed_preexisting_search_page_with_stale_results(db)
+        db.session.commit()
+
+        seed_docs_search()
+        seed_docs_search()
+
+        search_page = (
+            db.session.query(CmsPost).filter_by(type="page", slug="search").one()
+        )
+        results = _results_placement_rows(db, search_page)
+        assert len(results) == 1, "results placement duplicated on second run"
+        assert results[0].config_override["config"]["mode"] == "category"
+        # Exactly one /search page (no duplicate created by the second run).
+        assert (
+            db.session.query(CmsPost).filter_by(type="page", slug="search").count() == 1
+        )
