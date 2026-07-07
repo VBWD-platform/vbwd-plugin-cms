@@ -24,10 +24,14 @@ def _make_service():
 
     created = {"id": POST_ID, "slug": "my-headline", "type": "post", "status": "draft"}
     post_service.create_post.return_value = created
-    # find_or_create returns a term dict keyed by name (deterministic id per name).
-    term_service.find_or_create.side_effect = lambda term_type, name: {
-        "id": f"{term_type}:{name}"
-    }
+
+    # find_or_create returns a term dict keyed by name (deterministic id per name);
+    # a child term (parent_id given) gets a parent-qualified id so both are visible.
+    def _find_or_create(term_type, name, parent_id=None):
+        suffix = f"|{parent_id}" if parent_id else ""
+        return {"id": f"{term_type}:{name}{suffix}"}
+
+    term_service.find_or_create.side_effect = _find_or_create
     image_service.upload_image.return_value = {"url_path": "/uploads/images/hero.jpg"}
 
     service = ContentIngestService(
@@ -95,6 +99,66 @@ def test_categories_via_terms_and_tags_via_core_port():
     assert entity_type == "cms_post"
     assert str(entity_id) == POST_ID
     assert slugs == ["saas", "dev-ops"]
+
+
+def test_flat_category_string_resolves_single_top_level_term():
+    """Backward-compat: a plain string category → one term with parent_id null."""
+    service, post_service, term_service, _, _ = _make_service()
+
+    service.ingest({"title": "T", "categories": ["News"]}, user_id="u")
+
+    calls = [
+        (call.args[0], call.args[1], call.kwargs.get("parent_id"))
+        for call in term_service.find_or_create.call_args_list
+    ]
+    assert calls == [("category", "News", None)]
+    assert post_service.assign_terms.call_args[0][1] == ["category:News"]
+
+
+def test_hierarchical_category_creates_parent_and_child_and_assigns_both():
+    """A ``{"name": "ai", "parent": "blog"}`` entry creates 'blog' (top-level) and
+    'ai' under it, then assigns BOTH term ids to the post."""
+    service, post_service, term_service, _, _ = _make_service()
+
+    service.ingest(
+        {"title": "T", "categories": [{"name": "ai", "parent": "blog"}]},
+        user_id="u",
+    )
+
+    calls = [
+        (call.args[0], call.args[1], call.kwargs.get("parent_id"))
+        for call in term_service.find_or_create.call_args_list
+    ]
+    # Parent resolved first (no parent_id), then the child under the parent id.
+    assert ("category", "blog", None) in calls
+    assert ("category", "ai", "category:blog") in calls
+    term_ids = post_service.assign_terms.call_args[0][1]
+    assert set(term_ids) == {"category:blog", "category:ai|category:blog"}
+
+
+def test_mixed_flat_and_hierarchical_categories_deduped():
+    """Two children sharing a parent → the parent id is assigned only once."""
+    service, post_service, term_service, _, _ = _make_service()
+
+    service.ingest(
+        {
+            "title": "T",
+            "categories": [
+                {"name": "blog"},
+                {"name": "ai", "parent": "blog"},
+                {"name": "ml", "parent": "blog"},
+            ],
+        },
+        user_id="u",
+    )
+
+    term_ids = post_service.assign_terms.call_args[0][1]
+    assert term_ids.count("category:blog") == 1
+    assert set(term_ids) == {
+        "category:blog",
+        "category:ai|category:blog",
+        "category:ml|category:blog",
+    }
 
 
 def test_no_tags_does_not_call_set_tags():

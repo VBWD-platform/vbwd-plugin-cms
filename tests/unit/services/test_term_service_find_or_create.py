@@ -38,12 +38,30 @@ def _term(term_type="category", slug="news", name="News"):
     return term
 
 
+def _match_parent(term_parent_id, parent_id):
+    if parent_id is None:
+        return term_parent_id is None
+    return str(term_parent_id) == str(parent_id)
+
+
 def _service(terms=None):
     store = {str(t.id): t for t in (terms or [])}
     repo = MagicMock()
     repo.find_by_id.side_effect = lambda tid: store.get(str(tid))
     repo.find_by_type_and_slug.side_effect = lambda ttype, slug: next(
         (t for t in store.values() if t.term_type == ttype and t.slug == slug), None
+    )
+    repo.find_by_type_slug_parent.side_effect = (
+        lambda ttype, slug, parent_id=None: next(
+            (
+                t
+                for t in store.values()
+                if t.term_type == ttype
+                and t.slug == slug
+                and _match_parent(t.parent_id, parent_id)
+            ),
+            None,
+        )
     )
     repo.save.side_effect = lambda t: store.setdefault(str(t.id), t)
     return TermService(repo), repo, store
@@ -67,3 +85,26 @@ def test_returns_existing_when_present_no_duplicate():
 
     assert result["id"] == str(existing.id)
     assert len(store) == 1
+
+
+def test_creates_child_under_parent():
+    parent = _term(term_type="category", slug="blog", name="Blog")
+    service, repo, store = _service([parent])
+
+    child = service.find_or_create("category", "AI", parent_id=str(parent.id))
+
+    assert child["slug"] == "ai"
+    assert child["parent_id"] == str(parent.id)
+    assert len(store) == 2
+
+
+def test_returns_existing_child_scoped_by_parent():
+    parent = _term(term_type="category", slug="blog", name="Blog")
+    child = _term(term_type="category", slug="ai", name="AI")
+    child.parent_id = parent.id
+    service, repo, store = _service([parent, child])
+
+    result = service.find_or_create("category", "AI", parent_id=str(parent.id))
+
+    assert result["id"] == str(child.id)
+    assert len(store) == 2

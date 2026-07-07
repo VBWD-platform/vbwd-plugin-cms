@@ -39,6 +39,24 @@ class TermRepository:
             .first()
         )
 
+    def find_by_type_slug_parent(
+        self, term_type: str, slug: str, parent_id: Optional[str] = None
+    ) -> Optional[CmsTerm]:
+        """Resolve a term by (term_type, slug, parent_id).
+
+        A parent-aware sibling of ``find_by_type_and_slug`` used by hierarchical
+        find-or-create — ``parent_id=None`` matches top-level terms (``IS NULL``).
+        """
+        return (
+            self.session.query(CmsTerm)
+            .filter(
+                CmsTerm.term_type == term_type,
+                CmsTerm.slug == slug,
+                CmsTerm.parent_id == parent_id,
+            )
+            .first()
+        )
+
     def find_children(self, parent_id: str) -> List[CmsTerm]:
         return (
             self.session.query(CmsTerm)

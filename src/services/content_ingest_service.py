@@ -97,12 +97,39 @@ class ContentIngestService:
                 data[field] = seo[field]
 
     def _resolve_category_terms(self, payload: Dict[str, Any]) -> List[Any]:
-        """Resolve category names to cms_term ids (tags go via the core port)."""
+        """Resolve category entries to cms_term ids (tags go via the core port).
+
+        Each entry is EITHER a plain ``str`` (a top-level category, the original
+        behaviour) OR a ``{"name": str, "parent": str | None}`` dict. A dict with
+        a non-null ``parent`` lands the post in BOTH the parent category and the
+        child subcategory: the parent is find-or-created top-level, then the child
+        under it. All resolved ids (parents included) are collected and deduped so
+        assign_terms receives each term once.
+        """
         term_ids: List[Any] = []
-        for name in payload.get("categories") or []:
-            term = self._term_service.find_or_create("category", name)
-            term_ids.append(term["id"])
+        seen_ids: set = set()
+        for entry in payload.get("categories") or []:
+            for term_id in self._resolve_category_entry(entry):
+                if term_id not in seen_ids:
+                    seen_ids.add(term_id)
+                    term_ids.append(term_id)
         return term_ids
+
+    def _resolve_category_entry(self, entry: Any) -> List[Any]:
+        """Resolve one category entry to the term ids it contributes."""
+        if isinstance(entry, dict):
+            name = (entry.get("name") or "").strip()
+            if not name:
+                return []
+            parent_name = (entry.get("parent") or "").strip()
+            if parent_name:
+                parent_term = self._term_service.find_or_create("category", parent_name)
+                child_term = self._term_service.find_or_create(
+                    "category", name, parent_id=parent_term["id"]
+                )
+                return [parent_term["id"], child_term["id"]]
+            return [self._term_service.find_or_create("category", name)["id"]]
+        return [self._term_service.find_or_create("category", entry)["id"]]
 
     def _apply_tags(self, post_id: Any, payload: Dict[str, Any]) -> None:
         """Write the payload's ``tags`` to the core tag catalog (D7).

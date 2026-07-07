@@ -44,18 +44,26 @@ class TermService:
             raise TermNotFoundError(f"Term '{term_id}' not found")
         return term.to_dict()
 
-    def find_or_create(self, term_type: str, name: str) -> Dict[str, Any]:
+    def find_or_create(
+        self, term_type: str, name: str, *, parent_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Resolve a term by name within a taxonomy, creating it if absent.
 
         The slug is derived from the name (same rule ``create_term`` uses), so
         repeated names map to the one term — no duplicates. Single home for
         term resolution, reused by the API content-ingestion path.
+
+        Resolution is scoped by ``parent_id`` so a hierarchical taxonomy can hold
+        a child term under a parent; ``parent_id=None`` (the default) resolves and
+        creates top-level terms exactly as before.
         """
         slug = slugify((name or "").strip())
-        existing = self._repo.find_by_type_and_slug(term_type, slug)
+        existing = self._repo.find_by_type_slug_parent(term_type, slug, parent_id)
         if existing:
             return existing.to_dict()
-        return self.create_term({"term_type": term_type, "name": name})
+        return self.create_term(
+            {"term_type": term_type, "name": name, "parent_id": parent_id}
+        )
 
     def create_term(self, data: Dict[str, Any]) -> Dict[str, Any]:
         term_type = (data.get("term_type") or "").strip()
