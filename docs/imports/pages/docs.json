@@ -1,0 +1,64 @@
+{
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "docs",
+      "title": "Docs",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Documentation"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "This page uses the \"Docs pages\" layout. The sidebar slot holds a self-contained Search box with quicksearch turned on via its per-placement config_override — start typing to see a live dropdown of published pages and posts, no separate results page needed."
+              }
+            ]
+          }
+        ]
+      },
+      "content_html": null,
+      "status": "published",
+      "language": "en",
+      "sort_order": 0,
+      "layout_slug": "docs",
+      "style_slug": null,
+      "meta_title": "Docs",
+      "meta_description": "Documentation home with a self-contained quicksearch box in the sidebar.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "index,follow",
+      "terms": [],
+      "page_assignments": [
+        {
+          "widget_slug": "search",
+          "area_name": "sidebar",
+          "sort_order": 0,
+          "config_override": {
+            "config": {
+              "quicksearch": true,
+              "scope": "both",
+              "quicksearch_limit": 6
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

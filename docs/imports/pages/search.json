@@ -1,0 +1,64 @@
+{
+  "vbwd_export": "cms_posts",
+  "version": 1,
+  "cms_posts": [
+    {
+      "type": "page",
+      "slug": "search",
+      "title": "Search",
+      "excerpt": null,
+      "content_json": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 1
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Search"
+              }
+            ]
+          }
+        ]
+      },
+      "content_html": null,
+      "status": "published",
+      "language": "en",
+      "sort_order": 0,
+      "layout_slug": "search",
+      "style_slug": null,
+      "meta_title": "Search",
+      "meta_description": "Search the site: type a query and browse the matching pages and posts.",
+      "meta_keywords": null,
+      "og_title": null,
+      "robots": "noindex,follow",
+      "terms": [],
+      "page_assignments": [
+        {
+          "widget_slug": "search",
+          "area_name": "search",
+          "sort_order": 0,
+          "config_override": {
+            "config": {
+              "target_path": "/search",
+              "scope": "both"
+            }
+          }
+        },
+        {
+          "widget_slug": "search-results",
+          "area_name": "results",
+          "sort_order": 0,
+          "config_override": {
+            "config": {
+              "scope": "both"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

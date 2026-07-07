@@ -228,3 +228,56 @@ class TestSearchRoute:
         slugs = [item["slug"] for item in resp.get_json()["items"]]
         assert seeded["title_match"]["slug"] in slugs
         assert seeded["body_match"]["slug"] not in slugs
+
+
+class TestScopeToTypeMapping:
+    """S121 regression guard — locks the widget ``scope`` → ``/cms/search``
+    request mapping the two frontends rely on (no production code; the FTS
+    backend already supports ``type`` filtering and forces ``published``):
+
+      - ``scope=pages``  → ``?type=page`` → published pages only
+      - ``scope=posts``  → ``?type=post`` → published posts only
+      - ``scope=both``   → omit ``type``  → all published types (pages + posts)
+
+    In every case a draft/unpublished post must never surface.
+    """
+
+    def _route_slugs(self, client, query):
+        resp = client.get(query)
+        assert resp.status_code == 200
+        return [item["slug"] for item in resp.get_json()["items"]]
+
+    def test_scope_pages_returns_only_pages(self, client, db, seeded):
+        slugs = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&type=page&per_page=50"
+        )
+        assert seeded["page_match"]["slug"] in slugs
+        # A published post must be excluded when scope=pages (type=page).
+        assert seeded["title_match"]["slug"] not in slugs
+        assert seeded["body_match"]["slug"] not in slugs
+        # Drafts never surface.
+        assert seeded["draft_match"]["slug"] not in slugs
+
+    def test_scope_posts_returns_only_posts(self, client, db, seeded):
+        slugs = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&type=post&per_page=50"
+        )
+        assert seeded["title_match"]["slug"] in slugs
+        assert seeded["body_match"]["slug"] in slugs
+        # The published page must be excluded when scope=posts (type=post).
+        assert seeded["page_match"]["slug"] not in slugs
+        # Drafts never surface.
+        assert seeded["draft_match"]["slug"] not in slugs
+
+    def test_scope_both_omits_type_and_returns_pages_and_posts(
+        self, client, db, seeded
+    ):
+        # scope=both maps to omitting the type param entirely (all published).
+        slugs = self._route_slugs(
+            client, "/api/v1/cms/search?q=hospitality&per_page=50"
+        )
+        assert seeded["page_match"]["slug"] in slugs
+        assert seeded["title_match"]["slug"] in slugs
+        assert seeded["body_match"]["slug"] in slugs
+        # Drafts never surface, regardless of scope.
+        assert seeded["draft_match"]["slug"] not in slugs

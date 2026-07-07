@@ -1,0 +1,36 @@
+{
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
+    {
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "Docs Sidebar (Search)",
+          "name": "sidebar",
+          "type": "page-widget"
+        },
+        {
+          "label": "Doc Body",
+          "name": "content",
+          "type": "content"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Docs pages layout: a page-widget sidebar slot hosts a self-contained quicksearch box (config_override turns quicksearch on), plus a content area for the doc body.",
+      "is_active": true,
+      "is_default": false,
+      "name": "Docs pages",
+      "slug": "docs",
+      "sort_order": 20
+    }
+  ]
+}

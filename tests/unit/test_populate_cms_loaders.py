@@ -184,6 +184,38 @@ class TestLostStandaloneWidgets:
         assert "code" in config
 
 
+class TestSearchWidgetScopeConfig:
+    """S121 — the seeded ``search`` / ``search-results`` widget records carry a
+    constrained ``scope`` (``pages`` | ``posts`` | ``both``) plus the quicksearch
+    controls, replacing the legacy free-text ``type`` on SearchResults. Config is
+    the single source of truth (matches the fe-admin editor defaults); asserted
+    without a DB so drift is caught at unit speed."""
+
+    def _by_slug(self):
+        return {w["slug"]: w for w in populate_cms._STANDALONE_VUE_WIDGETS}
+
+    def test_search_box_config_carries_scope_and_quicksearch_defaults(self):
+        config = self._by_slug()["search"]["config"]
+        # Existing keys are preserved.
+        assert config["component_name"] == "Search"
+        assert config["placeholder"] == "Search…"
+        assert config["target_path"] == ""
+        # New S121 keys with their defaults.
+        assert config["scope"] == "both"
+        assert config["quicksearch"] is False
+        assert config["quicksearch_limit"] == 6
+
+    def test_search_results_config_replaces_type_with_scope(self):
+        config = self._by_slug()["search-results"]["config"]
+        # Existing keys are preserved.
+        assert config["component_name"] == "SearchResults"
+        assert config["mode"] == "titles"
+        assert config["per_page"] == 10
+        # ``type`` is replaced by the constrained ``scope`` (default ``both``).
+        assert "type" not in config
+        assert config["scope"] == "both"
+
+
 class TestCatalogCollectionWidgets:
     """Two pure-frontend catalog widgets — TariffPlanCollection and
     TokenBundleCollection — are seeded as standalone vue-component RECORDS so
@@ -277,3 +309,72 @@ class TestPageWidgetDemo:
         )
         standalone_slugs = {w["slug"] for w in populate_cms._STANDALONE_VUE_WIDGETS}
         assert sidebar["widget_slug"] in standalone_slugs
+
+
+class TestSearchDemoLayouts:
+    """S121 §4.5 — two demo layouts ship so a fresh install shows both search
+    journeys as *data*, not code:
+
+      - ``docs``   — a self-contained quicksearch box in a sidebar slot
+        (``config_override`` turns quicksearch on).
+      - ``search`` — the classic box (``target_path=/search``) + a
+        ``SearchResults`` widget in a results slot.
+
+    Loader tests read the REAL fixture files (no DB) so the seeded layouts, the
+    area→widget assignments, and the ``config_override`` cannot silently drift.
+    """
+
+    def _layouts_by_slug(self):
+        return {layout["slug"]: layout for layout in populate_cms._load_layouts()}
+
+    def _pages_by_slug(self):
+        return {page["slug"]: page for page in populate_cms._load_pages()}
+
+    def _assignment(self, page, area_name):
+        return next(
+            a for a in page["page_widget_assignments"] if a["area_name"] == area_name
+        )
+
+    def test_docs_layout_seeded_with_page_widget_slot(self):
+        docs = self._layouts_by_slug()["docs"]
+        assert docs["name"] == "Docs pages"
+        area_types = {area["type"] for area in docs["areas"]}
+        # A page-widget slot hosts the Search box; a content area holds the body.
+        assert "page-widget" in area_types
+        assert "content" in area_types
+
+    def test_docs_page_assigns_search_box_with_quicksearch_override(self):
+        docs_page = self._pages_by_slug()["docs"]
+        assert docs_page["layout_slug"] == "docs"
+        sidebar = self._assignment(docs_page, "sidebar")
+        assert sidebar["widget_slug"] == "search"
+        # The demo turns quicksearch ON via a per-placement config_override.
+        # Defect 1 — vue-component widget overrides MUST be nested under
+        # ``config`` (the fe-user renderer merges ``override.config`` into the
+        # widget config); a FLAT override is silently ignored.
+        override = sidebar["config_override"]
+        assert "quicksearch" not in override, "override must be nested under 'config'"
+        nested = override["config"]
+        assert nested["quicksearch"] is True
+        assert nested["scope"] == "both"
+        assert nested["quicksearch_limit"] == 6
+
+    def test_search_layout_seeded_with_box_and_results_slots(self):
+        search = self._layouts_by_slug()["search"]
+        assert search["name"] == "Search"
+        area_names = {area["name"] for area in search["areas"]}
+        assert "search" in area_names
+        assert "results" in area_names
+
+    def test_search_page_wires_box_targetpath_and_results_widget(self):
+        search_page = self._pages_by_slug()["search"]
+        assert search_page["layout_slug"] == "search"
+        box = self._assignment(search_page, "search")
+        assert box["widget_slug"] == "search"
+        # The classic box navigates to the /search results page. Defect 1 —
+        # vue-component overrides are nested under ``config``.
+        assert box["config_override"]["config"]["target_path"] == "/search"
+        assert box["config_override"]["config"]["scope"] == "both"
+        results = self._assignment(search_page, "results")
+        assert results["widget_slug"] == "search-results"
+        assert results["config_override"]["config"]["scope"] == "both"

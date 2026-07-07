@@ -882,6 +882,12 @@ _STANDALONE_VUE_WIDGETS = [
             "component_name": "Search",
             "placeholder": "Search…",
             "target_path": "",
+            # S121 — constrained scope + quicksearch controls. ``both`` searches
+            # all published types (pages + posts); quicksearch off by default so
+            # existing operator-placed boxes are byte-identical to before.
+            "scope": "both",
+            "quicksearch": False,
+            "quicksearch_limit": 6,
         },
     },
     {
@@ -891,7 +897,9 @@ _STANDALONE_VUE_WIDGETS = [
         "content_json": {"component": "SearchResults"},
         "config": {
             "component_name": "SearchResults",
-            "type": "post",
+            # S121 — ``scope`` (pages | posts | both) replaces the legacy
+            # free-text ``type``. ``both`` omits the post-type filter server-side.
+            "scope": "both",
             "mode": "titles",
             "per_page": 10,
         },
@@ -1020,6 +1028,17 @@ _LAYOUT_WIDGET_PLACEMENTS: dict[str, list[tuple[str, str]]] = {
         ("header", "header-nav"),
         ("breadcrumbs", "breadcrumbs"),
         ("archive", "tag-archive"),
+        ("footer", "footer-nav"),
+    ],
+    # S121 — demo search layouts. The Search / SearchResults widgets are placed
+    # at PAGE level (via config_override on the docs/search demo pages), so only
+    # the structural header/footer are layout-level placements here.
+    "docs": [
+        ("header", "header-nav"),
+        ("footer", "footer-nav"),
+    ],
+    "search": [
+        ("header", "header-nav"),
         ("footer", "footer-nav"),
     ],
 }
@@ -1359,16 +1378,21 @@ def _get_or_create_unified_page(
 def _set_unified_page_widgets(
     post_widget_repo,
     post: dict,
-    assignments: list[tuple[str, str]],
+    assignments: list[dict],
     widget_map: dict[str, "CmsWidget"],
 ) -> None:
     """Assign page-level widgets to a unified post. Idempotent — skips if the
-    post already has assignments (replace would otherwise re-write them)."""
+    post already has assignments (replace would otherwise re-write them).
+
+    ``assignments`` mirror the demo pages' ``page_widget_assignments`` shape:
+    dicts with ``widget_slug`` / ``area_name`` and an optional per-placement
+    ``config_override`` (S121 — e.g. the docs-layout quicksearch box)."""
     post_id = post["id"]
     if post_widget_repo.find_by_post(post_id):
         return
     rows: list[dict] = []
-    for order, (area_name, widget_slug) in enumerate(assignments):
+    for order, assignment in enumerate(assignments):
+        widget_slug = assignment["widget_slug"]
         widget = widget_map.get(widget_slug)
         if not widget:
             print(f"    ! widget '{widget_slug}' not found, skipping")
@@ -1376,13 +1400,107 @@ def _set_unified_page_widgets(
         rows.append(
             {
                 "widget_id": str(widget.id),
-                "area_name": area_name,
-                "sort_order": order,
+                "area_name": assignment["area_name"],
+                "sort_order": assignment.get("sort_order", order),
+                "config_override": assignment.get("config_override"),
             }
         )
     if rows:
         post_widget_repo.replace_for_post(post_id, rows)
         print(f"    + {len(rows)} page widget(s) for '{post['slug']}'")
+
+
+# ─── Docs page re-point (S121 Defect 2) ────────────────────────────────────────
+# A real documentation-portal page already owns the ``docs`` slug on another
+# layout, so the create-only page path (which skips on a slug conflict) never
+# gives it the quicksearch sidebar. This is the ONE sanctioned mutation of that
+# live page: re-point its layout + ensure the sidebar Search box — nothing else.
+_DOCS_PAGE_SLUG = "docs"
+_DOCS_LAYOUT_SLUG = "docs"
+_DOCS_SEARCH_AREA = "sidebar"
+_DOCS_SEARCH_WIDGET_SLUG = "search"
+# Defect 1 — vue-component overrides are nested under ``config`` so the fe-user
+# renderer (which merges ``override.config``) actually applies them.
+_DOCS_QUICKSEARCH_CONFIG_OVERRIDE = {
+    "config": {"quicksearch": True, "scope": "both", "quicksearch_limit": 6}
+}
+
+
+def _repoint_docs_page_to_docs_layout(
+    post_repo, post_widget_repo, layout_map, widget_map
+) -> None:
+    """Idempotently re-point the EXISTING ``docs`` page onto the "Docs pages"
+    layout and ensure its sidebar holds a quicksearch Search box.
+
+    Narrow + idempotent: it changes ONLY the page's ``layout_id`` (when it
+    differs) and appends the sidebar Search assignment (with the nested
+    ``config_override``) when absent — the title, body, SEO and any other page
+    widgets are left untouched, so re-pointing never blanks the documentation.
+    A re-run is a no-op. Does nothing if the docs page, layout or Search widget
+    is not present (e.g. a partially-seeded DB).
+    """
+    docs_page = post_repo.find_by_type_and_slug("page", _DOCS_PAGE_SLUG)
+    docs_layout = layout_map.get(_DOCS_LAYOUT_SLUG)
+    search_widget = widget_map.get(_DOCS_SEARCH_WIDGET_SLUG)
+    if docs_page is None or docs_layout is None or search_widget is None:
+        return
+
+    if str(docs_page.layout_id) != str(docs_layout.id):
+        docs_page.layout_id = docs_layout.id
+        db.session.add(docs_page)
+        db.session.flush()
+        print(f"  ~ page 'docs' re-pointed to '{docs_layout.slug}' layout")
+
+    existing = post_widget_repo.find_by_post(str(docs_page.id))
+
+    def _is_sidebar_search(row) -> bool:
+        return (
+            str(row.widget_id) == str(search_widget.id)
+            and row.area_name == _DOCS_SEARCH_AREA
+        )
+
+    def _is_nested(override) -> bool:
+        return isinstance(override, dict) and isinstance(override.get("config"), dict)
+
+    sidebar_rows = [row for row in existing if _is_sidebar_search(row)]
+    # Idempotent: a correctly-nested sidebar Search box needs no change (and any
+    # other page widgets stay exactly as the operator left them).
+    if sidebar_rows and all(_is_nested(row.config_override) for row in sidebar_rows):
+        return
+
+    # Preserve every existing widget. Heal a stale FLAT sidebar override (a
+    # pre-Defect-1 seed artifact the renderer silently ignored) to the canonical
+    # nested shape; append the Search box if the sidebar has none.
+    healed = False
+    rows: list[dict] = []
+    for row in existing:
+        override = row.config_override
+        if _is_sidebar_search(row) and not _is_nested(override):
+            override = dict(_DOCS_QUICKSEARCH_CONFIG_OVERRIDE)
+            healed = True
+        rows.append(
+            {
+                "widget_id": str(row.widget_id),
+                "area_name": row.area_name,
+                "sort_order": row.sort_order,
+                "required_access_level_ids": row.required_access_level_ids,
+                "config_override": override,
+            }
+        )
+    if not sidebar_rows:
+        rows.append(
+            {
+                "widget_id": str(search_widget.id),
+                "area_name": _DOCS_SEARCH_AREA,
+                "sort_order": len(rows),
+                "config_override": dict(_DOCS_QUICKSEARCH_CONFIG_OVERRIDE),
+            }
+        )
+    post_widget_repo.replace_for_post(str(docs_page.id), rows)
+    if healed:
+        print("  ~ page 'docs' sidebar Search override healed to nested config")
+    else:
+        print("  + page 'docs' sidebar Search box ensured (quicksearch on)")
 
 
 # ─── Unified model seed (S47.0) ────────────────────────────────────────────────
@@ -1874,15 +1992,18 @@ def populate_cms() -> None:
 
     print("\n── Page Widgets (cms_post_widget) ──────────────────────────────")
     for pd in pages_data:
-        assignments = [
-            (a["area_name"], a["widget_slug"])
-            for a in pd.get("page_widget_assignments", [])
-        ]
+        assignments = pd.get("page_widget_assignments", [])
         post_for_assign = page_map.get(pd["slug"])
         if assignments and post_for_assign:
             _set_unified_page_widgets(
                 post_widget_repo, post_for_assign, assignments, widget_map
             )
+    db.session.commit()
+
+    print("\n── Docs page re-point (S121) ───────────────────────────────────")
+    _repoint_docs_page_to_docs_layout(
+        post_repo, post_widget_repo, layout_map, widget_map
+    )
     db.session.commit()
 
     print("\n── Routing Rules ───────────────────────────────────────────────")

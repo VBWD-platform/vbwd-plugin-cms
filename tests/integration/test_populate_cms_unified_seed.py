@@ -19,10 +19,12 @@ cold local + CI; demo data seeded through services); SOLID/DI/DRY; Liskov; clean
 code; no overengineering. Quality guard: ``bin/pre-commit-check.sh --plugin cms
 --full``.
 """
-from plugins.cms.src.bin.populate_cms import populate_cms
+from plugins.cms.src.bin.populate_cms import populate_cms, _build_unified_services
+from plugins.cms.src.models.cms_layout import CmsLayout
 from plugins.cms.src.models.cms_post import CmsPost
 from plugins.cms.src.models.cms_post_widget import CmsPostWidget
 from plugins.cms.src.models.cms_term import CmsTerm, CATEGORY_TERM_TYPE
+from plugins.cms.src.models.cms_widget import CmsWidget
 
 
 def _count(db, model, **filters):
@@ -58,3 +60,138 @@ class TestPopulateSeedsUnifiedModel:
         populate_cms()
         second = _count(db, CmsPost, type="page", slug="about")
         assert first == 1 and second == 1
+
+
+class TestSearchDemoLayoutsPersisted:
+    """S121 §4.5 — the demo ``docs`` page must persist the quicksearch
+    ``config_override`` onto its ``cms_post_widget`` row, proving the seeder's
+    page-widget assignment path carries per-placement overrides end-to-end
+    (not just the fixture)."""
+
+    def test_docs_page_widget_persists_quicksearch_config_override(self, db):
+        populate_cms()
+        docs = (
+            db.session.query(CmsPost).filter_by(type="page", slug="docs").one_or_none()
+        )
+        assert docs is not None, "demo 'docs' page not seeded"
+        assignment = (
+            db.session.query(CmsPostWidget)
+            .filter_by(post_id=docs.id, area_name="sidebar")
+            .one_or_none()
+        )
+        assert assignment is not None, "docs sidebar search widget not assigned"
+        override = assignment.config_override
+        assert override is not None
+        # Defect 1 — the persisted vue-widget override is NESTED under ``config``
+        # so the fe-user renderer (which merges ``override.config``) applies it.
+        assert "quicksearch" not in override, "override must be nested under 'config'"
+        nested = override["config"]
+        assert nested["quicksearch"] is True
+        assert nested["scope"] == "both"
+        assert nested["quicksearch_limit"] == 6
+
+
+class TestDocsPageRepointedToDocsLayout:
+    """S121 Defect 2 — a real documentation-portal ``docs`` page pre-dates this
+    seed (on another layout). The seeder RE-POINTS that existing page onto the
+    "Docs pages" layout and gives it a quicksearch sidebar, WITHOUT wiping its
+    title/body or its other widgets. The repoint is narrow (only ``layout_id`` +
+    the sidebar Search assignment) and idempotent."""
+
+    _PORTAL_BODY = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": "REAL PORTAL DOCS BODY"}],
+            }
+        ],
+    }
+
+    def _seed_preexisting_docs_page(self):
+        """Create a ``docs`` page on NO docs layout (simulating the pre-existing
+        portal page) straight through the unified service, then commit."""
+        post_service, _term, _pr, _tr, _pw = _build_unified_services()
+        post_service.create_post(
+            {
+                "type": "page",
+                "slug": "docs",
+                "title": "Documentation Portal",
+                "language": "en",
+                "content_json": self._PORTAL_BODY,
+                "status": "published",
+                "layout_id": None,
+            }
+        )
+
+    def test_existing_docs_page_is_repointed_body_preserved(self, db):
+        self._seed_preexisting_docs_page()
+        db.session.commit()
+
+        populate_cms()
+
+        docs = db.session.query(CmsPost).filter_by(type="page", slug="docs").one()
+        # Title + body preserved — the repoint never overwrites page content.
+        assert docs.title == "Documentation Portal"
+        assert docs.content_json == self._PORTAL_BODY
+        # Re-pointed onto the "Docs pages" layout.
+        docs_layout = db.session.query(CmsLayout).filter_by(slug="docs").one()
+        assert str(docs.layout_id) == str(docs_layout.id)
+        assert docs_layout.name == "Docs pages"
+        # The sidebar holds the Search box with the NESTED quicksearch override.
+        sidebar = (
+            db.session.query(CmsPostWidget)
+            .filter_by(post_id=docs.id, area_name="sidebar")
+            .one()
+        )
+        nested = sidebar.config_override["config"]
+        assert nested["quicksearch"] is True
+        assert nested["scope"] == "both"
+        assert nested["quicksearch_limit"] == 6
+
+    def test_repoint_is_idempotent_and_preserves_other_widgets(self, db):
+        self._seed_preexisting_docs_page()
+        db.session.commit()
+        populate_cms()
+
+        _ps, _ts, _pr, _tr, post_widget_repo = _build_unified_services()
+        docs = db.session.query(CmsPost).filter_by(type="page", slug="docs").one()
+
+        # Simulate an operator-added extra widget in another area of the page.
+        footer = db.session.query(CmsWidget).filter_by(slug="footer-nav").one()
+        rows = [
+            {
+                "widget_id": str(row.widget_id),
+                "area_name": row.area_name,
+                "sort_order": row.sort_order,
+                "required_access_level_ids": row.required_access_level_ids,
+                "config_override": row.config_override,
+            }
+            for row in post_widget_repo.find_by_post(str(docs.id))
+        ]
+        rows.append(
+            {
+                "widget_id": str(footer.id),
+                "area_name": "footer",
+                "sort_order": len(rows),
+                "config_override": None,
+            }
+        )
+        post_widget_repo.replace_for_post(str(docs.id), rows)
+
+        # Re-run the whole seed — must be a no-op for the docs page.
+        populate_cms()
+
+        assert (
+            db.session.query(CmsPost).filter_by(type="page", slug="docs").count() == 1
+        ), "repoint must not create a second docs page"
+        after = post_widget_repo.find_by_post(str(docs.id))
+        by_area = {}
+        for row in after:
+            by_area.setdefault(row.area_name, []).append(row)
+        # Sidebar Search preserved and NOT duplicated.
+        assert len(by_area.get("sidebar", [])) == 1
+        # The operator's footer widget survived the re-seed.
+        assert len(by_area.get("footer", [])) == 1
+        # Body still intact.
+        assert docs.content_json == self._PORTAL_BODY

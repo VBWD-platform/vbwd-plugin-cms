@@ -1,0 +1,36 @@
+{
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
+    {
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "Search Box",
+          "name": "search",
+          "type": "page-widget"
+        },
+        {
+          "label": "Search Results",
+          "name": "results",
+          "type": "page-widget"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Classic search layout: a Search box (config_override target_path=/search) navigates to this page, and a SearchResults widget renders the matches below.",
+      "is_active": true,
+      "is_default": false,
+      "name": "Search",
+      "slug": "search",
+      "sort_order": 21
+    }
+  ]
+}
