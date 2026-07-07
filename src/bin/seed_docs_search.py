@@ -10,9 +10,13 @@ This entrypoint lands ONLY the S121 demo ``docs`` / ``search`` layouts, the
 ``/search`` demo page, and the ``/docs`` re-point — and every write here is
 provably CREATE-ONLY or APPEND-ONLY:
 
-  * Widgets are never created or modified — they are QUERIED (read-only) into a
-    map. If the ``search`` widget is absent the ``/docs`` re-point is skipped
-    (never crashes on a partially-seeded DB).
+  * Widgets are CREATE-ONLY: the map starts from the EXISTING widget rows
+    (read-only), and the ``search`` / ``search-results`` records are created
+    ONLY when their slug is absent (their canonical S121 config comes from
+    ``populate_cms._STANDALONE_VUE_WIDGETS`` — DRY). An existing (operator-edited)
+    widget is LEFT 100% UNTOUCHED (we never reach the overwrite branch of
+    ``_get_or_create_widget``). This is what lets the ``/docs`` re-point complete
+    on a production instance that never ran the destructive full seeder.
   * Layouts are created ONLY when absent. An existing ``docs`` / ``search``
     layout is LEFT UNTOUCHED (``_create_layout_if_absent`` never reaches the
     overwrite branch of ``_get_or_create_layout``).
@@ -48,9 +52,11 @@ from vbwd.extensions import db  # noqa: E402
 from plugins.cms.src.models.cms_layout import CmsLayout  # noqa: E402
 from plugins.cms.src.models.cms_widget import CmsWidget  # noqa: E402
 from plugins.cms.src.bin.populate_cms import (  # noqa: E402
+    _STANDALONE_VUE_WIDGETS,
     _build_unified_services,
     _get_or_create_layout,
     _get_or_create_unified_page,
+    _get_or_create_widget,
     _load_layouts,
     _load_pages,
     _repoint_docs_page_to_docs_layout,
@@ -62,16 +68,59 @@ _DOCS_SEARCH_LAYOUT_SLUGS = ("docs", "search")
 _SEARCH_PAGE_SLUG = "search"
 # The widget whose presence gates the /docs re-point (the sidebar quicksearch).
 _SEARCH_WIDGET_SLUG = "search"
+# The Search widget records this safe seed is allowed to CREATE (only if absent).
+# Their canonical S121 config defaults live in ``_STANDALONE_VUE_WIDGETS`` — we
+# reference (never re-hardcode) them so created rows match the full seeder.
+_SEARCH_WIDGET_SLUGS = ("search", "search-results")
+_DOCS_PAGE_SLUG = "docs"
+_DOCS_LAYOUT_SLUG = "docs"
 
 
 def _build_widget_map() -> dict[str, "CmsWidget"]:
     """Return ``{slug: CmsWidget}`` for the EXISTING widget rows (read-only).
 
-    Never creates or mutates a widget — the destructive full seeder owns widget
-    authoring. This map only lets the layout/page placements resolve widget ids
-    (missing widgets degrade to a skip, not a crash).
+    Never mutates a widget — this map only lets the layout/page placements and
+    the ``/docs`` re-point resolve widget ids. The Search widget records are then
+    ensured create-only on top of it (see ``_ensure_search_widget_if_absent``).
     """
     return {widget.slug: widget for widget in db.session.query(CmsWidget).all()}
+
+
+def _canonical_search_widget_definitions() -> list[dict]:
+    """The canonical ``search`` / ``search-results`` definitions, referenced
+    (DRY) from ``populate_cms._STANDALONE_VUE_WIDGETS`` so any created record
+    carries the S121 config defaults (scope ``both``, quicksearch off, limit 6)."""
+    return [
+        definition
+        for definition in _STANDALONE_VUE_WIDGETS
+        if definition["slug"] in _SEARCH_WIDGET_SLUGS
+    ]
+
+
+def _ensure_search_widget_if_absent(definition: dict) -> "CmsWidget":
+    """Create a Search widget record ONLY when its slug is absent; otherwise
+    return the EXISTING row 100% untouched.
+
+    CRITICAL (destructive-safety): ``_get_or_create_widget`` OVERWRITES an
+    existing widget's ``name`` / ``content_json`` / ``source_css`` / ``config``
+    in its ``if existing:`` branch. An operator may have edited the Search box,
+    so we must never reach that branch for an existing slug — we short-circuit on
+    an existing row and delegate to the seeder's helper (reaching solely its
+    CREATE branch) only when the slug is genuinely absent. DRY: the S121 config
+    defaults come from the referenced ``_STANDALONE_VUE_WIDGETS`` definition.
+    """
+    slug = definition["slug"]
+    existing = db.session.query(CmsWidget).filter_by(slug=slug).first()
+    if existing is not None:
+        print(f"  ~ widget '{slug}' exists — left as-is")
+        return existing
+    return _get_or_create_widget(
+        definition["slug"],
+        definition["name"],
+        definition["widget_type"],
+        content_json=definition.get("content_json"),
+        config=definition.get("config"),
+    )
 
 
 def _create_layout_if_absent(data: dict, widget_map: dict) -> "CmsLayout":
@@ -102,8 +151,16 @@ def seed_docs_search() -> None:
         post_widget_repo,
     ) = _build_unified_services()
 
-    # (2) Read-only widget map — never authors widgets.
+    # (2) Widget map: start from the EXISTING rows (read-only), then ensure the
+    # Search widgets create-only-if-absent. On a prod instance these records
+    # never existed (only the destructive full seeder creates them), which is why
+    # the /docs re-point and the search-page wiring silently no-oped before.
     widget_map = _build_widget_map()
+    print("\n── Search widgets (create-only-if-absent) ──────────────────────")
+    for widget_definition in _canonical_search_widget_definitions():
+        ensured_widget = _ensure_search_widget_if_absent(widget_definition)
+        widget_map[ensured_widget.slug] = ensured_widget
+    db.session.commit()
 
     # (3) Create the docs + search demo layouts ONLY IF ABSENT; build a
     # layout_map (slug → CmsLayout) from the existing-or-created rows.
@@ -143,22 +200,34 @@ def seed_docs_search() -> None:
     db.session.commit()
 
     # (5) Re-point the EXISTING /docs page onto the docs layout (append-only).
-    # Skip gracefully when the search widget is absent (partially-seeded DB).
+    # Track the ACTUAL outcome so the summary reports it truthfully.
     print("\n── Docs re-point (append-only) ─────────────────────────────────")
-    if widget_map.get(_SEARCH_WIDGET_SLUG) is None:
-        print("  WARN: 'search' widget absent — skipping /docs re-point")
+    docs_page = post_repo.find_by_type_and_slug("page", _DOCS_PAGE_SLUG)
+    docs_layout = layout_map.get(_DOCS_LAYOUT_SLUG)
+    if docs_page is None:
+        docs_outcome = "skipped (no /docs page present)"
+        print("  ~ no /docs page present — nothing to re-point")
+    elif widget_map.get(_SEARCH_WIDGET_SLUG) is None or docs_layout is None:
+        docs_outcome = "skipped ('search' widget or 'docs' layout unavailable)"
+        print("  WARN: 'search' widget or 'docs' layout unavailable — skipping")
     else:
+        already_correct = str(docs_page.layout_id) == str(docs_layout.id)
         _repoint_docs_page_to_docs_layout(
             post_repo, post_widget_repo, layout_map, widget_map
         )
+        docs_outcome = (
+            "already on 'docs' layout"
+            if already_correct
+            else "re-pointed to 'docs' layout (append-only)"
+        )
     db.session.commit()
 
-    # (6) Summary.
+    # (6) Summary — reports the ACTUAL outcome, not an optimistic constant.
     print("\n" + "=" * 55)
     print("✓ Safe docs/search seed complete (create-only / append-only)")
     print(f"  Layouts     : {sorted(layout_map.keys())}")
     print(f"  Search page : '{_SEARCH_PAGE_SLUG}' (create-only)")
-    print("  Docs        : re-pointed to 'docs' layout (append-only)")
+    print(f"  Docs        : {docs_outcome}")
     print("=" * 55)
 
 

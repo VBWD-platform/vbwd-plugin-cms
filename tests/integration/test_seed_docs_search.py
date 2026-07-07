@@ -7,10 +7,13 @@ never run on a live instance. ``seed_docs_search`` lands ONLY the S121 demo
 and every write is CREATE-ONLY or APPEND-ONLY. These tests are the safety proof:
 
   * it CREATES the demo layouts + re-points ``/docs`` when they are absent;
+  * it CREATES the ``search`` / ``search-results`` widget records when absent
+    (the prod scenario: those records only ever came from the destructive full
+    seeder) and then re-points ``/docs``;
   * it NEVER overwrites an existing (operator-edited) ``docs`` layout;
+  * it NEVER overwrites an existing (operator-edited) ``search`` widget;
   * the re-point preserves every pre-existing ``/docs`` widget;
-  * a second run is a no-op (no duplicate layouts / pages / sidebar rows);
-  * a missing ``search`` widget degrades to a skip (no crash, no re-point).
+  * a second run is a no-op (no duplicate layouts / pages / sidebar rows).
 
 Data is seeded THROUGH the unified services / the seeder's own ORM helpers
 (never raw SQL); the shared rolled-back ``db`` fixture self-cleans each test.
@@ -200,19 +203,88 @@ class TestIdempotentSecondRunIsNoop:
         assert len(_sidebar_search_rows(db, docs)) == 1, "sidebar row duplicated"
 
 
-class TestSkipsGracefullyWhenSearchWidgetAbsent:
-    def test_skips_gracefully_when_search_widget_absent(self, db):
-        # No search widget seeded.
+class TestCreatesSearchWidgetsWhenAbsent:
+    """The prod scenario that regressed: a live instance has the ``/docs`` page
+    but NONE of the ``search`` / ``search-results`` widget records (those came
+    only from the destructive full seeder we never run). The safe seed must
+    CREATE them (create-only) and then complete the ``/docs`` re-point."""
+
+    def test_creates_search_widgets_when_absent_then_repoints(self, db):
+        # No search widgets seeded — exactly the failing prod state.
         _seed_preexisting_docs_page(layout_id=None)
         db.session.commit()
 
-        # Must not raise.
         seed_docs_search()
 
+        search_widget = db.session.query(CmsWidget).filter_by(slug="search").one()
+        results_widget = (
+            db.session.query(CmsWidget).filter_by(slug="search-results").one()
+        )
+        # S121 config defaults carried from _STANDALONE_VUE_WIDGETS (not re-coded).
+        assert search_widget.config["scope"] == "both"
+        assert search_widget.config["quicksearch"] is False
+        assert search_widget.config["quicksearch_limit"] == 6
+        assert search_widget.content_json == {"component": "Search"}
+        assert results_widget.config["scope"] == "both"
+
+        docs_layout = db.session.query(CmsLayout).filter_by(slug="docs").one()
         docs = db.session.query(CmsPost).filter_by(type="page", slug="docs").one()
-        # /docs was NOT re-pointed (guarded by the missing search widget).
-        assert docs.layout_id is None, "docs must not be re-pointed without search"
-        assert len(_sidebar_search_rows(db, docs)) == 0, "no sidebar box expected"
+        # /docs is now re-pointed onto the docs layout (the step that was skipped
+        # on prod because the search widget was absent).
+        assert str(docs.layout_id) == str(docs_layout.id)
+
+        sidebar = _sidebar_search_rows(db, docs)
+        assert len(sidebar) == 1, "sidebar Search box not appended"
+        assert str(sidebar[0].widget_id) == str(search_widget.id)
+        nested = sidebar[0].config_override["config"]
+        assert nested["quicksearch"] is True
+        assert nested["scope"] == "both"
+        assert nested["quicksearch_limit"] == 6
+
+
+class TestDoesNotOverwriteExistingSearchWidget:
+    """The critical safety test: an operator-edited ``search`` widget must
+    survive the seed byte-for-byte (create-only, never update) — the create
+    path must run ONLY when the slug is absent."""
+
+    _CUSTOM_CONFIG = {
+        "component_name": "Search",
+        "placeholder": "OPERATOR CUSTOM PLACEHOLDER",
+        "scope": "pages",
+        "quicksearch": True,
+        "quicksearch_limit": 99,
+    }
+    _CUSTOM_CONTENT = {"component": "Search", "operator": "edited"}
+
+    def test_does_NOT_overwrite_existing_search_widget(self, db):
+        operator_widget = CmsWidget(
+            slug="search",
+            name="OPERATOR CUSTOM SEARCH",
+            widget_type="vue-component",
+            content_json=self._CUSTOM_CONTENT,
+            config=self._CUSTOM_CONFIG,
+            sort_order=0,
+            is_active=True,
+        )
+        db.session.add(operator_widget)
+        _seed_preexisting_docs_page(layout_id=None)
+        db.session.commit()
+
+        seed_docs_search()
+
+        after = db.session.query(CmsWidget).filter_by(slug="search").one()
+        assert after.config == self._CUSTOM_CONFIG, "search widget config overwritten"
         assert (
-            db.session.query(CmsWidget).filter_by(slug="search").count() == 0
-        ), "seed must not create the search widget"
+            after.content_json == self._CUSTOM_CONTENT
+        ), "search widget content overwritten"
+        assert after.name == "OPERATOR CUSTOM SEARCH", "search widget name overwritten"
+        # Exactly one search widget (no duplicate created).
+        assert db.session.query(CmsWidget).filter_by(slug="search").count() == 1
+
+        # The re-point still proceeds and uses the EXISTING operator widget.
+        docs = db.session.query(CmsPost).filter_by(type="page", slug="docs").one()
+        docs_layout = db.session.query(CmsLayout).filter_by(slug="docs").one()
+        assert str(docs.layout_id) == str(docs_layout.id)
+        sidebar = _sidebar_search_rows(db, docs)
+        assert len(sidebar) == 1
+        assert str(sidebar[0].widget_id) == str(after.id)
