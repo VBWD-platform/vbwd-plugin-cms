@@ -43,8 +43,11 @@ def _config(**overrides):
 
 
 def _middleware(config, allowed_codes=None):
+    # The enforcement middleware reads the singleton config read-only (it must
+    # never create/commit a row as a side effect of a request), so it depends
+    # on ``get_config_readonly`` rather than the get-or-create ``get_config``.
     service = SimpleNamespace(
-        get_config=lambda: config,
+        get_config_readonly=lambda: config,
         allowed_codes=lambda: set(allowed_codes or []),
     )
     return CmsGeoBlockMiddleware(
@@ -62,6 +65,18 @@ def _run(app, middleware, path, *, country=None, cookies=None):
 
 def test_disabled_is_noop(app):
     mw = _middleware(_config(is_enabled=False), allowed_codes=[])
+    assert _run(app, mw, "/some-page", country="DE") is None
+
+
+def test_unconfigured_is_noop(app):
+    """A missing singleton config row (never configured) passes through.
+
+    The enforcement hot path must read the config read-only — no row means
+    geo-blocking was never set up, which is equivalent to disabled. This avoids
+    a write-on-read (get-or-create + commit) on every request, which also
+    double-queried the config table on the create path.
+    """
+    mw = _middleware(None, allowed_codes=["AT"])
     assert _run(app, mw, "/some-page", country="DE") is None
 
 
@@ -157,12 +172,12 @@ def test_empty_slug_returns_451(app):
 
 
 def _raising_config_middleware(exception, session=None):
-    """Middleware whose service.get_config() raises (regression: prod outage)."""
+    """Middleware whose config read raises (regression: prod outage)."""
 
     def _raise():
         raise exception
 
-    service = SimpleNamespace(get_config=_raise, allowed_codes=lambda: set())
+    service = SimpleNamespace(get_config_readonly=_raise, allowed_codes=lambda: set())
     return CmsGeoBlockMiddleware(
         service=service,
         token_signer=GeoBypassTokenSigner(SECRET),

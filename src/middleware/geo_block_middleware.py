@@ -62,7 +62,7 @@ class CmsGeoBlockMiddleware:
 
     def before_request(self) -> Optional[Any]:
         try:
-            config = self._service.get_config()
+            config = self._service.get_config_readonly()
         except Exception:
             # Fail open: geo-blocking is non-critical enforcement and must never
             # take down the whole API. A missing ``cms_geo_block_config`` table
@@ -82,7 +82,7 @@ class CmsGeoBlockMiddleware:
             self._rollback_poisoned_transaction()
             return None
 
-        if not config.is_enabled:
+        if config is None or not config.is_enabled:
             return None
 
         path = request.path

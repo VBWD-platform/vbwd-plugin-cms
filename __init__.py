@@ -97,13 +97,19 @@ class CmsPlugin(BasePlugin):
                 "/api/v1/cms/routing-rules": "Public CMS routing rules for the SPA router.",
                 "/api/v1/cms/routing-rules/middleware": "Public CMS middleware routing rules for the SPA router.",
                 "/api/v1/cms/rss.xml": "Public RSS feed for the blog.",
-                "/api/v1/cms/_seo-render": "Token-gated (X-VBWD-Render-Token) crawler prerender endpoint; called nginx-internally, not a user auth surface.",
+                "/api/v1/cms/_seo-render": (
+                    "Token-gated (X-VBWD-Render-Token) crawler prerender "
+                    "endpoint; called nginx-internally, not a user auth surface."
+                ),
                 "/api/v1/cms/search": "Public CMS post search for the website.",
                 "/api/v1/cms/styles/<style_id>/css": "Public CMS style CSS for page rendering.",
                 "/api/v1/cms/styles/default": "Public default CMS style descriptor.",
                 "/api/v1/cms/styles/default/css": "Public default CMS style CSS.",
                 "/api/v1/cms/terms": "Public CMS taxonomy terms for the website.",
-                "/<key>.txt": "IndexNow key-verification file; the secret key itself is the capability (matches only the configured key, else 404).",
+                "/<key>.txt": (
+                    "IndexNow key-verification file; the secret key itself is "
+                    "the capability (matches only the configured key, else 404)."
+                ),
                 "/robots.txt": "Public robots.txt for crawlers.",
                 "/sitemap.xml": "Public sitemap index for crawlers.",
                 "/sitemap-<int:chunk>.xml": "Public paginated sitemap chunk for crawlers.",

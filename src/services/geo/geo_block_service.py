@@ -5,7 +5,7 @@ tax-and-countries screen), never duplicated here (DRY). The service owns config
 get/update with validation; enforcement lives in ``CmsGeoBlockMiddleware``.
 """
 import re
-from typing import Any, Dict, Set
+from typing import Any, Dict, Optional, Set
 
 from plugins.cms.src.models.cms_geo_block_config import CmsGeoBlockConfig
 
@@ -23,6 +23,15 @@ class CmsGeoBlockService:
 
     def get_config(self) -> CmsGeoBlockConfig:
         return self._config_repo.get_or_create()
+
+    def get_config_readonly(self) -> Optional[CmsGeoBlockConfig]:
+        """Return the singleton config, or ``None`` if never configured.
+
+        For the per-request enforcement path, which must not create/commit a
+        row as a side effect of a read. A missing row means geo-blocking was
+        never set up — equivalent to disabled — so the caller passes through.
+        """
+        return self._config_repo.get()
 
     def allowed_codes(self) -> Set[str]:
         """Derive the enabled ISO country codes from core (upper-case)."""
