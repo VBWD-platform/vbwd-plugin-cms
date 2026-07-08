@@ -339,6 +339,74 @@ class TestDoesNotOverwriteExistingSearchWidget:
         assert str(sidebar[0].widget_id) == str(after.id)
 
 
+class TestSeedCreatesSearchResultsDocsWidget:
+    """The docs-scoped ``search-results-docs`` widget RECORD must be ensured
+    create-only on already-populated instances too, so the docs/pages-scoped
+    search-results widget appears in the admin picker without running the
+    destructive full seeder. Its config comes from ``_STANDALONE_VUE_WIDGETS``
+    (DRY); existing records are left untouched."""
+
+    def test_seed_creates_search_results_docs_widget(self, db):
+        _seed_preexisting_docs_page(layout_id=None)
+        db.session.commit()
+
+        seed_docs_search()
+
+        docs_results = (
+            db.session.query(CmsWidget).filter_by(slug="search-results-docs").one()
+        )
+        assert docs_results.widget_type == "vue-component"
+        assert docs_results.content_json == {"component": "SearchResults"}
+        # Config defaults carried from _STANDALONE_VUE_WIDGETS (not re-coded).
+        assert docs_results.config["types"] == ["page"]
+        assert docs_results.config["mode"] == "category"
+        assert docs_results.config["per_page"] == 8
+
+    def test_seed_is_idempotent_for_search_results_docs_widget(self, db):
+        _seed_preexisting_docs_page(layout_id=None)
+        db.session.commit()
+
+        seed_docs_search()
+        seed_docs_search()
+
+        assert (
+            db.session.query(CmsWidget).filter_by(slug="search-results-docs").count()
+            == 1
+        ), "search-results-docs duplicated on second run"
+
+    def test_does_NOT_overwrite_existing_search_results_docs_widget(self, db):
+        operator_config = {
+            "component_name": "SearchResults",
+            "types": ["post"],
+            "mode": "titles",
+            "per_page": 42,
+        }
+        operator_widget = CmsWidget(
+            slug="search-results-docs",
+            name="OPERATOR CUSTOM DOCS RESULTS",
+            widget_type="vue-component",
+            content_json={"component": "SearchResults", "operator": "edited"},
+            config=dict(operator_config),
+            sort_order=0,
+            is_active=True,
+        )
+        db.session.add(operator_widget)
+        _seed_preexisting_docs_page(layout_id=None)
+        db.session.commit()
+
+        seed_docs_search()
+
+        after = db.session.query(CmsWidget).filter_by(slug="search-results-docs").one()
+        assert after.config == operator_config, "docs results config overwritten"
+        assert (
+            after.name == "OPERATOR CUSTOM DOCS RESULTS"
+        ), "docs results name overwritten"
+        assert after.content_json == {
+            "component": "SearchResults",
+            "operator": "edited",
+        }
+
+
 class TestSearchResultsGetsCategoryOverride:
     """S120 — on an already-populated instance the ``/search`` page's
     SearchResults placement (stale, no ``mode``) must be healed to the

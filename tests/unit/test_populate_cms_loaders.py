@@ -225,6 +225,48 @@ class TestSearchWidgetScopeConfig:
         assert config["mode"] == "category"
 
 
+class TestSearchResultsDocsWidget:
+    """A SECOND SearchResults record — ``search-results-docs`` — ships so a
+    docs/pages-scoped search-results widget appears in the admin picker on every
+    install. It reuses the same ``SearchResults`` vue component as the general
+    ``search-results`` record but scopes the query to pages only
+    (``types: ['page']``) in WordPress-archive ``category`` mode. Config is the
+    single source of truth (``_STANDALONE_VUE_WIDGETS``); asserted without a DB
+    so drift is caught at unit speed."""
+
+    def _by_slug(self):
+        return {w["slug"]: w for w in populate_cms._STANDALONE_VUE_WIDGETS}
+
+    def test_search_results_docs_record_is_defined(self):
+        assert (
+            "search-results-docs" in self._by_slug()
+        ), "docs-scoped search-results record not defined"
+
+    def test_search_results_docs_is_a_searchresults_vue_component(self):
+        widget = self._by_slug()["search-results-docs"]
+        assert widget["widget_type"] == "vue-component"
+        assert widget["content_json"]["component"] == "SearchResults"
+        assert widget["name"] == "Search Results — Docs"
+
+    def test_search_results_docs_config_is_pages_scoped_category_mode(self):
+        config = self._by_slug()["search-results-docs"]["config"]
+        assert config["component_name"] == "SearchResults"
+        # Docs split: pages-only scope (the general ``search-results`` record
+        # covers post+page); category card; 8 per page.
+        assert config["types"] == ["page"]
+        assert config["mode"] == "category"
+        assert config["per_page"] == 8
+
+    def test_general_search_results_record_stays_content_scoped(self):
+        # The pre-existing general record is untouched by the docs split — it
+        # remains the broad content search (its own scope key), distinct from
+        # the new pages-only docs record.
+        by_slug = self._by_slug()
+        assert "search-results" in by_slug
+        assert by_slug["search-results"]["config"]["component_name"] == "SearchResults"
+        assert by_slug["search-results-docs"] is not by_slug["search-results"]
+
+
 class TestCatalogCollectionWidgets:
     """Two pure-frontend catalog widgets — TariffPlanCollection and
     TokenBundleCollection — are seeded as standalone vue-component RECORDS so

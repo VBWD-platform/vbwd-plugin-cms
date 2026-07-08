@@ -907,6 +907,23 @@ _STANDALONE_VUE_WIDGETS = [
             "per_page": 8,
         },
     },
+    {
+        # A SECOND SearchResults record — the docs/pages-scoped split. Same
+        # ``SearchResults`` vue component as ``search-results`` above, but the
+        # query is constrained to pages only (``types: ['page']``) so operators
+        # get a ready-made "docs search" widget in the admin picker. The general
+        # ``search-results`` record stays the broad content search.
+        "slug": "search-results-docs",
+        "name": "Search Results — Docs",
+        "widget_type": "vue-component",
+        "content_json": {"component": "SearchResults"},
+        "config": {
+            "component_name": "SearchResults",
+            "types": ["page"],
+            "mode": "category",
+            "per_page": 8,
+        },
+    },
     # Pure-frontend catalog widgets — they consume EXISTING public catalog APIs
     # (GET /tarif-plans?category=<slug> / GET /tarif-plans/<slug> for plans;
     # GET /token-bundles/ for bundles). No backend endpoint or per-widget

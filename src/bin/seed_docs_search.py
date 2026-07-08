@@ -71,7 +71,10 @@ _SEARCH_WIDGET_SLUG = "search"
 # The Search widget records this safe seed is allowed to CREATE (only if absent).
 # Their canonical S121 config defaults live in ``_STANDALONE_VUE_WIDGETS`` — we
 # reference (never re-hardcode) them so created rows match the full seeder.
-_SEARCH_WIDGET_SLUGS = ("search", "search-results")
+# ``search-results-docs`` is the pages/docs-scoped SearchResults split, ensured
+# create-only here so it lands in the admin picker on already-populated
+# instances too (an existing operator-edited row is left 100% untouched).
+_SEARCH_WIDGET_SLUGS = ("search", "search-results", "search-results-docs")
 _DOCS_PAGE_SLUG = "docs"
 _DOCS_LAYOUT_SLUG = "docs"
 
