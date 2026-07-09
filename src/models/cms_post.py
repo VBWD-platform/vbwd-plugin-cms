@@ -113,7 +113,11 @@ class CmsPost(BaseModel):
     # of the ``/{posts_root}`` blog listing, ahead of the normal ordering. This
     # is the site-wide pin; the per-category pin lives on cms_post_term.pinned.
     # NOT NULL, defaults False — existing rows are unaffected (S-archives).
-    pinned = db.Column(db.Boolean, nullable=False, default=False)
+    # server_default mirrors the migration so a create_all() schema (tests) and
+    # a migrated schema agree: a raw INSERT that omits ``pinned`` still works.
+    pinned = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.text("false")
+    )
     # Capability token for previewing an unpublished post via a shareable URL
     # (?preview_token=…). Generated on create; mirrors cms_page.preview_token.
     preview_token = db.Column(db.String(64), nullable=True, index=True)

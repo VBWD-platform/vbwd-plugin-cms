@@ -30,7 +30,11 @@ class CmsPostTerm(BaseModel):
     # that term's archive listing (e.g. ``/category/gadgets``). Scoped to this
     # single post↔term pairing, so a post can be pinned in one category and not
     # another. NOT NULL, defaults False — existing links are unaffected (S-archives).
-    pinned = db.Column(db.Boolean, nullable=False, default=False)
+    # server_default mirrors the migration so a create_all() schema (tests) and
+    # a migrated schema agree: a raw INSERT that omits ``pinned`` still works.
+    pinned = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.text("false")
+    )
 
     def to_dict(self) -> dict:
         return {
