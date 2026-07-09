@@ -106,6 +106,10 @@ class CmsPlugin(BasePlugin):
                 "/api/v1/cms/styles/default": "Public default CMS style descriptor.",
                 "/api/v1/cms/styles/default/css": "Public default CMS style CSS.",
                 "/api/v1/cms/terms": "Public CMS taxonomy terms for the website.",
+                "/api/v1/cms/terms/<term_type>/<path:slug>": (
+                    "Public CMS term resolution powering the /category/<slug> "
+                    "and /tag/<slug> archive pages."
+                ),
                 "/<key>.txt": (
                     "IndexNow key-verification file; the secret key itself is "
                     "the capability (matches only the configured key, else 404)."
