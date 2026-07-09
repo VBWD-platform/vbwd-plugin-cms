@@ -395,6 +395,18 @@ FEATURES_SLIDESHOW_HTML = """
 </style>
 """
 
+# Shared feature bullets rendered on EVERY pricing card (Landing1View renders one
+# shared list, not per-plan). Kept comma-free: the embed forwards this list as a
+# single comma-separated attribute, so a comma inside a bullet would split it.
+# Defined here (above the embed guide) so the live embed script tag and the
+# native-plans config can both reference the SAME list — they can never drift.
+NATIVE_PRICING_FEATURES = [
+    "All core platform features",
+    "Unlimited projects",
+    "Priority email support",
+    "Cancel anytime",
+]
+
 # ─── Embedded pricing guide ────────────────────────────────────────────────────
 
 PRICING_EMBED_GUIDE_HTML = """
@@ -417,7 +429,9 @@ PRICING_EMBED_GUIDE_HTML = """
       data-category="root"
       data-container="embed-live-preview"
       data-locale="en"
-      data-theme="light"
+      data-theme="indigo"
+      data-highlight="pro"
+      data-features="__EMBED_LIVE_FEATURES__"
       data-height="650"
     ></script>
 
@@ -435,8 +449,10 @@ PRICING_EMBED_GUIDE_HTML = """
   data-category="root"
   data-container="pricing-root"
   data-locale="en"
-  data-theme="light"
+  data-theme="indigo"
   data-height="700"
+  data-highlight="pro"
+  data-features="All core platform features,Unlimited projects,Priority email support,Cancel anytime"
 &gt;&lt;/script&gt;</code></pre>
       </li>
       <li>
@@ -454,11 +470,21 @@ PRICING_EMBED_GUIDE_HTML = """
         <tr><td><code>data-category</code></td><td>No</td><td><code>root</code></td><td>Tariff plan category slug. <code>root</code> shows all plans.</td></tr>  # noqa: E501
         <tr><td><code>data-container</code></td><td>Yes</td><td>—</td><td>ID of the host <code>&lt;div&gt;</code>.</td></tr>  # noqa: E501
         <tr><td><code>data-locale</code></td><td>No</td><td><code>en</code></td><td>UI language: <code>en</code>, <code>ru</code>, <code>fr</code>, <code>de</code>, …</td></tr>  # noqa: E501
-        <tr><td><code>data-theme</code></td><td>No</td><td><code>light</code></td><td><code>light</code> or <code>dark</code>.</td></tr>  # noqa: E501
+        <tr><td><code>data-theme</code></td><td>No</td><td><code>default</code></td><td>Card colour theme: <code>default</code>, <code>light</code>, <code>dark</code>, <code>teal</code>, <code>indigo</code>, <code>emerald</code>. Any other value falls back to <code>default</code>.</td></tr>  # noqa: E501
         <tr><td><code>data-height</code></td><td>No</td><td><code>700</code></td><td>iframe height in pixels.</td></tr>
-        <tr><td><code>data-plans</code></td><td>No</td><td>all</td><td>Comma-separated plan slugs to display (e.g. <code>starter,pro</code>).</td></tr>  # noqa: E501
+        <tr><td><code>data-highlight</code></td><td>No</td><td>—</td><td>Plan slug rendered as featured.</td></tr>
+        <tr><td><code>data-image</code></td><td>No</td><td>—</td><td>Header image URL for the card.</td></tr>
+        <tr><td><code>data-features</code></td><td>No</td><td>—</td><td>Comma-separated feature bullets.</td></tr>
+        <tr><td><code>data-heading</code></td><td>No</td><td>—</td><td>Overrides the card heading.</td></tr>
+        <tr><td><code>data-subtitle</code></td><td>No</td><td>—</td><td>Overrides the card subtitle.</td></tr>
+        <tr><td><code>data-cta</code></td><td>No</td><td>—</td><td>Overrides the CTA button label.</td></tr>
+        <tr><td><code>data-badge</code></td><td>No</td><td>—</td><td>Overrides the featured-plan badge.</td></tr>
       </tbody>
     </table>
+
+    <p class="embed-note"><code>data-features</code> is one comma-separated list, so a single
+      feature must not contain a comma. Leave <code>data-heading</code>, <code>data-subtitle</code>,
+      <code>data-cta</code> and <code>data-badge</code> unset to use the built-in localised text.</p>
 
     <h2>Show a Specific Category</h2>
     <pre><code>&lt;script
@@ -469,13 +495,19 @@ PRICING_EMBED_GUIDE_HTML = """
   data-theme="dark"
 &gt;&lt;/script&gt;</code></pre>
 
-    <h2>Filter to 3 Featured Plans</h2>
+    <h2>Customise Copy, Theme &amp; Highlight</h2>
     <pre><code>&lt;script
   src="/embed/widget.js"
   data-embed="landing1"
-  data-category="backend"
-  data-plans="starter,pro,enterprise"
+  data-category="root"
   data-container="pricing-root"
+  data-theme="emerald"
+  data-highlight="pro"
+  data-badge="Most popular"
+  data-heading="Choose your plan"
+  data-subtitle="Upgrade or downgrade anytime"
+  data-cta="Get started"
+  data-features="All core platform features,Unlimited projects,Cancel anytime"
 &gt;&lt;/script&gt;</code></pre>
 
   </div>
@@ -500,6 +532,12 @@ code { font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace; fon
 .embed-live-wrap { border: 2px dashed var(--color-border, #e2e8f0); border-radius: 12px; padding: 1rem; margin-bottom: 2.5rem; min-height: 100px; }  # noqa: E501
 </style>
 """
+
+# Resolve the live embed script's feature list from the single source of truth so
+# the seeded guide and the native-plans card advertise the exact same bullets.
+PRICING_EMBED_GUIDE_HTML = PRICING_EMBED_GUIDE_HTML.replace(
+    "__EMBED_LIVE_FEATURES__", ",".join(NATIVE_PRICING_FEATURES)
+)
 
 # ─── Native pricing Vue component widget config ────────────────────────────────
 # Stored in CmsWidget.config; the frontend "vue-component" widget type reads this
@@ -579,6 +617,14 @@ NATIVE_PRICING_CONFIG = {
     "mode": "category",
     "category": "root",
     "plan_slugs": [],
+    # 'teal' is one of Landing1View's ALLOWED_THEMES; 'pro' is a real seeded plan
+    # slug in the 'root' category, so the featured badge/border lands on a card.
+    # heading/subtitle/cta_label/highlight_badge and image_url are deliberately
+    # left UNSET: the first four fall back to i18n keys present in all 8 locales,
+    # and image_url would be a dangling reference on a fresh (no media) install.
+    "theme": "teal",
+    "highlight_slug": "pro",
+    "features": NATIVE_PRICING_FEATURES,
     "css": NATIVE_PRICING_CSS,
 }
 
@@ -990,6 +1036,8 @@ _STANDALONE_VUE_WIDGETS = [
             "login_path": "/login",
             "dashboard_label": "Dashboard",
             "dashboard_path": "/dashboard",
+            "stickable": False,
+            "stickable_offset_px": 160,
         },
     },
 ]

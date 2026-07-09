@@ -15,6 +15,8 @@ local + CI, no DB needed here); SOLID/DI/DRY (one unwrap home reused by every
 loader); clean code; no overengineering. Quality guard:
 ``bin/pre-commit-check.sh --plugin cms --full``.
 """
+import re
+
 from plugins.cms.src.bin import populate_cms
 
 
@@ -434,3 +436,96 @@ class TestSearchDemoLayouts:
         # (nested under ``config`` so the fe-user renderer merges it).
         assert results["config_override"]["config"]["mode"] == "category"
         assert results["config_override"]["config"]["per_page"] == 8
+
+
+class TestNativePricingConfig:
+    """The pricing-card redesign only ever lived as hand-edited ``CmsWidget.config``
+    rows, so a reseed wiped its styling. ``NATIVE_PRICING_CONFIG`` now bakes the
+    look-and-feel (theme + featured plan + shared feature bullets) into the seed
+    so a fresh install and a re-seed both reproduce it. ``_get_or_create_widget``
+    overwrites ``existing.config`` when config is not None, so this reaches
+    existing installs on re-seed (intended).
+
+    Config is the single source of truth; asserted without a DB so drift is
+    caught at unit speed. Landing1View's ``ALLOWED_THEMES`` and its i18n-fallback
+    behaviour are the contracts under test.
+    """
+
+    _ALLOWED_THEMES = {"default", "light", "dark", "teal", "indigo", "emerald"}
+
+    def test_theme_is_allowed_and_highlights_pro(self):
+        config = populate_cms.NATIVE_PRICING_CONFIG
+        # An unknown theme silently falls back to 'default' in Landing1View, so
+        # the baked theme must be one Landing1View actually renders.
+        assert config["theme"] in self._ALLOWED_THEMES
+        # 'pro' is a real seeded plan slug in the 'root' category, so the
+        # featured badge/border lands on an existing card.
+        assert config["highlight_slug"] == "pro"
+
+    def test_features_is_a_comma_free_bullet_list(self):
+        features = populate_cms.NATIVE_PRICING_CONFIG["features"]
+        assert isinstance(features, list)
+        assert features, "features must be a non-empty shared bullet list"
+        for bullet in features:
+            assert isinstance(bullet, str) and bullet.strip(), "blank bullet"
+            # The embed forwards features as a single comma-separated attribute,
+            # so an individual bullet must never contain a comma (it would split
+            # into two bullets on the embed side).
+            assert "," not in bullet, f"bullet must be comma-free: {bullet!r}"
+
+    def test_i18n_fallback_and_media_keys_stay_unset(self):
+        config = populate_cms.NATIVE_PRICING_CONFIG
+        # heading/subtitle/cta_label/highlight_badge are deliberately UNSET so
+        # Landing1View falls back to i18n keys that exist in all 8 locales;
+        # baking English here would break the other 7 locales.
+        for i18n_key in ("heading", "subtitle", "cta_label", "highlight_badge"):
+            assert i18n_key not in config, f"{i18n_key} must stay i18n-driven"
+        # image_url renders an <img>; a fresh install has no seeded media, so a
+        # baked URL would be a dangling reference.
+        assert "image_url" not in config
+
+
+def _live_preview_embed_script(content_html: str) -> str:
+    """Return the single ``<script src="/embed/widget.js">`` tag whose
+    ``data-container`` is the live preview. The documentation code samples
+    HTML-escape their script tags (``&lt;script``) so they do not match a real
+    ``<script`` open tag; only the live one is a real element.
+    """
+    real_script_tags = re.findall(
+        r"<script\b[^>]*>.*?</script>", content_html, re.DOTALL
+    )
+    live = [
+        tag for tag in real_script_tags if 'data-container="embed-live-preview"' in tag
+    ]
+    assert len(live) == 1, f"expected exactly one live-preview script, got {len(live)}"
+    return live[0]
+
+
+def _data_attr(script_tag: str, attr: str) -> str:
+    match = re.search(rf'{attr}="([^"]*)"', script_tag)
+    assert match is not None, f"{attr} not present on live-preview script tag"
+    return match.group(1)
+
+
+class TestPricingEmbeddedLivePreview:
+    """The ``pricing-embedded`` page ships a LIVE embed script (the copy-paste
+    code samples on the same page are HTML-escaped and left untouched). The live
+    preview must reflect the same redesigned styling as the native widget: the
+    'pro'-highlighted 'indigo' embed theme with the shared feature bullets.
+    Parsed from the REAL fixture the seeder reads (via ``_load_pages``).
+    """
+
+    def _live_script(self) -> str:
+        pages = {page["slug"]: page for page in populate_cms._load_pages()}
+        assert "pricing-embedded" in pages
+        return _live_preview_embed_script(pages["pricing-embedded"]["content_html"])
+
+    def test_live_preview_highlights_pro_on_indigo_theme(self):
+        script = self._live_script()
+        assert _data_attr(script, "data-theme") == "indigo"
+        assert _data_attr(script, "data-highlight") == "pro"
+
+    def test_live_preview_features_match_native_config(self):
+        script = self._live_script()
+        embed_features = _data_attr(script, "data-features").split(",")
+        assert embed_features == populate_cms.NATIVE_PRICING_CONFIG["features"]

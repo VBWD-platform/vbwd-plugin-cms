@@ -157,15 +157,47 @@ Style hooks: `.cms-super-header`, `.cms-super-header__logo`, `.cms-super-header_
 
 #### NativePricingPlans
 
-Renders the platform's live pricing plans fetched from the API.
+Renders the platform's live pricing plans fetched from the API, using the same
+`Landing1View` card layout as the `/embed/landing1` embed. All presentation is
+driven by `CmsWidget.config`.
 
 | Config key | Type | Default | Description |
 |------------|------|---------|-------------|
 | `component_name` | string | `"NativePricingPlans"` | Component selector |
-| `mode` | string | `"category"` | `"category"` (show plans by category) or `"slugs"` (explicit plan list) |
+| `mode` | string | `"category"` | `"category"` (show plans by category) or `"plans"` (explicit plan list) |
 | `category` | string | `"root"` | Plan category slug to display when `mode = "category"` |
-| `plan_slugs` | array | `[]` | Explicit plan slugs to display when `mode = "slugs"` |
+| `plan_slugs` | array | `[]` | Explicit plan slugs to display when `mode = "plans"` |
+| `heading` | string | `""` | Card heading; blank → i18n fallback (see below) |
+| `subtitle` | string | `""` | Card subtitle; blank → i18n fallback |
+| `theme` | string | `""` | Card colour theme (allowed values below); unknown → `default` |
+| `image_url` | string | `""` | Header image URL shown above the cards |
+| `highlight_slug` | string | `""` | Plan slug rendered as the featured card |
+| `highlight_badge` | string | `""` | Featured-plan badge label; blank → i18n fallback |
+| `cta_label` | string | `""` | Call-to-action button label; blank → i18n fallback |
+| `features` | array | `[]` | Feature bullets shown on each card (an array here — not comma-joined) |
 | `css` | string | `""` | Scoped CSS; three ready-to-use commented style blocks are pre-populated |
+
+**Allowed `theme` values:** `default`, `light`, `dark`, `teal`, `indigo`,
+`emerald`. Any other value silently falls back to `default`.
+
+**i18n fallback:** leave `heading`, `subtitle`, `cta_label` and `highlight_badge`
+blank/absent to use the built-in localised strings (`landing1.title`,
+`landing1.subtitle`, `landing1.choosePlan`, `landing1.popular`) — this keeps the
+card correct in all locales, so leaving them unset is the recommended default.
+
+#### `pricing-embed-demo` (seeded html widget)
+
+`populate_cms.py` seeds a standalone **`html`** widget, `pricing-embed-demo`,
+whose body is the public "how to embed" guide (constant `PRICING_EMBED_GUIDE_HTML`).
+It contains one **live** `<script src="/embed/widget.js" … data-container="embed-live-preview">`
+tag plus HTML-escaped code samples and a "Configuration Attributes" reference table
+documenting the `/embed/widget.js` loader. The live script's `data-features` is
+injected from `NATIVE_PRICING_FEATURES` via an `__EMBED_LIVE_FEATURES__` placeholder
+so the guide and the native card always advertise the same bullets.
+
+The widget is seeded as an admin-picker RECORD only — it is **not** attached to any
+layout. The public `/pricing-embedded` page renders its own inline copy of the same
+HTML (mirrored, drift-guarded, in `docs/imports/pages/pricing-embedded.json`).
 
 #### ContactForm
 

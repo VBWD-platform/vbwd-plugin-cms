@@ -11,20 +11,20 @@
       },
       "source_css": null,
       "config": {
-        "component_name": "NativePricingPlans",
-        "mode": "plans",
         "component": "NativePricingPlans",
-        "css": "",
-        "props": {
-          "category": "root",
-          "default_billing_period": "monthly",
-          "plan_count": 3,
-          "show_billing_toggle": true
-        },
-        "plan_slugs": [
-          "free",
-          "plugin-ghrm"
-        ]
+        "component_name": "NativePricingPlans",
+        "mode": "category",
+        "category": "root",
+        "plan_slugs": [],
+        "theme": "teal",
+        "highlight_slug": "pro",
+        "features": [
+          "All core platform features",
+          "Unlimited projects",
+          "Priority email support",
+          "Cancel anytime"
+        ],
+        "css": ""
       },
       "sort_order": 0,
       "is_active": true
