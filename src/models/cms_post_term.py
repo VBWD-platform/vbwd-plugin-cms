@@ -26,12 +26,18 @@ class CmsPostTerm(BaseModel):
         nullable=False,
         index=True,
     )
+    # Per-category "pin" (sticky). A pinned link floats its post to the TOP of
+    # that term's archive listing (e.g. ``/category/gadgets``). Scoped to this
+    # single post↔term pairing, so a post can be pinned in one category and not
+    # another. NOT NULL, defaults False — existing links are unaffected (S-archives).
+    pinned = db.Column(db.Boolean, nullable=False, default=False)
 
     def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "post_id": str(self.post_id),
             "term_id": str(self.term_id),
+            "pinned": bool(self.pinned),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

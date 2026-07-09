@@ -97,6 +97,7 @@ from plugins.cms.src.services.post_service import (
     InvalidStatusTransitionError,
     PostHierarchyError,
     InvalidLayoutOrStyleError,
+    core_entity_type_for_post_type,
 )
 from plugins.cms.src.services.post_import_export_service import (
     PostImportExportService,
@@ -112,7 +113,8 @@ from plugins.cms.src.services.rss_feed_service import RssFeedService
 from plugins.cms.src.services.content_ingest_service import ContentIngestService
 from plugins.cms.src.services import post_type_registry, term_type_registry
 from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED, POST_STATUS_PRIVATE
-from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE
+from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE, TAG_TERM_TYPE
+from plugins.cms.src.services.term_permalink import term_archive_path
 
 # Some base images ship a mimetypes registry that does not know modern image
 # formats (e.g. `.webp` → None → served as application/octet-stream, which an
@@ -231,9 +233,10 @@ def _core_entity_type_for_post(post: dict) -> str:
 
     Pages (``type=page``) are addressed as ``cms_page``; everything else as
     ``cms_post`` — so the new core tags / custom-fields blocks are scoped per
-    content kind exactly like the matrix entries.
+    content kind exactly like the matrix entries. Delegates to the single
+    ``core_entity_type_for_post_type`` map (DRY — shared with list enrichment).
     """
-    return "cms_page" if post.get("type") == "page" else "cms_post"
+    return core_entity_type_for_post_type(post.get("type"))
 
 
 def _append_core_tags_and_custom_fields(post: dict) -> None:
@@ -279,6 +282,7 @@ def _post_service() -> PostService:
     from plugins.cms.src.services.content_event_publisher import (
         ContentEventPublisher,
     )
+    from vbwd.services.tags_and_custom_fields import resolve_tags_and_custom_fields
 
     return PostService(
         repo=PostRepository(db.session),
@@ -296,6 +300,9 @@ def _post_service() -> PostService:
         # and the public_base_url/home_slug for the preview surface.
         routing_rule_repo=CmsRoutingRuleRepository(db.session),
         permalink_config=_cms_config(),
+        # Core tags port: LIST serialization batch-fetches per-post tags so the
+        # fe archive card can render tag chips (one bulk query per entity type).
+        tags_port=resolve_tags_and_custom_fields(),
     )
 
 
@@ -1975,14 +1982,32 @@ def _admin_change_post_status(post_id: str, target_status: str):
 @require_admin
 @require_permission("cms.manage")
 def admin_assign_post_terms(post_id: str):
-    """PUT /api/v1/admin/cms/posts/<id>/terms — replace term links."""
+    """PUT /api/v1/admin/cms/posts/<id>/terms — replace term links.
+
+    ``pinned_term_ids`` (optional, subset of ``term_ids``) carries the
+    per-category pins (cms_post_term.pinned). Absent → pins are preserved as-is
+    (legacy clients keep working); present → authoritative for this post
+    (S-archives).
+    """
     data = request.get_json()
     term_ids = (data or {}).get("term_ids")
     if not isinstance(term_ids, list):
         return jsonify({"error": "term_ids array required"}), 400
+    pinned_term_ids = (data or {}).get("pinned_term_ids")
+    if pinned_term_ids is not None and not isinstance(pinned_term_ids, list):
+        return jsonify({"error": "pinned_term_ids must be an array"}), 400
     try:
-        _post_service().assign_terms(post_id, term_ids)
-        return jsonify({"post_id": post_id, "term_ids": term_ids}), 200
+        _post_service().assign_terms(post_id, term_ids, pinned_term_ids)
+        return (
+            jsonify(
+                {
+                    "post_id": post_id,
+                    "term_ids": term_ids,
+                    "pinned_term_ids": pinned_term_ids or [],
+                }
+            ),
+            200,
+        )
     except PostNotFoundError as e:
         return jsonify({"error": str(e)}), 404
 
@@ -2174,6 +2199,32 @@ def public_list_terms():
     if not term_type:
         return jsonify({"error": "type query param required"}), 400
     return jsonify(_term_service().list_terms(term_type)), 200
+
+
+@cms_bp.route("/api/v1/cms/terms/<term_type>/<path:slug>", methods=["GET"])
+def public_resolve_term(term_type: str, slug: str):
+    """GET /api/v1/cms/terms/<term_type>/<path:slug> — resolve one term or 404.
+
+    The fe catch-all resolves a term archive (``/category/<slug>`` /
+    ``/tag/<slug>``) through this endpoint ONLY after both a page and a post
+    fail to resolve (precedence page → post → term). The payload adds
+    ``archive_url`` (via the single ``term_archive_path`` map) so the fe never
+    re-hardcodes the ``category/``/``tag/`` prefix.
+
+    Categories resolve from the ``cms_term`` taxonomy. Tags do NOT live in
+    ``cms_term`` — they are held in the core ``vbwd_entity_tag`` index (D7) — so
+    a tag is resolved to a SYNTHETIC term via the same tag index the archive
+    listing uses, valid iff at least one PUBLISHED post carries it.
+    """
+    normalized = slug.strip("/")
+    if term_type == TAG_TERM_TYPE:
+        term = _post_service().resolve_tag_term(normalized)
+    else:
+        term = _term_service().find_by_slug(term_type, normalized)
+    if not term:
+        return jsonify({"error": f"Term '{slug}' not found"}), 404
+    term["archive_url"] = term_archive_path(term["term_type"], term["slug"])
+    return jsonify(term), 200
 
 
 @cms_bp.route("/api/v1/cms/embed-manifest", methods=["GET"])

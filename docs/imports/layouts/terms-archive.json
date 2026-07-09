@@ -1,0 +1,36 @@
+{
+  "vbwd_export": "cms_layouts",
+  "version": 1,
+  "cms_layouts": [
+    {
+      "areas": [
+        {
+          "label": "Header",
+          "name": "header",
+          "type": "header"
+        },
+        {
+          "label": "",
+          "name": "breadcrumbs",
+          "type": "vue"
+        },
+        {
+          "label": "Archive",
+          "name": "archive",
+          "type": "vue"
+        },
+        {
+          "label": "Footer",
+          "name": "footer",
+          "type": "footer"
+        }
+      ],
+      "description": "Shared term archive: breadcrumbs plus the route-driven TermArchive widget that lists a category's or tag's posts. One layout renders every category AND tag archive.",
+      "is_active": true,
+      "is_default": false,
+      "name": "Term Archive",
+      "slug": "terms-archive",
+      "sort_order": 13
+    }
+  ]
+}

@@ -83,7 +83,16 @@ class PostRepository:
 
         total = query.count()
         items = (
-            self._apply_ordering(query, newest_first, sort_by, sort_dir)
+            self._apply_ordering(
+                query,
+                newest_first,
+                sort_by,
+                sort_dir,
+                # Blog-index (and the default admin list) float globally-pinned
+                # posts to the top via cms_post.pinned. An explicit sort_by still
+                # wins (admin column sort), so this only shapes the DEFAULT order.
+                pinned_column=CmsPost.pinned,
+            )
             .offset((page - 1) * per_page)
             .limit(per_page)
             .all()
@@ -119,7 +128,14 @@ class PostRepository:
 
         total = query.count()
         items = (
-            self._apply_ordering(query, newest_first)
+            self._apply_ordering(
+                query,
+                newest_first,
+                # Category archive floats posts pinned *within this term* to the
+                # top via cms_post_term.pinned (the join above is already scoped
+                # to the one term row, so this is the per-category pin).
+                pinned_column=CmsPostTerm.pinned,
+            )
             .offset((page - 1) * per_page)
             .limit(per_page)
             .all()
@@ -196,13 +212,20 @@ class PostRepository:
         newest_first: bool,
         sort_by: Optional[str] = None,
         sort_dir: str = "asc",
+        pinned_column=None,
     ):
         """Apply the result ordering for a list query.
 
         An explicit ``sort_by`` (whitelisted column) wins, in ``sort_dir``
         direction. Otherwise: ``newest_first`` (RSS feed) orders by
-        ``published_at`` desc; the default (list UI) is ``sort_order`` then
-        most-recently-edited.
+        ``published_at`` desc; the default (public archive / list UI) is
+        ``sort_order`` then most-recently-edited.
+
+        ``pinned_column`` (a boolean column — ``cms_post.pinned`` for the blog
+        index, ``cms_post_term.pinned`` for a category archive) is prepended to
+        the DEFAULT ordering only, so pinned rows float to the top ahead of the
+        existing order. It never overrides an explicit ``sort_by`` (admin column
+        sort) nor the RSS ``newest_first`` feed order — both stay unchanged.
         """
         column = self._SORTABLE.get((sort_by or "").strip())
         if column is not None:
@@ -213,7 +236,10 @@ class PostRepository:
                 CmsPost.published_at.desc().nullslast(),
                 CmsPost.created_at.desc(),
             )
-        return query.order_by(CmsPost.sort_order.asc(), CmsPost.updated_at.desc())
+        default_ordering = [CmsPost.sort_order.asc(), CmsPost.updated_at.desc()]
+        if pinned_column is not None:
+            return query.order_by(pinned_column.desc(), *default_ordering)
+        return query.order_by(*default_ordering)
 
     def find_scheduled_due(self, now: Optional[datetime] = None) -> List[CmsPost]:
         """Scheduled posts whose published_at has passed."""

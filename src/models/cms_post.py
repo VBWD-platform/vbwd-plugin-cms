@@ -109,6 +109,11 @@ class CmsPost(BaseModel):
     language = db.Column(db.String(8), nullable=False, default="en")
     translation_group_id = db.Column(db.UUID, nullable=True, index=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
+    # Global "pin" (sticky) for the blog index. A pinned post floats to the TOP
+    # of the ``/{posts_root}`` blog listing, ahead of the normal ordering. This
+    # is the site-wide pin; the per-category pin lives on cms_post_term.pinned.
+    # NOT NULL, defaults False — existing rows are unaffected (S-archives).
+    pinned = db.Column(db.Boolean, nullable=False, default=False)
     # Capability token for previewing an unpublished post via a shareable URL
     # (?preview_token=…). Generated on create; mirrors cms_page.preview_token.
     preview_token = db.Column(db.String(64), nullable=True, index=True)
@@ -177,6 +182,7 @@ class CmsPost(BaseModel):
                 str(self.translation_group_id) if self.translation_group_id else None
             ),
             "sort_order": self.sort_order,
+            "pinned": bool(self.pinned),
             "meta_title": self.meta_title,
             "meta_description": self.meta_description,
             "meta_keywords": self.meta_keywords,

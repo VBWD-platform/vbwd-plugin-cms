@@ -665,6 +665,17 @@ class TestAssignTerms:
         service, _, _, _ = _make_service(posts=[post])
         term_id = str(uuid4())
         service.assign_terms(str(post.id), [term_id])
+        # ``pinned_term_ids`` defaults to None (preserve existing pins) when the
+        # caller does not pass per-category pins (S-archives).
         service._post_term_repo.replace_for_post.assert_called_once_with(
-            str(post.id), [term_id]
+            str(post.id), [term_id], None
+        )
+
+    def test_assign_terms_passes_pinned_term_ids_through(self):
+        post = _post()
+        service, _, _, _ = _make_service(posts=[post])
+        term_id = str(uuid4())
+        service.assign_terms(str(post.id), [term_id], pinned_term_ids=[term_id])
+        service._post_term_repo.replace_for_post.assert_called_once_with(
+            str(post.id), [term_id], [term_id]
         )

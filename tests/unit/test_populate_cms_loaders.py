@@ -80,6 +80,7 @@ class TestLayoutLoader:
             "pricing-native-plans",
             "tag-archive",
             "posts-archive",
+            "terms-archive",
             "addon-catalog",
             "cookie-consent",
         }

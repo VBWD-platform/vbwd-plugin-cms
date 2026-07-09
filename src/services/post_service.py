@@ -13,7 +13,7 @@ Responsibilities:
 """
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from vbwd.events.dispatcher import Event
 
@@ -30,6 +30,10 @@ from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE, TAG_TERM_TYPE
 from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
 from plugins.cms.src.services import post_type_registry
 from plugins.cms.src.services._slug import slugify, unique_slug
+from plugins.cms.src.services.term_permalink import (
+    term_archive_path,
+    humanize_term_slug,
+)
 from plugins.cms.src.services.permalink import (
     PermalinkRenderer,
     PrimaryCategory,
@@ -39,6 +43,23 @@ from plugins.cms.src.services.seo_canonical import derive_canonical_url
 
 
 CONTENT_CHANGED_EVENT = "content.changed"
+
+# Core entity types a unified post is addressed as in the core tags/custom-fields
+# index (``vbwd_entity_tag``). A ``page`` is a ``cms_page``; everything else a
+# ``cms_post`` — mirrors the tags/custom-fields matrix scoping.
+CORE_ENTITY_TYPE_POST = "cms_post"
+CORE_ENTITY_TYPE_PAGE = "cms_page"
+
+
+def core_entity_type_for_post_type(post_type: Optional[str]) -> str:
+    """Map a unified post's ``type`` discriminator onto its core entity type.
+
+    Single source of truth for the ``page → cms_page`` / else → ``cms_post``
+    convention, reused by both the list-tag enrichment here and the detail
+    route's per-post tag append (DRY — one mapping, no re-hardcoded strings).
+    """
+    return CORE_ENTITY_TYPE_PAGE if post_type == "page" else CORE_ENTITY_TYPE_POST
+
 
 # Legal status transitions (D9). Every status may also move to ``trash``
 # (soft-delete). ``published``/``private`` are interchangeable; ``scheduled``
@@ -151,6 +172,7 @@ class PostService:
         routing_rule_repo=None,
         permalink_config=None,
         renderer=None,
+        tags_port=None,
     ) -> None:
         self._repo = repo
         self._term_repo = term_repo
@@ -183,6 +205,12 @@ class PostService:
         self._routing_rule_repo = routing_rule_repo
         self._permalink_config = permalink_config or {}
         self._renderer = renderer or PermalinkRenderer()
+        # Core tags port (S77). When present, LIST serialization batch-fetches
+        # each post's tags (one bulk query per core entity type — no N+1) so the
+        # fe archive card can render tag chips. Absent → items carry an empty
+        # ``tags`` list, so a caller that does not wire it keeps working (the
+        # disabled-feature path).
+        self._tags_port = tags_port
 
     # ── reads ────────────────────────────────────────────────────────────
 
@@ -263,23 +291,61 @@ class PostService:
 
     def _with_term_ids(self, dto: Dict[str, Any], post_id: Any) -> Dict[str, Any]:
         """Attach the post's linked term ids so editors/lists can show the
-        selected categories + tags (cms_post.to_dict has no term info)."""
+        selected categories + tags (cms_post.to_dict has no term info).
+
+        Also attaches ``pinned_term_ids`` — the subset of term ids whose link is
+        pinned — so the editor can re-hydrate the per-category pin toggles on
+        load (S-archives)."""
         links = self._post_term_repo.find_by_post(str(post_id))
         dto["term_ids"] = [str(link.term_id) for link in links]
+        dto["pinned_term_ids"] = [
+            str(link.term_id) for link in links if getattr(link, "pinned", False)
+        ]
         return dto
 
     def _with_terms(self, dto: Dict[str, Any], post_id: Any) -> Dict[str, Any]:
         """Attach the post's linked terms as FULL term dicts (categories + tags)
-        so the public renderer can show a tag cloud. A link whose term no longer
-        exists is skipped. Empty list when the post has no terms."""
+        so the public renderer can show a tag cloud and real archive links. Each
+        term dict carries an ``archive_url`` (the fixed ``category/``/``tag/``
+        prefix map) so the fe never re-hardcodes the prefix. A link whose term no
+        longer exists is skipped. Empty list when the post has no terms."""
         links = self._post_term_repo.find_by_post(str(post_id))
         terms: List[Dict[str, Any]] = []
         for link in links:
             term = self._term_repo.find_by_id(str(link.term_id))
             if term is not None:
-                terms.append(term.to_dict())
+                terms.append(self._term_dict_with_archive_url(term))
         dto["terms"] = terms
         return dto
+
+    @staticmethod
+    def _term_dict_with_archive_url(term: Any) -> Dict[str, Any]:
+        """Serialize a term and append its archive URL (single-source map)."""
+        term_dto = term.to_dict()
+        term_dto["archive_url"] = term_archive_path(
+            term_dto["term_type"], term_dto["slug"]
+        )
+        return term_dto
+
+    def _primary_category_dict(self, post: Any) -> Optional[Dict[str, Any]]:
+        """Return the post's primary category ``{slug, name, archive_url}`` or None.
+
+        The primary is the explicit ``primary_term_id`` when it is set AND still
+        resolves to a ``category`` term. Absent/dangling/non-category → ``None``
+        (the card simply omits the eyebrow link). Additive; existing list
+        payloads are unchanged apart from the new ``primary_category`` key.
+        """
+        primary_id = getattr(post, "primary_term_id", None)
+        if not primary_id:
+            return None
+        term = self._term_repo.find_by_id(str(primary_id))
+        if term is None or term.term_type != CATEGORY_TERM_TYPE:
+            return None
+        return {
+            "slug": term.slug,
+            "name": term.name,
+            "archive_url": term_archive_path(term.term_type, term.slug),
+        }
 
     def get_post(self, post_id: str) -> Dict[str, Any]:
         post = self._repo.find_by_id(post_id)
@@ -359,6 +425,34 @@ class PostService:
             )
         return self._serialize_page(result)
 
+    def resolve_tag_term(self, slug: str) -> Optional[Dict[str, Any]]:
+        """Resolve a TAG archive to a synthetic term dict, or ``None``.
+
+        Tags live in the core ``vbwd_entity_tag`` index — NOT ``cms_term`` — so a
+        tag has no stored term row. Validity is proxied by post existence via the
+        SAME tag index the archive listing uses (``find_by_tag_slug``): a tag is
+        valid iff at least one PUBLISHED post carries it, else ``None`` (so a
+        genuinely unknown tag still 404s and falls through). The display name is
+        the humanized slug (no core tag-catalog lookup — kept plugin-local).
+        """
+        normalized = slug.strip("/")
+        result = self._repo.find_by_tag_slug(
+            tag_slug=normalized,
+            post_type=None,
+            status=POST_STATUS_PUBLISHED,
+            page=1,
+            per_page=1,
+        )
+        if not result.get("total"):
+            return None
+        return {
+            "term_type": TAG_TERM_TYPE,
+            "slug": normalized,
+            "name": humanize_term_slug(normalized),
+            "description": None,
+            "parent_id": None,
+        }
+
     def resolve_published_path(
         self, post_type: str, path: str
     ) -> Optional[Dict[str, Any]]:
@@ -437,6 +531,9 @@ class PostService:
         post.language = data.get("language") or "en"
         post.translation_group_id = data.get("translation_group_id")
         post.sort_order = data.get("sort_order", 0)
+        # Global blog-index pin (S-archives). Absent → False (unpinned), matching
+        # the column default; existing create callers are unaffected.
+        post.pinned = bool(data.get("pinned", False))
         self._apply_seo(post, data)
         self._apply_layout_style(post, data)
         if post.status == POST_STATUS_PUBLISHED and not post.published_at:
@@ -475,6 +572,9 @@ class PostService:
             "language",
             "translation_group_id",
             "sort_order",
+            # Global blog-index pin (S-archives). Round-trips like sort_order;
+            # absent from the payload → left unchanged.
+            "pinned",
         ):
             if field in data:
                 setattr(post, field, data[field])
@@ -592,11 +692,19 @@ class PostService:
             raise PostNotFoundError(f"Post '{post_id}' not found")
         self._repo.delete(post_id)
 
-    def assign_terms(self, post_id: str, term_ids: List[str]) -> None:
+    def assign_terms(
+        self,
+        post_id: str,
+        term_ids: List[str],
+        pinned_term_ids: Optional[List[str]] = None,
+    ) -> None:
         post = self._repo.find_by_id(post_id)
         if not post:
             raise PostNotFoundError(f"Post '{post_id}' not found")
-        self._post_term_repo.replace_for_post(post_id, term_ids)
+        # ``pinned_term_ids`` (subset of ``term_ids``) flags the per-category pins.
+        # ``None`` preserves the post's existing pins (legacy callers); an explicit
+        # list is authoritative — the editor always sends it (S-archives).
+        self._post_term_repo.replace_for_post(post_id, term_ids, pinned_term_ids)
 
     # ── bulk operations (admin list bulk-bar) ─────────────────────────────
     def bulk_delete(self, ids: List[str]) -> Dict[str, int]:
@@ -798,18 +906,69 @@ class PostService:
             self._repo.save(post)
 
     def _serialize_page(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        for item in result.get("items", []):
+        posts = result.get("items", [])
+        for item in posts:
             self._backfill_preview_token(item)
+        dtos = [
+            self._with_primary_category(
+                self._with_term_ids(item.to_dict(), item.id), item
+            )
+            for item in posts
+        ]
+        self._attach_tags_bulk(dtos, posts)
         return {
-            "items": [
-                self._with_term_ids(item.to_dict(), item.id)
-                for item in result.get("items", [])
-            ],
+            "items": dtos,
             "total": result.get("total", 0),
             "page": result.get("page", 1),
             "per_page": result.get("per_page", 20),
             "pages": result.get("pages", 1),
         }
+
+    def _attach_tags_bulk(self, dtos: List[Dict[str, Any]], posts: List[Any]) -> None:
+        """Attach each list item's core tags as ``{slug, name, archive_url}``.
+
+        Efficient by construction: the page's post ids are grouped by core
+        entity type and fetched with ONE ``get_tags_bulk`` query per type (at
+        most two: ``cms_post`` + ``cms_page``) — never one query per post (no
+        N+1). Every dto receives a ``tags`` list; a post with no tags — or a
+        service with no tags port wired — gets ``[]`` (the disabled-feature
+        path, so callers stay Liskov-safe).
+        """
+        for dto in dtos:
+            dto["tags"] = []
+        if self._tags_port is None or not posts:
+            return
+        ids_by_entity_type: Dict[str, List[UUID]] = {}
+        for post in posts:
+            entity_type = core_entity_type_for_post_type(getattr(post, "type", None))
+            ids_by_entity_type.setdefault(entity_type, []).append(UUID(str(post.id)))
+        slugs_by_id: Dict[UUID, List[str]] = {}
+        for entity_type, entity_ids in ids_by_entity_type.items():
+            slugs_by_id.update(self._tags_port.get_tags_bulk(entity_type, entity_ids))
+        for dto, post in zip(dtos, posts):
+            slugs = slugs_by_id.get(UUID(str(post.id)), [])
+            dto["tags"] = [self._tag_chip(slug) for slug in slugs]
+
+    @staticmethod
+    def _tag_chip(slug: str) -> Dict[str, Any]:
+        """A single tag rendered as the fe archive card expects it: the slug,
+        a humanized display name, and the ``tag/<slug>`` archive path (via the
+        single ``term_archive_path`` map — the fe never re-hardcodes the prefix).
+        """
+        return {
+            "slug": slug,
+            "name": humanize_term_slug(slug),
+            "archive_url": term_archive_path(TAG_TERM_TYPE, slug),
+        }
+
+    def _with_primary_category(self, dto: Dict[str, Any], post: Any) -> Dict[str, Any]:
+        """Attach the post's primary category (with archive URL) to a list item.
+
+        Lets the fe archive card render a real ``/category/<slug>`` eyebrow link.
+        ``None`` when the post has no resolvable primary category term.
+        """
+        dto["primary_category"] = self._primary_category_dict(post)
+        return dto
 
     def _emit_content_changed(
         self, post: CmsPost, reason: str, previous_slug: Optional[str] = None

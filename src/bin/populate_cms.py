@@ -1058,6 +1058,15 @@ _LAYOUT_WIDGET_PLACEMENTS: dict[str, list[tuple[str, str]]] = {
         ("archive", "posts-archive"),
         ("footer", "footer-nav"),
     ],
+    # Shared term archive: ONE layout renders every category AND tag archive.
+    # The route-driven TermArchive widget reads the term type + slug from the
+    # catch-all URL (/category/<slug> or /tag/<slug>) and lists that term's posts.
+    "terms-archive": [
+        ("header", "header-nav"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("archive", "terms-archive"),
+        ("footer", "footer-nav"),
+    ],
     # S121 — demo search layouts. The Search / SearchResults widgets are placed
     # at PAGE level (via config_override on the docs/search demo pages), so only
     # the structural header/footer are layout-level placements here.
@@ -1329,6 +1338,12 @@ def _get_or_create_layout(data: dict, widget_map: dict) -> "CmsLayout":
 # integration oracle so the layout/widget slugs cannot drift.
 POSTS_ARCHIVE_LAYOUT_SLUG = "posts-archive"
 POSTS_ARCHIVE_WIDGET_SLUG = "posts-archive"
+
+# Shared term-archive (category + tag) layout/widget slugs. The archive is
+# served dynamically through the fe catch-all — NO per-term page is seeded —
+# so only the layout + its route-driven TermArchive widget need seeding.
+TERMS_ARCHIVE_LAYOUT_SLUG = "terms-archive"
+TERMS_ARCHIVE_WIDGET_SLUG = "terms-archive"
 
 
 def _resolve_posts_root() -> str:
@@ -2011,6 +2026,22 @@ def populate_cms() -> None:
         content_json={"component": "PostArchive", "mode": "category", "type": "post"},
         config={
             "component_name": "PostArchive",
+            "type": "post",
+            "mode": "category",
+            "posts_per_page": 20,
+            "paginate": True,
+        },
+    )
+    # Shared term-archive widget — lists a category's OR a tag's posts. Reads the
+    # term type + slug from the catch-all route (NOT config), so ONE widget on the
+    # ONE terms-archive layout renders every category and tag archive.
+    widget_map[TERMS_ARCHIVE_WIDGET_SLUG] = _get_or_create_widget(
+        TERMS_ARCHIVE_WIDGET_SLUG,
+        "Term Archive",
+        "vue-component",
+        content_json={"component": "TermArchive", "mode": "category", "type": "post"},
+        config={
+            "component_name": "TermArchive",
             "type": "post",
             "mode": "category",
             "posts_per_page": 20,
