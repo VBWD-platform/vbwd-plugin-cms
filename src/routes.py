@@ -815,6 +815,23 @@ def get_layout_by_slug_public(slug: str):
         return jsonify({"error": str(e)}), 404
 
 
+@cms_bp.route("/api/v1/cms/widgets/by-slug/<slug>", methods=["GET"])
+def get_widget_by_slug_public(slug: str):
+    """GET /api/v1/cms/widgets/by-slug/<slug> — public widget lookup by slug.
+
+    The super-header widget fetches its nested menu widget by slug at render
+    time. Inactive widgets are 404 (never served publicly); the existing public
+    layout routes already embed full widget DTOs, so this exposes no new data.
+    """
+    try:
+        widget = _widget_service().get_widget_by_slug(slug)
+    except CmsWidgetNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    if not widget.get("is_active"):
+        return jsonify({"error": f"Widget '{slug}' not found"}), 404
+    return jsonify(widget), 200
+
+
 @cms_bp.route("/api/v1/cms/styles/<style_id>/css", methods=["GET"])
 def get_style_css_public(style_id: str):
     """GET /api/v1/cms/styles/<id>/css — serve CSS as text/css."""

@@ -106,6 +106,10 @@ class CmsPlugin(BasePlugin):
                 "/api/v1/cms/styles/default": "Public default CMS style descriptor.",
                 "/api/v1/cms/styles/default/css": "Public default CMS style CSS.",
                 "/api/v1/cms/terms": "Public CMS taxonomy terms for the website.",
+                "/api/v1/cms/widgets/by-slug/<slug>": (
+                    "Public CMS widget by slug (active only) for render-time "
+                    "widget composition, e.g. the super-header's nested menu."
+                ),
                 "/api/v1/cms/terms/<term_type>/<path:slug>": (
                     "Public CMS term resolution powering the /category/<slug> "
                     "and /tag/<slug> archive pages."

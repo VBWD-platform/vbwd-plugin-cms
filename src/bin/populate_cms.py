@@ -964,6 +964,34 @@ _STANDALONE_VUE_WIDGETS = [
         "content_json": {"component": "CookieConsent"},
         "config": COOKIE_CONSENT_CONFIG,
     },
+    # Super Header — a composite header that fetches a nested `menu` widget by
+    # slug at render time (via the public /api/v1/cms/widgets/by-slug route).
+    # The seed only creates the picker RECORD; operators place it themselves (it
+    # is deliberately NOT added to _LAYOUT_WIDGET_PLACEMENTS).
+    {
+        "slug": "super-header",
+        "name": "Super Header",
+        "widget_type": "vue-component",
+        "content_json": {"component": "SuperHeader"},
+        "config": {
+            "component_name": "SuperHeader",
+            "logo_image_url": "",
+            "logo_text": "VBWD",
+            "logo_link": "/",
+            "nav_widget_slug": "header-nav",
+            "show_search": True,
+            "search_placeholder": "Search…",
+            "search_target_path": "/search",
+            "search_scope": "both",
+            "quicksearch": True,
+            "quicksearch_limit": 6,
+            "show_auth_links": True,
+            "login_label": "Login",
+            "login_path": "/login",
+            "dashboard_label": "Dashboard",
+            "dashboard_path": "/dashboard",
+        },
+    },
 ]
 
 

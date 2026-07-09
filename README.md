@@ -28,6 +28,7 @@ Provides a full headless CMS for creating and managing static/dynamic content pa
 | GET | `/api/v1/cms/categories` | List all categories |
 | GET | `/api/v1/cms/pages` | List published pages (paginated, filterable by category) |
 | GET | `/api/v1/cms/pages/<slug>` | Get page by slug |
+| GET | `/api/v1/cms/widgets/by-slug/<slug>` | Get an **active** widget by slug (404 when missing or inactive) |
 | GET | `/uploads/<path>` | Serve uploaded files |
 | POST | `/api/v1/contact` | Submit a contact form |
 
@@ -123,6 +124,36 @@ Renders a breadcrumb trail for the current page.
 | `category_label` | string | `""` | Override label when `show_category` is true |
 | `max_label_length` | number | `60` | Truncate page title in the last crumb |
 | `css` | string | `""` | Scoped CSS injected into the widget's `<style>` |
+
+#### SuperHeader
+
+A complete site header: logo, navigation, search box and one auth link. Drop it into a layout's `header` area.
+
+The navigation is **not** configured here. `nav_widget_slug` names an existing `menu` widget, which SuperHeader fetches over `GET /api/v1/cms/widgets/by-slug/<slug>` and renders through the normal widget renderer — so the referenced widget keeps its own menu items, submenus and mobile burger drawer. Any menu widget can be swapped in by changing the slug. A referenced widget that is itself a `SuperHeader` is skipped.
+
+The search box reuses the `Search` widget's component, so `quicksearch` behaves identically (backed by `/api/v1/cms/search`). The auth link renders `login_label` → `login_path` for anonymous visitors and `dashboard_label` → `dashboard_path` once a valid `auth_token` is present.
+
+| Config key | Type | Default | Description |
+|------------|------|---------|-------------|
+| `component_name` | string | `"SuperHeader"` | Component selector |
+| `logo_image_url` | string | `""` | Logo image; when empty, `logo_text` is rendered instead |
+| `logo_text` | string | `"VBWD"` | Text logo, and the `alt` text when `logo_image_url` is set |
+| `logo_link` | string | `"/"` | Href for the logo |
+| `nav_widget_slug` | string | `"header-nav"` | Slug of an existing `menu` widget to render as the nav; empty renders no nav |
+| `show_search` | boolean | `true` | Render the search box |
+| `search_placeholder` | string | `"Search…"` | Placeholder text |
+| `search_target_path` | string | `"/search"` | Page the full search submits to |
+| `search_scope` | string | `"both"` | `"pages"`, `"posts"` or `"both"` |
+| `quicksearch` | boolean | `true` | Show the instant results dropdown |
+| `quicksearch_limit` | number | `6` | Maximum dropdown rows (1–20) |
+| `show_auth_links` | boolean | `true` | Render the auth link |
+| `login_label` | string | `"Login"` | Link text shown to anonymous visitors |
+| `login_path` | string | `"/login"` | Href shown to anonymous visitors |
+| `dashboard_label` | string | `"Dashboard"` | Link text shown to authenticated visitors |
+| `dashboard_path` | string | `"/dashboard"` | Href shown to authenticated visitors |
+| `css` | string | `""` | Scoped CSS injected into the widget's `<style>` |
+
+Style hooks: `.cms-super-header`, `.cms-super-header__logo`, `.cms-super-header__nav`, `.cms-super-header__search`, `.cms-super-header__auth`.
 
 #### NativePricingPlans
 

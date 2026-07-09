@@ -6,6 +6,7 @@ from plugins.cms.src.services.cms_widget_service import (
     CmsWidgetService,
     CmsWidgetSlugConflictError,
     CmsWidgetInUseError,
+    CmsWidgetNotFoundError,
 )
 from plugins.cms.src.models.cms_widget import CmsWidget
 
@@ -210,6 +211,32 @@ class TestMenuTree:
         items = [{"label": "Home", "url": "/", "sort_order": 0}]
         svc.replace_menu_tree(str(w.id), items)
         menu_repo.replace_tree.assert_called_once_with(str(w.id), items)
+
+
+class TestGetWidgetBySlug:
+    """The public super-header widget resolves a nested widget by slug (S).
+
+    ``get_widget_by_slug`` mirrors ``get_widget`` but keys on the slug and
+    always includes the menu tree, so a menu widget fetched by slug carries its
+    ``menu_items`` (the super-header pulls its nav that way).
+    """
+
+    def test_get_widget_by_slug_returns_dto_with_menu_items(self):
+        menu_widget = _widget(slug="header-nav", widget_type="menu", name="Header Nav")
+        item_dict = {"id": "mi-1", "parent_id": None, "label": "Home", "url": "/"}
+        menu_item = MagicMock()
+        menu_item.to_dict.return_value = item_dict
+        svc, _, _ = _make_service(widgets=[menu_widget], menu_items=[menu_item])
+
+        result = svc.get_widget_by_slug("header-nav")
+
+        assert result["slug"] == "header-nav"
+        assert result["menu_items"] == [item_dict]
+
+    def test_get_widget_by_slug_unknown_raises_not_found(self):
+        svc, _, _ = _make_service()
+        with pytest.raises(CmsWidgetNotFoundError):
+            svc.get_widget_by_slug("does-not-exist")
 
 
 class TestImportWidget:

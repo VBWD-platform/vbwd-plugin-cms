@@ -67,6 +67,12 @@ class CmsWidgetService:
             raise CmsWidgetNotFoundError(f"Widget {widget_id} not found")
         return self._to_dto(obj, include_menu=True)
 
+    def get_widget_by_slug(self, slug: str) -> Dict[str, Any]:
+        obj = self._repo.find_by_slug(slug)
+        if not obj:
+            raise CmsWidgetNotFoundError(f"Widget '{slug}' not found")
+        return self._to_dto(obj, include_menu=True)
+
     def create_widget(self, data: Dict[str, Any]) -> Dict[str, Any]:
         name = data.get("name", "").strip()
         if not name:
