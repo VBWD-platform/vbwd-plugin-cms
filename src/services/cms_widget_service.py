@@ -134,6 +134,47 @@ class CmsWidgetService:
         deleted_count = sum(1 for entry in results if entry["status"] == "deleted")
         return {"deleted": deleted_count, "results": results}
 
+    # ── copy ("make a copy") ─────────────────────────────────────────────────
+
+    def copy_widget(self, widget_id: str) -> Dict[str, Any]:
+        """Duplicate one widget into a fresh, inactive row.
+
+        The copy gets a new id/timestamps, a "<name> (Copy)" name, and a
+        collision-safe slug ("<base>-copy", "-copy-2", …). Widgets own no
+        children. Raises CmsWidgetNotFoundError for an unknown id.
+        """
+        source = self._repo.find_by_id(widget_id)
+        if not source:
+            raise CmsWidgetNotFoundError(f"Widget {widget_id} not found")
+        duplicate = CmsWidget()
+        duplicate.slug = self._copy_slug(source.slug)
+        duplicate.name = f"{source.name} (Copy)"
+        duplicate.widget_type = source.widget_type
+        duplicate.content_json = source.content_json
+        duplicate.source_css = source.source_css
+        duplicate.config = source.config
+        duplicate.sort_order = source.sort_order
+        duplicate.is_active = False
+        self._repo.save(duplicate)
+        return self._to_dto(duplicate)
+
+    def bulk_copy(self, ids: List[str]) -> Dict[str, Any]:
+        """Copy many widgets; unknown ids are skipped, not fatal."""
+        items: List[Dict[str, Any]] = []
+        for widget_id in ids:
+            try:
+                items.append(self.copy_widget(str(widget_id)))
+            except CmsWidgetNotFoundError:
+                continue
+        return {"items": items, "count": len(items)}
+
+    def _copy_slug(self, base_slug: str) -> str:
+        """A free "<base>-copy" slug, suffixing "-2"/"-3" on collision."""
+        return unique_slug(
+            f"{base_slug}-copy",
+            lambda candidate: self._repo.find_by_slug(candidate) is not None,
+        )
+
     def _delete_for_bulk(self, widget_id: str, force: bool) -> Dict[str, Any]:
         """Apply the single-delete guard/force logic to one id, never raising
         for an in-use widget — the bulk caller gets a per-id outcome instead."""

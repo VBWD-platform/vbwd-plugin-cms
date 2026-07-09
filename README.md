@@ -131,12 +131,12 @@ A complete site header: logo, navigation, search box and one auth link. Drop it 
 
 The navigation is **not** configured here. `nav_widget_slug` names an existing `menu` widget, which SuperHeader fetches over `GET /api/v1/cms/widgets/by-slug/<slug>` and renders through the normal widget renderer — so the referenced widget keeps its own menu items, submenus and mobile burger drawer. Any menu widget can be swapped in by changing the slug. A referenced widget that is itself a `SuperHeader` is skipped.
 
-The search box reuses the `Search` widget's component, so `quicksearch` behaves identically (backed by `/api/v1/cms/search`). The auth link renders `login_label` → `login_path` for anonymous visitors and `dashboard_label` → `dashboard_path` once a valid `auth_token` is present.
+The search box reuses the `Search` widget's component, so `quicksearch` behaves identically (backed by `/api/v1/cms/search`). Anonymous visitors get a text link — `login_label` → `login_path`. Once a valid `auth_token` is present that becomes an **account icon** linking to `dashboard_path`, with `dashboard_label` as its `aria-label` and `title` rather than visible text.
 
 | Config key | Type | Default | Description |
 |------------|------|---------|-------------|
 | `component_name` | string | `"SuperHeader"` | Component selector |
-| `logo_image_url` | string | `""` | Logo image; when empty, `logo_text` is rendered instead |
+| `logo_image_url` | string | `""` | Logo image, chosen from the CMS Image Library in the admin editor; when empty, `logo_text` is rendered instead |
 | `logo_text` | string | `"VBWD"` | Text logo, and the `alt` text when `logo_image_url` is set |
 | `logo_link` | string | `"/"` | Href for the logo |
 | `nav_widget_slug` | string | `"header-nav"` | Slug of an existing `menu` widget to render as the nav; empty renders no nav |
@@ -147,13 +147,17 @@ The search box reuses the `Search` widget's component, so `quicksearch` behaves 
 | `quicksearch` | boolean | `true` | Show the instant results dropdown |
 | `quicksearch_limit` | number | `6` | Maximum dropdown rows (1–20) |
 | `show_auth_links` | boolean | `true` | Render the auth link |
-| `login_label` | string | `"Login"` | Link text shown to anonymous visitors |
+| `login_label` | string | `"Login"` | Accessible name (`aria-label` / `title`) of the account icon shown to anonymous visitors |
 | `login_path` | string | `"/login"` | Href shown to anonymous visitors |
-| `dashboard_label` | string | `"Dashboard"` | Link text shown to authenticated visitors |
+| `dashboard_label` | string | `"Dashboard"` | Accessible name (`aria-label` / `title`) of the account icon shown to authenticated visitors |
 | `dashboard_path` | string | `"/dashboard"` | Href shown to authenticated visitors |
+| `stickable` | boolean | `false` | Pin the header to the top of the viewport once the visitor scrolls past `stickable_offset_px` |
+| `stickable_offset_px` | number | `160` | Scroll distance in px before the header pins |
 | `css` | string | `""` | Scoped CSS injected into the widget's `<style>` |
 
-Style hooks: `.cms-super-header`, `.cms-super-header__logo`, `.cms-super-header__nav`, `.cms-super-header__search`, `.cms-super-header__auth`.
+When `stickable` is enabled, the header becomes fixed to the top of the viewport once the visitor scrolls past `stickable_offset_px`, and a spacer of the header's own height is inserted in the normal flow so the page height is preserved and the content below does not jump.
+
+Style hooks: `.cms-super-header`, `.cms-super-header__logo`, `.cms-super-header__nav`, `.cms-super-header__search`, `.cms-super-header__auth`, `.cms-super-header--stuck` (modifier applied while the header is pinned).
 
 #### NativePricingPlans
 

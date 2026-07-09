@@ -131,6 +131,45 @@ class CmsStyleService:
         if not self._repo.delete(style_id):
             raise CmsStyleNotFoundError(f"Style {style_id} not found")
 
+    # ── copy ("make a copy") ─────────────────────────────────────────────────
+
+    def copy_style(self, style_id: str) -> Dict[str, Any]:
+        """Duplicate one style into a fresh, inactive, non-default row.
+
+        The copy gets a new id/timestamps, a "<name> (Copy)" name, and a
+        collision-safe slug ("<base>-copy", "-copy-2", …). Styles own no
+        children. Raises CmsStyleNotFoundError for an unknown id.
+        """
+        source = self._repo.find_by_id(style_id)
+        if not source:
+            raise CmsStyleNotFoundError(f"Style {style_id} not found")
+        duplicate = CmsStyle()
+        duplicate.slug = self._copy_slug(source.slug)
+        duplicate.name = f"{source.name} (Copy)"
+        duplicate.source_css = source.source_css
+        duplicate.sort_order = source.sort_order
+        duplicate.is_active = False
+        duplicate.is_default = False
+        self._repo.save(duplicate)
+        return duplicate.to_dict()
+
+    def bulk_copy(self, ids: List[str]) -> Dict[str, Any]:
+        """Copy many styles; unknown ids are skipped, not fatal."""
+        items: List[Dict[str, Any]] = []
+        for style_id in ids:
+            try:
+                items.append(self.copy_style(str(style_id)))
+            except CmsStyleNotFoundError:
+                continue
+        return {"items": items, "count": len(items)}
+
+    def _copy_slug(self, base_slug: str) -> str:
+        """A free "<base>-copy" slug, suffixing "-2"/"-3" on collision."""
+        return unique_slug(
+            f"{base_slug}-copy",
+            lambda candidate: self._repo.find_by_slug(candidate) is not None,
+        )
+
     def bulk_delete(self, ids: List[str]) -> Dict[str, Any]:
         count = self._repo.bulk_delete(ids)
         return {"deleted": count}

@@ -11,6 +11,7 @@ Responsibilities:
   - a ``content.changed`` event on every status change and content edit
     (consumed by the 47.1 prerender writer).
 """
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -173,6 +174,7 @@ class PostService:
         permalink_config=None,
         renderer=None,
         tags_port=None,
+        post_widget_repo=None,
     ) -> None:
         self._repo = repo
         self._term_repo = term_repo
@@ -184,6 +186,11 @@ class PostService:
         # the feature is silently inert, so a caller that does not wire it keeps
         # working (the disabled-feature path).
         self._content_block_repo = content_block_repo
+        # Optional per-post widget-placement repo (S55). When present, ``copy_post``
+        # duplicates a post's ``cms_post_widget`` rows onto the copy (re-pointing
+        # ``post_id``, keeping the shared ``widget_id``). Absent → the copy simply
+        # carries no per-post widget overrides (the disabled-feature path).
+        self._post_widget_repo = post_widget_repo
         # Optional layout/style repos: when present, a provided layout_id /
         # style_id is validated to exist (mirrors how cms_page is themed). When
         # absent the ids are persisted unchecked, so a caller that does not wire
@@ -772,6 +779,138 @@ class PostService:
     def _is_category_term(self, term_id: str) -> bool:
         term = self._term_repo.find_by_id(term_id)
         return term is not None and term.term_type == CATEGORY_TERM_TYPE
+
+    # ── copy ("make a copy") ─────────────────────────────────────────────────
+
+    def copy_post(self, post_id: str) -> Dict[str, Any]:
+        """Duplicate one post (page or post) into a fresh DRAFT row.
+
+        The copy never goes live: status=draft, published_at cleared, not pinned,
+        a new preview token, and translation_group_id cleared (a copy is not a
+        translation). Its slug is collision-safe ("<base>-copy", "-copy-2", …)
+        within the same ``type`` (the (type, slug) uniqueness), and slug_base is
+        recomputed from the new slug's tail. Author/parent/primary-term/layout/
+        style/SEO/content all carry over. Owned children — content blocks,
+        per-post widget placements, and term junction rows — are duplicated and
+        re-pointed, keeping shared widget/term ids. Raises PostNotFoundError for
+        an unknown id.
+        """
+        source = self._repo.find_by_id(post_id)
+        if not source:
+            raise PostNotFoundError(f"Post '{post_id}' not found")
+
+        new_slug = self._copy_slug(source.type, source.slug)
+        duplicate = CmsPost()
+        duplicate.type = source.type
+        duplicate.slug = new_slug
+        duplicate.slug_base = new_slug.rsplit("/", 1)[-1]
+        duplicate.primary_term_id = source.primary_term_id
+        duplicate.title = f"{source.title} (Copy)"
+        duplicate.excerpt = source.excerpt
+        duplicate.featured_image_url = source.featured_image_url
+        duplicate.content_json = deepcopy(source.content_json) or {}
+        duplicate.content_html = source.content_html
+        duplicate.source_css = source.source_css
+        duplicate.type_data = deepcopy(source.type_data)
+        duplicate.author_id = source.author_id
+        duplicate.parent_id = source.parent_id
+        # A copy is never live.
+        duplicate.status = POST_STATUS_DRAFT
+        duplicate.published_at = None
+        duplicate.pinned = False
+        duplicate.language = source.language
+        # A copy is not a translation of the source.
+        duplicate.translation_group_id = None
+        duplicate.sort_order = source.sort_order
+        duplicate.preview_token = uuid4().hex
+        self._copy_seo_fields(source, duplicate)
+        duplicate.layout_id = source.layout_id
+        duplicate.style_id = source.style_id
+
+        self._repo.save(duplicate)
+        self._copy_post_children(str(source.id), str(duplicate.id))
+        return duplicate.to_dict()
+
+    def bulk_copy(self, ids: List[str]) -> Dict[str, Any]:
+        """Copy many posts; unknown ids are skipped, not fatal."""
+        items: List[Dict[str, Any]] = []
+        for post_id in ids:
+            try:
+                items.append(self.copy_post(str(post_id)))
+            except PostNotFoundError:
+                continue
+        return {"items": items, "count": len(items)}
+
+    @staticmethod
+    def _copy_seo_fields(source: CmsPost, duplicate: CmsPost) -> None:
+        """Carry every SEO column onto the copy (schema_json deep-copied)."""
+        duplicate.meta_title = source.meta_title
+        duplicate.meta_description = source.meta_description
+        duplicate.meta_keywords = source.meta_keywords
+        duplicate.og_title = source.og_title
+        duplicate.og_description = source.og_description
+        duplicate.og_image_url = source.og_image_url
+        duplicate.canonical_url = source.canonical_url
+        duplicate.robots = source.robots
+        duplicate.schema_json = deepcopy(source.schema_json)
+        duplicate.seo_excluded = source.seo_excluded
+
+    def _copy_post_children(self, source_id: str, target_id: str) -> None:
+        """Duplicate a post's owned children onto the copy, re-pointing the
+        parent FK and keeping shared widget/term ids untouched."""
+        self._copy_content_blocks(source_id, target_id)
+        self._copy_post_widgets(source_id, target_id)
+        self._copy_post_terms(source_id, target_id)
+
+    def _copy_content_blocks(self, source_id: str, target_id: str) -> None:
+        if self._content_block_repo is None:
+            return
+        blocks = [
+            {
+                "area_name": block.area_name,
+                "content_json": deepcopy(block.content_json),
+                "content_html": block.content_html,
+                "source_css": block.source_css,
+                "sort_order": block.sort_order,
+            }
+            for block in self._content_block_repo.find_by_post(source_id)
+        ]
+        if blocks:
+            self._content_block_repo.replace_for_post(target_id, blocks)
+
+    def _copy_post_widgets(self, source_id: str, target_id: str) -> None:
+        if self._post_widget_repo is None:
+            return
+        placements = [
+            {
+                "widget_id": str(placement.widget_id),
+                "area_name": placement.area_name,
+                "sort_order": placement.sort_order,
+                "required_access_level_ids": placement.required_access_level_ids or [],
+                "config_override": deepcopy(placement.config_override),
+            }
+            for placement in self._post_widget_repo.find_by_post(source_id)
+        ]
+        if placements:
+            self._post_widget_repo.replace_for_post(target_id, placements)
+
+    def _copy_post_terms(self, source_id: str, target_id: str) -> None:
+        links = self._post_term_repo.find_by_post(source_id)
+        term_ids = [str(link.term_id) for link in links]
+        pinned_ids = [
+            str(link.term_id) for link in links if getattr(link, "pinned", False)
+        ]
+        if term_ids:
+            self._post_term_repo.replace_for_post(target_id, term_ids, pinned_ids)
+
+    def _copy_slug(self, post_type: str, base_slug: str) -> str:
+        """A free "<base>-copy" slug for ``post_type``, suffixing "-2"/"-3" on
+        collision within the (type, slug) uniqueness scope."""
+        return unique_slug(
+            f"{base_slug}-copy",
+            lambda candidate: self._repo.find_by_type_and_slug(post_type, candidate)
+            is not None,
+        )
 
     def bulk_assign_layout(
         self, ids: List[str], layout_id: Optional[str]

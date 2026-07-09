@@ -303,6 +303,9 @@ def _post_service() -> PostService:
         # Core tags port: LIST serialization batch-fetches per-post tags so the
         # fe archive card can render tag chips (one bulk query per entity type).
         tags_port=resolve_tags_and_custom_fields(),
+        # Per-post widget-placement repo: ``copy_post`` duplicates a post's
+        # per-post widget overrides onto the copy (keeping the shared widget id).
+        post_widget_repo=_post_widget_repo(),
     )
 
 
@@ -929,6 +932,25 @@ def admin_bulk_layout_active():
     return jsonify(_layout_service().bulk_set_active(ids, bool(data["active"]))), 200
 
 
+@cms_bp.route("/api/v1/admin/cms/layouts/bulk/copy", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.layouts.manage")
+def admin_bulk_layout_copy():
+    """POST /api/v1/admin/cms/layouts/bulk/copy — "make a copy" of many layouts.
+
+    Each copy is inactive/non-default with a unique "<base>-copy" slug; its
+    widget placements are duplicated and re-pointed (shared widgets untouched).
+    Pages/posts referencing a layout are NOT copied. Unknown ids are skipped.
+    Returns 201 with the created layouts + a count.
+    """
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    return jsonify(_layout_service().bulk_copy(ids)), 201
+
+
 @cms_bp.route("/api/v1/admin/cms/layouts/<layout_id>", methods=["GET"])
 @require_auth
 @require_admin
@@ -1077,6 +1099,24 @@ def admin_bulk_widgets():
     return jsonify(result), 200
 
 
+@cms_bp.route("/api/v1/admin/cms/widgets/bulk/copy", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.widgets.manage")
+def admin_bulk_widget_copy():
+    """POST /api/v1/admin/cms/widgets/bulk/copy — "make a copy" of many widgets.
+
+    Each copy is inactive with a unique "<base>-copy" slug. Widgets own no
+    children. Unknown ids are skipped. Returns 201 with the created widgets + a
+    count.
+    """
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    return jsonify(_widget_service().bulk_copy(ids)), 201
+
+
 @cms_bp.route("/api/v1/admin/cms/widgets/<widget_id>", methods=["GET"])
 @require_auth
 @require_admin
@@ -1184,6 +1224,24 @@ def admin_bulk_styles():
         return jsonify({"error": "ids required"}), 400
     result = _style_service().bulk_delete(data["ids"])
     return jsonify(result), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/styles/bulk/copy", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.styles.manage")
+def admin_bulk_style_copy():
+    """POST /api/v1/admin/cms/styles/bulk/copy — "make a copy" of many styles.
+
+    Each copy is inactive/non-default with a unique "<base>-copy" slug. Styles
+    own no children. Unknown ids are skipped. Returns 201 with the created
+    styles + a count.
+    """
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    return jsonify(_style_service().bulk_copy(ids)), 201
 
 
 @cms_bp.route("/api/v1/admin/cms/styles/<style_id>", methods=["GET"])
@@ -1759,6 +1817,24 @@ def admin_bulk_post_unassign_category():
     if not isinstance(ids, list):
         return jsonify({"error": "ids array required"}), 400
     return jsonify(_post_service().bulk_unassign_category(ids)), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/posts/bulk/copy", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.manage")
+def admin_bulk_post_copy():
+    """POST /api/v1/admin/cms/posts/bulk/copy — "make a copy" of many posts.
+
+    Covers both ``type='page'`` and ``type='post'``. Each copy is a fresh draft
+    (never live) with a unique "<base>-copy" slug and duplicated owned children.
+    Unknown ids are skipped. Returns 201 with the created posts + a count.
+    """
+    data = request.get_json() or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"error": "ids array required"}), 400
+    return jsonify(_post_service().bulk_copy(ids)), 201
 
 
 @cms_bp.route("/api/v1/admin/cms/seo/regenerate", methods=["POST"])

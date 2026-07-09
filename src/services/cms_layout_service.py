@@ -3,6 +3,7 @@ import re
 import json
 import zipfile
 import io
+from copy import deepcopy
 from typing import List, Dict, Any, Optional, cast
 from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
 from plugins.cms.src.repositories.cms_layout_widget_repository import (
@@ -172,6 +173,67 @@ class CmsLayoutService:
             layout.is_active = active
             self._repo.save(layout)
         return {"updated": len(layouts)}
+
+    # ── copy ("make a copy") ─────────────────────────────────────────────────
+
+    def copy_layout(self, layout_id: str) -> Dict[str, Any]:
+        """Duplicate one layout into a fresh, inactive, non-default row.
+
+        The copy gets a new id/timestamps, a "<name> (Copy)" name, and a
+        collision-safe slug ("<base>-copy", "-copy-2", …). Its owned
+        ``cms_layout_widget`` placements are duplicated and re-pointed at the new
+        layout, keeping ``widget_id`` on the SAME shared widget (never
+        duplicated). The ``areas`` JSON is copied verbatim. Pages/posts that
+        merely reference the layout are NOT touched. Raises
+        CmsLayoutNotFoundError for an unknown id.
+        """
+        source = self._repo.find_by_id(layout_id)
+        if not source:
+            raise CmsLayoutNotFoundError(f"Layout {layout_id} not found")
+        duplicate = CmsLayout()
+        duplicate.slug = self._copy_slug(source.slug)
+        duplicate.name = f"{source.name} (Copy)"
+        duplicate.description = source.description
+        duplicate.areas = deepcopy(source.areas)
+        duplicate.sort_order = source.sort_order
+        duplicate.is_active = False
+        duplicate.is_default = False
+        duplicate.head_html = source.head_html
+        self._repo.save(duplicate)
+        self._copy_widget_placements(str(source.id), str(duplicate.id))
+        return self._to_dto(duplicate)
+
+    def bulk_copy(self, ids: List[str]) -> Dict[str, Any]:
+        """Copy many layouts; unknown ids are skipped, not fatal."""
+        items: List[Dict[str, Any]] = []
+        for layout_id in ids:
+            try:
+                items.append(self.copy_layout(str(layout_id)))
+            except CmsLayoutNotFoundError:
+                continue
+        return {"items": items, "count": len(items)}
+
+    def _copy_widget_placements(self, source_id: str, target_id: str) -> None:
+        """Duplicate a layout's widget placements onto the target layout."""
+        placements = self._lw_repo.find_by_layout(source_id)
+        assignments = [
+            {
+                "widget_id": str(placement.widget_id),
+                "area_name": placement.area_name,
+                "sort_order": placement.sort_order,
+                "required_access_level_ids": placement.required_access_level_ids or [],
+            }
+            for placement in placements
+        ]
+        if assignments:
+            self._lw_repo.replace_for_layout(target_id, assignments)
+
+    def _copy_slug(self, base_slug: str) -> str:
+        """A free "<base>-copy" slug, suffixing "-2"/"-3" on collision."""
+        return unique_slug(
+            f"{base_slug}-copy",
+            lambda candidate: self._repo.find_by_slug(candidate) is not None,
+        )
 
     def set_widget_assignments(
         self, layout_id: str, assignments: List[Dict[str, Any]]

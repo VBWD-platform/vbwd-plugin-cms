@@ -38,6 +38,11 @@ class TestSuperHeaderSeed:
         assert config["component_name"] == "SuperHeader"
         assert config["nav_widget_slug"] == "header-nav"
 
+    def test_config_seeds_stickable_defaults(self):
+        config = _super_header_entries()[0]["config"]
+        assert config["stickable"] is False
+        assert config["stickable_offset_px"] == 160
+
     def test_super_header_is_not_auto_placed_in_a_layout(self):
         placed_widget_slugs = {
             widget_slug
