@@ -5,8 +5,7 @@
     {
       "config": null,
       "content_json": {
-        "component": "GhrmPackageDetail",
-        "items_per_page": 12
+        "component": "GhrmPackageDetail"
       },
       "is_active": true,
       "name": "GHRM Software Detail",

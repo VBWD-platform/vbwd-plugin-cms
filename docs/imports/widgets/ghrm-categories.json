@@ -6,7 +6,9 @@
       "config": null,
       "content_json": {
         "component": "GhrmCatalogueContent",
-        "items_per_page": 12
+        "props": {
+          "items_per_page": 12
+        }
       },
       "is_active": true,
       "name": "GHRM Categories",
