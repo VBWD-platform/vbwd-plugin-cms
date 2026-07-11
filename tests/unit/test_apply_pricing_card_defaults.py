@@ -20,11 +20,56 @@ from plugins.cms.src.bin import populate_cms
 # Keys the applier must NEVER write.
 _PROTECTED_KEYS = ("heading", "subtitle", "cta_label", "highlight_badge", "image_url")
 
+# A root-category pricing-card config: 'pro' is a real plan slug here, so
+# highlight_slug is in scope for this widget.
+_ROOT_CONFIG = {"component_name": "TariffPlanCollection", "category": "root"}
+
+
+class TestIsPricingCardWidget:
+    def test_native_pricing_plans_matches(self):
+        assert applier.is_pricing_card_widget({"component_name": "NativePricingPlans"})
+
+    def test_tariff_plan_collection_matches(self):
+        assert applier.is_pricing_card_widget(
+            {"component_name": "TariffPlanCollection"}
+        )
+
+    def test_unrelated_component_is_ignored(self):
+        assert not applier.is_pricing_card_widget({"component_name": "SuperHeader"})
+
+    def test_missing_component_name_is_ignored(self):
+        assert not applier.is_pricing_card_widget({})
+        assert not applier.is_pricing_card_widget(None)
+
+
+class TestDefaultsForConfig:
+    def test_root_category_includes_highlight_slug(self):
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        assert defaults["theme"] == "teal"
+        assert defaults["features"] == populate_cms.NATIVE_PRICING_FEATURES
+        assert defaults["highlight_slug"] == "pro"
+
+    def test_non_root_category_omits_highlight_slug(self):
+        defaults = applier.defaults_for_config(
+            {"component_name": "TariffPlanCollection", "category": "subscription-plans"}
+        )
+        assert defaults["theme"] == "teal"
+        assert defaults["features"] == populate_cms.NATIVE_PRICING_FEATURES
+        assert "highlight_slug" not in defaults
+
+    def test_missing_category_omits_highlight_slug(self):
+        defaults = applier.defaults_for_config(
+            {"component_name": "TariffPlanCollection"}
+        )
+        assert "highlight_slug" not in defaults
+
 
 class TestDecideConfigDefaults:
     def test_fills_theme_highlight_and_features_when_unset(self):
-        defaults = applier.seed_config_defaults()
-        new_config, decisions = applier.decide_config_defaults({}, defaults)
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        new_config, decisions = applier.decide_config_defaults(
+            dict(_ROOT_CONFIG), defaults
+        )
 
         assert new_config["theme"] == populate_cms.NATIVE_PRICING_CONFIG["theme"]
         assert (
@@ -34,13 +79,13 @@ class TestDecideConfigDefaults:
         assert new_config["features"] == populate_cms.NATIVE_PRICING_FEATURES
         assert decisions == {
             "theme": "filled",
-            "highlight_slug": "filled",
             "features": "filled",
+            "highlight_slug": "filled",
         }
 
     def test_fills_empty_string_and_empty_list_values(self):
-        defaults = applier.seed_config_defaults()
-        starting = {"theme": "", "highlight_slug": None, "features": []}
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        starting = {**_ROOT_CONFIG, "theme": "", "highlight_slug": None, "features": []}
 
         new_config, decisions = applier.decide_config_defaults(starting, defaults)
 
@@ -50,8 +95,8 @@ class TestDecideConfigDefaults:
         assert set(decisions.values()) == {"filled"}
 
     def test_operator_theme_is_never_overwritten(self):
-        defaults = applier.seed_config_defaults()
-        starting = {"theme": "emerald"}
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        starting = {**_ROOT_CONFIG, "theme": "emerald"}
 
         new_config, decisions = applier.decide_config_defaults(starting, defaults)
 
@@ -60,16 +105,32 @@ class TestDecideConfigDefaults:
         # The still-empty siblings are filled — kept keys don't block filled keys.
         assert decisions["highlight_slug"] == "filled"
 
+    def test_non_root_config_never_gains_a_highlight_slug(self):
+        config = {
+            "component_name": "TariffPlanCollection",
+            "category": "subscription-plans",
+        }
+        defaults = applier.defaults_for_config(config)
+
+        new_config, decisions = applier.decide_config_defaults(config, defaults)
+
+        assert new_config["theme"] == "teal"
+        assert new_config["features"] == populate_cms.NATIVE_PRICING_FEATURES
+        assert "highlight_slug" not in new_config
+
     def test_protected_keys_are_never_written(self):
-        defaults = applier.seed_config_defaults()
-        new_config, _ = applier.decide_config_defaults({}, defaults)
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        new_config, _ = applier.decide_config_defaults(dict(_ROOT_CONFIG), defaults)
 
         for key in _PROTECTED_KEYS:
             assert key not in new_config
 
     def test_operator_protected_keys_are_left_untouched(self):
-        defaults = applier.seed_config_defaults()
-        starting = {key: f"operator-{key}" for key in _PROTECTED_KEYS}
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        starting = {
+            **_ROOT_CONFIG,
+            **{key: f"operator-{key}" for key in _PROTECTED_KEYS},
+        }
 
         new_config, _ = applier.decide_config_defaults(starting, defaults)
 
@@ -77,8 +138,8 @@ class TestDecideConfigDefaults:
             assert new_config[key] == f"operator-{key}"
 
     def test_second_pass_is_a_noop(self):
-        defaults = applier.seed_config_defaults()
-        once, _ = applier.decide_config_defaults({}, defaults)
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        once, _ = applier.decide_config_defaults(dict(_ROOT_CONFIG), defaults)
 
         twice, decisions = applier.decide_config_defaults(once, defaults)
 

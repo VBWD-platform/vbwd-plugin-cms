@@ -8,13 +8,19 @@ runs on every deploy and fills in the pricing-card defaults ONLY where the
 operator has not already set a value. It is strictly non-destructive and fully
 idempotent — a second run reports "already-current" and writes nothing.
 
-Two widgets are touched:
+Two passes touch existing widgets:
 
-* ``pricing-native-plans`` (vue-component): for each of ``theme``,
-  ``highlight_slug`` and ``features`` the seeded default is written ONLY when the
-  key is currently absent / ``None`` / empty (``""`` or ``[]``). Any existing
-  operator value is kept. ``heading``, ``subtitle``, ``cta_label``,
-  ``highlight_badge`` and ``image_url`` are NEVER written.
+* Pricing-card component pass (vue-component): EVERY widget whose
+  ``config.component_name`` is a pricing-card component
+  (``NativePricingPlans`` / ``TariffPlanCollection``) is styled. For each of
+  ``theme`` and ``features`` the seeded default is written ONLY when the key is
+  currently absent / ``None`` / empty (``""`` or ``[]``); ``highlight_slug`` is
+  filled the same way but ONLY on ``root``-category widgets (the only category
+  with a real ``pro`` plan). Any existing operator value is kept. ``heading``,
+  ``subtitle``, ``cta_label``, ``highlight_badge`` and ``image_url`` are NEVER
+  written. Matching on ``component_name`` (not slug) is deliberate: a prod demo
+  widget uses the component name AS its slug (``TariffPlanCollection``), so
+  slug-matching would miss it — component_name catches every instance.
 * ``pricing-embed-demo`` (html): the live ``<script>`` tag is upgraded to carry
   ``data-theme``/``data-highlight``/``data-features`` ONLY when it still matches
   the previously-seeded original (no ``data-highlight`` / ``data-features``
@@ -31,37 +37,66 @@ import base64
 import re
 import sys
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from plugins.cms.src.bin import populate_cms  # noqa: E402
+from plugins.cms.src.models.cms_widget import CmsWidget  # noqa: E402
 from plugins.cms.src.repositories.cms_widget_repository import (  # noqa: E402
     CmsWidgetRepository,
 )
 
-NATIVE_PLANS_SLUG = "pricing-native-plans"
 EMBED_GUIDE_SLUG = "pricing-embed-demo"
 
-# The three config keys this applier may fill. Everything else on the widget
-# config (heading, subtitle, cta_label, highlight_badge, image_url, css, …) is
-# deliberately out of scope and never written.
-CONFIG_DEFAULT_KEYS: Tuple[str, ...] = ("theme", "highlight_slug", "features")
+# Every vue-component widget whose config.component_name is one of these renders
+# a pricing-card grid and shares the same default styling.
+PRICING_CARD_COMPONENT_NAMES: FrozenSet[str] = frozenset(
+    {"NativePricingPlans", "TariffPlanCollection"}
+)
+
+# ``highlight_slug`` is only seeded/filled on widgets pointing at this category —
+# the only one with a real ``pro`` plan; forcing it elsewhere would highlight a
+# non-existent plan.
+ROOT_CATEGORY = "root"
 
 _LIVE_EMBED_CONTAINER_ID = "embed-live-preview"
 _SCRIPT_TAG_PATTERN = re.compile(r"<script\b[^>]*>.*?</script>", re.DOTALL)
 
 
-def seed_config_defaults() -> Dict[str, object]:
-    """The seeded pricing-card defaults, read from the single source of truth.
+def is_pricing_card_widget(config: Optional[Dict[str, object]]) -> bool:
+    """True when this widget config renders a pricing-card component.
 
-    Sourced from ``populate_cms.NATIVE_PRICING_CONFIG`` so the applier can never
+    Matched on ``component_name`` (not slug): a prod demo widget uses the
+    component name AS its slug, which slug-matching would miss.
+    """
+    if not config:
+        return False
+    component_name = config.get("component_name")
+    return (
+        isinstance(component_name, str)
+        and component_name in PRICING_CARD_COMPONENT_NAMES
+    )
+
+
+def defaults_for_config(config: Optional[Dict[str, object]]) -> Dict[str, object]:
+    """The pricing-card defaults that apply to THIS widget config.
+
+    ``theme`` and ``features`` are universal; ``highlight_slug`` is included only
+    for ``root``-category widgets (the only category with a ``pro`` plan). Values
+    come from ``populate_cms.NATIVE_PRICING_CONFIG`` so the applier can never
     drift from what the seeder writes.
     """
     seed = populate_cms.NATIVE_PRICING_CONFIG
-    return {key: seed[key] for key in CONFIG_DEFAULT_KEYS}
+    defaults: Dict[str, object] = {
+        "theme": seed["theme"],
+        "features": seed["features"],
+    }
+    if (config or {}).get("category") == ROOT_CATEGORY:
+        defaults["highlight_slug"] = seed["highlight_slug"]
+    return defaults
 
 
 def _is_empty(value: object) -> bool:
@@ -72,7 +107,7 @@ def _is_empty(value: object) -> bool:
 def decide_config_defaults(
     config: Optional[Dict[str, object]], defaults: Dict[str, object]
 ) -> Tuple[Dict[str, object], Dict[str, str]]:
-    """Return (new_config, decisions) for the native-plans widget config.
+    """Return (new_config, decisions) for a pricing-card widget config.
 
     ``new_config`` is a fresh dict: every key already present is preserved, and
     each default key is filled ONLY when its current value is empty. ``decisions``
@@ -148,32 +183,40 @@ def _encode_widget_html(html: str) -> str:
     return base64.b64encode(html.encode("utf-8")).decode("ascii")
 
 
-def _apply_native_config(
-    repository: CmsWidgetRepository, summary: Dict[str, object]
-) -> None:
-    widget = repository.find_by_slug(NATIVE_PLANS_SLUG)
-    if widget is None:
-        print(f"  = widget '{NATIVE_PLANS_SLUG}' absent — skipped")
-        summary["native"] = "absent"
-        return
+def _find_pricing_card_widgets(session) -> List[CmsWidget]:
+    """Every vue-component widget rendering a pricing-card component.
 
-    new_config, decisions = decide_config_defaults(
-        widget.config, seed_config_defaults()
+    A read query in a maintenance script (not test-data / schema) is fine; it
+    enumerates ALL vue-component widgets so component-name matching catches every
+    instance regardless of slug.
+    """
+    widgets = (
+        session.query(CmsWidget).filter(CmsWidget.widget_type == "vue-component").all()
     )
-    filled = [key for key, verdict in decisions.items() if verdict == "filled"]
-    kept = [key for key, verdict in decisions.items() if verdict == "kept"]
-    for key in kept:
-        print(f"  = widget '{NATIVE_PLANS_SLUG}'.{key} — kept operator value")
-    if filled:
-        widget.config = new_config
-        repository.save(widget)
-        for key in filled:
-            print(f"  ~ widget '{NATIVE_PLANS_SLUG}'.{key} — filled seeded default")
-        summary["native"] = "updated"
-    else:
-        print(f"  = widget '{NATIVE_PLANS_SLUG}' (already-current)")
-        summary["native"] = "already-current"
-    summary["native_filled"] = filled
+    return [widget for widget in widgets if is_pricing_card_widget(widget.config)]
+
+
+def _apply_component_configs(
+    session, repository: CmsWidgetRepository, summary: Dict[str, object]
+) -> None:
+    per_widget: Dict[str, object] = {}
+    for widget in _find_pricing_card_widgets(session):
+        new_config, decisions = decide_config_defaults(
+            widget.config, defaults_for_config(widget.config)
+        )
+        filled = [key for key, verdict in decisions.items() if verdict == "filled"]
+        if filled:
+            widget.config = new_config
+            repository.save(widget)
+            print(f"  ~ widget '{widget.slug}' — filled seeded defaults {filled}")
+            status = "updated"
+        else:
+            print(f"  = widget '{widget.slug}' (already-current)")
+            status = "already-current"
+        per_widget[widget.slug] = {"status": status, "filled": filled}
+    if not per_widget:
+        print("  = no pricing-card widgets found — skipped")
+    summary["components"] = per_widget
 
 
 def _apply_embed_widget(
@@ -217,7 +260,7 @@ def apply_pricing_card_defaults(session) -> Dict[str, object]:
     """
     repository = CmsWidgetRepository(session)
     summary: Dict[str, object] = {}
-    _apply_native_config(repository, summary)
+    _apply_component_configs(session, repository, summary)
     _apply_embed_widget(repository, summary)
     session.commit()
     return summary

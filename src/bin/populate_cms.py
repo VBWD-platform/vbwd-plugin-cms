@@ -986,6 +986,13 @@ _STANDALONE_VUE_WIDGETS = [
             "plan_slugs": [],
             "default_view": "cards",
             "heading": "",
+            # Default pricing-card styling (shared with NativePricingPlans):
+            # 'teal' theme + the shared feature bullets are universally safe, and
+            # this is a 'root'-category widget — the only category with a 'pro'
+            # plan — so 'pro' resolves to a real card here.
+            "theme": "teal",
+            "highlight_slug": "pro",
+            "features": NATIVE_PRICING_FEATURES,
         },
     },
     {

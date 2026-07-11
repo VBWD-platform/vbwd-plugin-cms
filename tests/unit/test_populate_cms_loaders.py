@@ -188,6 +188,53 @@ class TestLostStandaloneWidgets:
         assert "code" in config
 
 
+class TestTariffPlanCollectionDefaultStyling:
+    """The seeded ``tariff-plan-collection`` widget ships the pricing-card
+    styling as its DEFAULT: ``theme='teal'`` + the shared ``features`` bullets,
+    and (being a ``root``-category widget, the only category with a ``pro`` plan)
+    ``highlight_slug='pro'``. The features list reuses NATIVE_PRICING_FEATURES —
+    it is never retyped. The inert docs mirror must carry the same three keys."""
+
+    def _config(self):
+        by_slug = {w["slug"]: w for w in populate_cms._STANDALONE_VUE_WIDGETS}
+        return by_slug["tariff-plan-collection"]["config"]
+
+    def test_seed_config_carries_default_pricing_card_styling(self):
+        config = self._config()
+        assert config["theme"] == "teal"
+        assert config["highlight_slug"] == "pro"
+        assert config["features"] == populate_cms.NATIVE_PRICING_FEATURES
+
+    def test_seed_config_preserves_existing_keys(self):
+        config = self._config()
+        assert config["component_name"] == "TariffPlanCollection"
+        assert config["source_mode"] == "category"
+        assert config["category"] == "root"
+        assert config["default_view"] == "cards"
+        assert config["heading"] == ""
+
+    def test_features_reuse_the_shared_constant_object(self):
+        # DRY: the seed must reference the constant, not a re-typed copy.
+        assert self._config()["features"] is populate_cms.NATIVE_PRICING_FEATURES
+
+    def test_inert_docs_mirror_matches_the_seeded_styling(self):
+        import json
+        from pathlib import Path
+
+        mirror_path = (
+            Path(populate_cms.__file__).resolve().parents[2]
+            / "docs"
+            / "imports"
+            / "widgets"
+            / "tariff-plan-collection.json"
+        )
+        mirror = json.loads(mirror_path.read_text())
+        config = mirror["cms_widgets"][0]["config"]
+        assert config["theme"] == "teal"
+        assert config["highlight_slug"] == "pro"
+        assert config["features"] == populate_cms.NATIVE_PRICING_FEATURES
+
+
 class TestSearchWidgetScopeConfig:
     """S121 — the seeded ``search`` / ``search-results`` widget records carry a
     constrained ``scope`` (``pages`` | ``posts`` | ``both``) plus the quicksearch
