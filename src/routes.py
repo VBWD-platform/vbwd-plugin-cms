@@ -40,6 +40,7 @@ from flask import (
     current_app,
     send_from_directory,
     Response,
+    g,
 )
 
 from vbwd.extensions import db
@@ -112,6 +113,9 @@ from plugins.cms.src.services.term_service import (
 from plugins.cms.src.services.rss_feed_service import RssFeedService
 from plugins.cms.src.services.content_ingest_service import ContentIngestService
 from plugins.cms.src.services import post_type_registry, term_type_registry
+from plugins.cms.src.services import entity_page_owner_registry
+from plugins.cms.src.services.entity_page_service import EntityPageService
+from plugins.cms.src.repositories.entity_page_repository import EntityPageRepository
 from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED, POST_STATUS_PRIVATE
 from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE, TAG_TERM_TYPE
 from plugins.cms.src.services.term_permalink import term_archive_path
@@ -1694,6 +1698,107 @@ def admin_delete_post(post_id: str):
         return jsonify({"deleted": post_id}), 200
     except PostNotFoundError as e:
         return jsonify({"error": str(e)}), 404
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# S128 — Entity Pages (a reusable content+SEO page attached to any entity)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def _entity_page_post_service() -> PostService:
+    """A PostService wired for entity-page writes only.
+
+    Deliberately omits the event dispatcher / permalink engine: an
+    ``entity_page`` post is ``routable=False`` — it is rendered inside its
+    owner's public page and must never emit a ``content.changed`` that would
+    prerender a standalone SEO URL for it (S128 non-goal).
+    """
+    return PostService(
+        repo=PostRepository(db.session),
+        term_repo=TermRepository(db.session),
+        post_term_repo=PostTermRepository(db.session),
+        content_block_repo=_post_content_block_repo(),
+    )
+
+
+def _entity_page_service() -> EntityPageService:
+    return EntityPageService(
+        post_service=_entity_page_post_service(),
+        entity_page_repo=EntityPageRepository(db.session),
+        post_repo=PostRepository(db.session),
+        content_block_repo=_post_content_block_repo(),
+    )
+
+
+def _resolve_entity_page_owner(owner_type: str, owner_id: str):
+    """Return the registered owner type, or an ``(error_response, status)``.
+
+    Liskov: an unknown owner type → 404, a failing ``authorize`` → 403 — never
+    a 500. The caller unpacks the tuple to short-circuit.
+    """
+    owner = entity_page_owner_registry.get_content_owner_type(owner_type)
+    if owner is None:
+        return None, (jsonify({"error": f"Unknown owner type '{owner_type}'"}), 404)
+    if not owner.authorize(g.user, owner_id):
+        return None, (jsonify({"error": "Forbidden"}), 403)
+    return owner, None
+
+
+@cms_bp.route("/api/v1/admin/cms/entity-pages/<owner_type>/<owner_id>", methods=["GET"])
+@cms_bp.route(
+    "/api/v1/admin/cms/entity-pages/<owner_type>/<owner_id>/<slot>", methods=["GET"]
+)
+@require_auth
+@require_admin
+def admin_get_entity_page(owner_type: str, owner_id: str, slot: str = "main"):
+    """GET the owner's entity page (scaffold when it has none yet).
+
+    Admin-authenticated; the owner type's ``authorize`` callback owns the
+    per-owner permission (unknown type → 404, unauthorized → 403).
+    """
+    _owner, error = _resolve_entity_page_owner(owner_type, owner_id)
+    if error is not None:
+        return error
+    projection = _entity_page_service().get_or_scaffold(owner_type, owner_id, slot)
+    return jsonify(projection), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/entity-pages/<owner_type>/<owner_id>", methods=["PUT"])
+@cms_bp.route(
+    "/api/v1/admin/cms/entity-pages/<owner_type>/<owner_id>/<slot>", methods=["PUT"]
+)
+@require_auth
+@require_admin
+def admin_save_entity_page(owner_type: str, owner_id: str, slot: str = "main"):
+    """PUT the owner's entity page — resolve-or-create + persist the fields."""
+    _owner, error = _resolve_entity_page_owner(owner_type, owner_id)
+    if error is not None:
+        return error
+    fields = request.get_json(silent=True) or {}
+    try:
+        saved = _entity_page_service().save(
+            owner_type, owner_id, slot, fields, actor=g.user
+        )
+    except PostSlugConflictError as exc:
+        return jsonify({"error": str(exc)}), 409
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(saved), 200
+
+
+@cms_bp.route("/api/v1/cms/entity-pages/<owner_type>/<owner_id>", methods=["GET"])
+@cms_bp.route(
+    "/api/v1/cms/entity-pages/<owner_type>/<owner_id>/<slot>", methods=["GET"]
+)
+def public_get_entity_page(owner_type: str, owner_id: str, slot: str = "main"):
+    """GET the PUBLISHED entity-page projection for an owner, or 404.
+
+    Public: the owner's public page renders this content under its own body.
+    """
+    view = _entity_page_service().public_view(owner_type, owner_id, slot)
+    if view is None:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(view), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/posts/<post_id>/widgets", methods=["GET"])

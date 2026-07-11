@@ -89,6 +89,13 @@ class CmsPlugin(BasePlugin):
                 "/uploads/<path:filename>": "Public CMS upload serving; published media only.",
                 "/api/v1/cms/categories": "Public CMS category listing for the website.",
                 "/api/v1/cms/config": "Public CMS site config (theme / public SEO settings) for the website.",
+                "/api/v1/cms/entity-pages/<owner_type>/<owner_id>": (
+                    "Public published entity-page projection (content + blocks + "
+                    "CSS + SEO), rendered inside an owner entity's public page."
+                ),
+                "/api/v1/cms/entity-pages/<owner_type>/<owner_id>/<slot>": (
+                    "Public published entity-page projection for an explicit slot."
+                ),
                 "/api/v1/cms/embed-manifest": "Public mobile WebView validation probe for the CMS archive (S91).",
                 "/api/v1/cms/layouts/<layout_id>": "Public CMS layout for page rendering.",
                 "/api/v1/cms/layouts/by-slug/<slug>": "Public CMS layout by slug for page rendering.",
@@ -195,6 +202,18 @@ class CmsPlugin(BasePlugin):
         register_post_type(
             PostType(key="post", label="Post", routable=True, hierarchical=False)
         )
+        # S128 — the entity-page content type. NOT routable and NOT hierarchical:
+        # an entity page is rendered INSIDE its owner's public page, never as a
+        # standalone CMS URL, and never appears in CMS Pages. Owner types arrive
+        # through the sibling content-owner registry (an adopter registration).
+        register_post_type(
+            PostType(
+                key="entity_page",
+                label="Entity Page",
+                routable=False,
+                hierarchical=False,
+            )
+        )
         register_term_type(
             TermType(key="category", label="Category", hierarchical=True)
         )
@@ -233,6 +252,43 @@ class CmsPlugin(BasePlugin):
         )
         container.cms_post_term_repository = providers.Factory(
             PostTermRepository, session=container.db_session
+        )
+
+        # S128 — entity-page link repo + service as DI providers so adopter
+        # plugins resolve the write/read/delete path through the container
+        # (e.g. dataset's delete hook calls ``delete_for_owner``). The service
+        # is composed with a PostService wired for entity-page writes only —
+        # deliberately WITHOUT the event dispatcher / permalink engine, since an
+        # ``entity_page`` post is routable=False and must never emit a
+        # content.changed that would prerender a standalone SEO URL for it.
+        from plugins.cms.src.repositories.entity_page_repository import (
+            EntityPageRepository,
+        )
+        from plugins.cms.src.repositories.cms_post_content_block_repository import (
+            CmsPostContentBlockRepository,
+        )
+        from plugins.cms.src.services.post_service import PostService
+        from plugins.cms.src.services.entity_page_service import EntityPageService
+
+        container.cms_entity_page_repository = providers.Factory(
+            EntityPageRepository, session=container.db_session
+        )
+        container.cms_entity_page_service = providers.Factory(
+            EntityPageService,
+            post_service=providers.Factory(
+                PostService,
+                repo=container.cms_post_repository,
+                term_repo=container.cms_term_repository,
+                post_term_repo=container.cms_post_term_repository,
+                content_block_repo=providers.Factory(
+                    CmsPostContentBlockRepository, session=container.db_session
+                ),
+            ),
+            entity_page_repo=container.cms_entity_page_repository,
+            post_repo=container.cms_post_repository,
+            content_block_repo=providers.Factory(
+                CmsPostContentBlockRepository, session=container.db_session
+            ),
         )
 
     def _register_seo_pipeline(self) -> None:

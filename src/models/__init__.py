@@ -16,3 +16,4 @@ from plugins.cms.src.models.cms_post_content_block import (  # noqa: F401
 )
 from plugins.cms.src.models.cms_term import CmsTerm  # noqa: F401
 from plugins.cms.src.models.cms_post_term import CmsPostTerm  # noqa: F401
+from plugins.cms.src.models.cms_entity_page import CmsEntityPage  # noqa: F401
