@@ -262,6 +262,18 @@ class PostRepository:
             .all()
         )
 
+    def find_all_by_type(self, post_type: str) -> List[CmsPost]:
+        """Every post of one type, any status — used by the permalink-repair
+        maintenance command. Deterministically ordered so a collision between two
+        rows that collapse to the same slug is resolved the same way on every run
+        (first wins, later reported)."""
+        return (
+            self.session.query(CmsPost)
+            .filter(CmsPost.type == post_type)
+            .order_by(CmsPost.created_at, CmsPost.id)
+            .all()
+        )
+
     def save(self, post: CmsPost) -> CmsPost:
         self.session.add(post)
         self.session.flush()

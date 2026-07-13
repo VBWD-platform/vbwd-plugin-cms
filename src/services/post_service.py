@@ -944,6 +944,124 @@ class PostService:
             self._emit_content_changed(post, reason="regenerated")
         return len(posts)
 
+    def repair_permalinks(
+        self, post_type: str = "post", apply: bool = False
+    ) -> Dict[str, Any]:
+        """Collapse accumulated permalinks back to the single-prefix form.
+
+        A pre-fix recursion fed a post's full stored permalink into the slug
+        token on update, so old rows carry doubled paths (``blog/x/blog/x/tail``).
+        For every engine-managed post this recomputes the slug via the SAME
+        renderer a fresh save uses (``_compute_full_slug``) from the BARE tail of
+        the current value, and — when ``apply`` — writes the corrected
+        ``slug``/``slug_base`` and emits the SAME old→new 301 the rename path
+        emits (``_emit_slug_redirect``).
+
+        Non-destructive + idempotent by construction: rows already correct are
+        skipped, a recomputed slug that would collide with a DIFFERENT post is
+        reported (never forced past the ``(type, slug)`` uniqueness), and when the
+        engine is off nothing is touched (the disabled-feature path). ``apply``
+        defaults to ``False`` (dry run) so a caller must opt into writes.
+        """
+        posts = self._repo.find_all_by_type(post_type)
+        if not self._is_permalink_engine(post_type):
+            return {
+                "post_type": post_type,
+                "applied": apply,
+                "scanned": len(posts),
+                "changes": [],
+                "already_correct": len(posts),
+                "collisions": [],
+            }
+
+        changes: List[Dict[str, Any]] = []
+        collisions: List[Dict[str, Any]] = []
+        already_correct = 0
+        claimed_slugs: Dict[str, str] = {}
+        for post in posts:
+            outcome = self._evaluate_permalink_repair(post, post_type, claimed_slugs)
+            if outcome is None:
+                already_correct += 1
+                continue
+            if outcome["collides_with"] is not None:
+                collisions.append(
+                    {
+                        "id": str(post.id),
+                        "new_slug": outcome["new_slug"],
+                        "collides_with": outcome["collides_with"],
+                    }
+                )
+                continue
+            claimed_slugs[outcome["new_slug"]] = str(post.id)
+            changes.append(
+                {
+                    "id": str(post.id),
+                    "old_slug": outcome["old_slug"],
+                    "new_slug": outcome["new_slug"],
+                    "old_slug_base": outcome["old_slug_base"],
+                    "new_slug_base": outcome["new_slug_base"],
+                }
+            )
+            if apply:
+                self._apply_permalink_repair(post, outcome)
+        return {
+            "post_type": post_type,
+            "applied": apply,
+            "scanned": len(posts),
+            "changes": changes,
+            "already_correct": already_correct,
+            "collisions": collisions,
+        }
+
+    def _evaluate_permalink_repair(
+        self, post: CmsPost, post_type: str, claimed_slugs: Dict[str, str]
+    ) -> Optional[Dict[str, Any]]:
+        """Plan one post's repair, or ``None`` when it is already correct.
+
+        ``slug_base`` collapses to the bare tail (the same reduction the update
+        path applies); the full slug is recomputed via the shared renderer.
+        """
+        bare_base = (post.slug_base or post.slug or "").strip("/").rsplit("/", 1)[-1]
+        new_slug, primary_term_id = self._compute_full_slug(
+            post_type=post_type, slug_base=bare_base, data={}, post=post
+        )
+        if new_slug == post.slug and bare_base == (post.slug_base or ""):
+            return None
+        return {
+            "old_slug": post.slug,
+            "new_slug": new_slug,
+            "old_slug_base": post.slug_base,
+            "new_slug_base": bare_base,
+            "primary_term_id": primary_term_id,
+            "collides_with": self._permalink_repair_collision(
+                post, new_slug, claimed_slugs
+            ),
+        }
+
+    def _permalink_repair_collision(
+        self, post: CmsPost, new_slug: str, claimed_slugs: Dict[str, str]
+    ) -> Optional[str]:
+        """The id of a DIFFERENT post the recomputed slug would collide with —
+        either an already-persisted row or one claimed earlier in this run — else
+        ``None``. Catches two to-be-changed rows collapsing to the same slug in
+        BOTH dry-run and apply, deterministically (first in order wins)."""
+        existing = self._repo.find_by_type_and_slug(post.type, new_slug)
+        if existing is not None and str(existing.id) != str(post.id):
+            return str(existing.id)
+        claimant = claimed_slugs.get(new_slug)
+        if claimant is not None and claimant != str(post.id):
+            return claimant
+        return None
+
+    def _apply_permalink_repair(self, post: CmsPost, outcome: Dict[str, Any]) -> None:
+        """Persist one repaired row + emit the old→new 301 (no-op when equal)."""
+        old_slug = post.slug
+        post.slug = outcome["new_slug"]
+        post.slug_base = outcome["new_slug_base"]
+        post.primary_term_id = outcome["primary_term_id"]
+        self._repo.save(post)
+        self._emit_slug_redirect(old_slug, post.slug)
+
     def publish_due_scheduled(self) -> List[str]:
         """Publish scheduled posts whose ``published_at`` has passed.
 
@@ -1260,12 +1378,20 @@ class PostService:
     def _effective_slug_base(self, data: Dict[str, Any], post: CmsPost) -> str:
         """The post's own tail segment for a re-render: a supplied ``slug`` wins,
         else the stored ``slug_base``, else the last segment of the current slug
-        (backfill for a post that predates the column)."""
+        (backfill for a post that predates the column).
+
+        Always reduced to the final path segment. The editor GETs a post whose
+        ``slug`` is the FULL permalink and PUTs the whole payload back on Save,
+        so ``data["slug"]`` (and a ``slug_base`` corrupted before this fix) can
+        carry the full ``root/category/tail`` path — leaving the slashes in would
+        re-prepend the prefix on every save. Mirrors the tail-extraction the
+        non-engine update / ``copy_post`` branches already do."""
         if "slug" in data:
             title = data.get("title", post.title)
-            return (data["slug"] or slugify(title or "")).strip("/")
+            base = (data["slug"] or slugify(title or "")).strip("/")
+            return base.rsplit("/", 1)[-1]
         if post.slug_base:
-            return post.slug_base
+            return post.slug_base.strip("/").rsplit("/", 1)[-1]
         return (post.slug or "").rsplit("/", 1)[-1]
 
     def _unique_computed_slug(self, post_type: str, slug: str, post_id: Any) -> str:

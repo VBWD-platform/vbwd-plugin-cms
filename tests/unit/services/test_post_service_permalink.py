@@ -394,6 +394,75 @@ class TestPreviousSlugInEvent:
         assert "previous_slug" not in _last_event_data(dispatcher)
 
 
+class TestSlugRoundTripDoesNotRecurse:
+    """The admin editor GETs a post (``slug`` = the FULL permalink) and PUTs the
+    whole payload back on Save, so ``data["slug"]`` is the stored full path, not
+    a bare tail. The engine must collapse it to its final segment before
+    re-expanding, else every save re-prepends ``%root%/%category%/`` (regression:
+    ``blog/electronics/blog/electronics/my-post``)."""
+
+    def _post_with_category(self):
+        category = _term("electronics")
+        post = _existing_post(
+            post_type="post",
+            slug="blog/electronics/my-post",
+            slug_base="my-post",
+            status="published",
+        )
+        service, repo, _, _, _ = _make_service(
+            config=STRUCTURED,
+            posts=[post],
+            terms=[category],
+            post_term_links={str(post.id): [str(category.id)]},
+        )
+        post.primary_term_id = category.id
+        return service, repo, post
+
+    def test_round_tripped_full_slug_does_not_double_prefix(self):
+        service, _, post = self._post_with_category()
+        # The editor sends back the CURRENT full permalink verbatim.
+        service.update_post(str(post.id), {"slug": "blog/electronics/my-post"})
+        assert post.slug == "blog/electronics/my-post"
+        assert post.slug_base == "my-post"
+
+    def test_already_corrupted_slug_base_collapses_on_resave(self):
+        # Simulate a post whose stored slug_base was corrupted BEFORE the fix.
+        category = _term("electronics")
+        post = _existing_post(
+            post_type="post",
+            slug="blog/electronics/blog/electronics/my-post",
+            slug_base="blog/electronics/my-post",
+            status="published",
+        )
+        service, _, _, _, _ = _make_service(
+            config=STRUCTURED,
+            posts=[post],
+            terms=[category],
+            post_term_links={str(post.id): [str(category.id)]},
+        )
+        post.primary_term_id = category.id
+        # Re-save with NO slug in the payload (e.g. only the title changed).
+        service.update_post(str(post.id), {"title": "My Post"})
+        assert post.slug == "blog/electronics/my-post"
+        assert post.slug_base == "my-post"
+
+    def test_saving_full_slug_twice_is_stable(self):
+        service, _, post = self._post_with_category()
+        service.update_post(str(post.id), {"slug": "blog/electronics/my-post"})
+        first = post.slug
+        # A second round-trip of the (now re-emitted) full slug must be stable.
+        service.update_post(str(post.id), {"slug": post.slug})
+        assert post.slug == first == "blog/electronics/my-post"
+        assert post.slug_base == "my-post"
+
+    def test_empty_slug_still_falls_back_to_title(self):
+        service, _, post = self._post_with_category()
+        # An empty slug must NOT become an empty tail; it falls back to the title.
+        service.update_post(str(post.id), {"slug": "", "title": "Fresh Title"})
+        assert post.slug == "blog/electronics/fresh-title"
+        assert post.slug_base == "fresh-title"
+
+
 class TestPreviewPermalink:
     def test_preview_returns_path_and_url(self):
         category = _term("electronics")

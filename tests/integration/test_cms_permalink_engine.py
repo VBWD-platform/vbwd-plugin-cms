@@ -137,6 +137,41 @@ def test_structured_post_resolves_and_prerenders(client, db, seo_var_dir):
     assert any(loc.endswith(expected) for loc in locs)
 
 
+def test_editor_round_trip_full_slug_does_not_recurse(client, db, seo_var_dir):
+    """The admin editor GETs a post (``slug`` = full permalink) and PUTs the whole
+    payload back on Save. Re-saving that full ``slug`` must NOT re-prepend the
+    ``blog/<category>/`` prefix (regression: doubled path on every save)."""
+    seo_wiring.register_seo_pipeline()
+    suffix = uuid.uuid4().hex[:8]
+    parent, child = _nested_category(db, suffix)
+    service = _service(db)
+
+    created = service.create_post(
+        {
+            "type": "post",
+            "title": "My Post",
+            "slug": f"my-post-{suffix}",
+            "content_html": "<p>Body</p>",
+            "status": POST_STATUS_PUBLISHED,
+            "term_ids": [str(parent.id), str(child.id)],
+            "primary_term_id": str(child.id),
+        }
+    )
+    full_path = f"blog/electronics-{suffix}/phones-{suffix}/my-post-{suffix}"
+    assert created["slug"] == full_path
+    service.assign_terms(created["id"], [str(parent.id), str(child.id)])
+
+    # Save the round-tripped payload three times as the editor would.
+    for _ in range(3):
+        updated = service.update_post(
+            created["id"],
+            {"slug": created["slug"], "primary_term_id": str(child.id)},
+        )
+        created = updated
+        assert updated["slug"] == full_path
+        assert updated["slug_base"] == f"my-post-{suffix}"
+
+
 def test_published_rename_moves_url_and_emits_single_301(client, db, seo_var_dir):
     seo_wiring.register_seo_pipeline()
     suffix = uuid.uuid4().hex[:8]
