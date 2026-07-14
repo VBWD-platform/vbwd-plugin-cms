@@ -59,6 +59,17 @@ def _make_service(rules=None):
 
     rule_repo.delete.side_effect = _delete
 
+    def _delete_many(ids):
+        count = 0
+        for rule_id in ids:
+            key = str(rule_id)
+            if key in store:
+                del store[key]
+                count += 1
+        return count
+
+    rule_repo.delete_many.side_effect = _delete_many
+
     nginx_gw = StubNginxReloadGateway()
     conf_gen = NginxConfGenerator()
     svc = CmsRoutingService(
@@ -158,6 +169,50 @@ def test_delete_rule_not_found():
     svc, _, _ = _make_service()
     with pytest.raises(CmsRoutingRuleNotFoundError):
         svc.delete_rule("nonexistent-id")
+
+
+# ── bulk_delete ───────────────────────────────────────────────────────────────
+
+
+def test_bulk_delete_returns_count():
+    rule_a = _make_rule(layer="middleware")
+    rule_b = _make_rule(layer="middleware")
+    svc, repo, nginx_gw = _make_service([rule_a, rule_b])
+    result = svc.bulk_delete([str(rule_a.id), str(rule_b.id)])
+    assert result == {"deleted": 2}
+    repo.delete_many.assert_called_once_with([str(rule_a.id), str(rule_b.id)])
+
+
+def test_bulk_delete_skips_unknown_ids():
+    rule = _make_rule(layer="middleware")
+    svc, _, _ = _make_service([rule])
+    result = svc.bulk_delete([str(rule.id), "nonexistent-id"])
+    assert result == {"deleted": 1}
+
+
+def test_bulk_delete_syncs_nginx_once_when_nginx_rule_deleted():
+    nginx_rule = _make_rule(layer="nginx", match_type="language", match_value="de")
+    mw_rule = _make_rule(layer="middleware")
+    svc, _, nginx_gw = _make_service([nginx_rule, mw_rule])
+    svc.bulk_delete([str(nginx_rule.id), str(mw_rule.id)])
+    # Exactly one reload for the whole batch, never once-per-rule.
+    assert nginx_gw.reload_count == 1
+
+
+def test_bulk_delete_does_not_sync_when_only_middleware_rules():
+    mw_a = _make_rule(layer="middleware")
+    mw_b = _make_rule(layer="middleware")
+    svc, _, nginx_gw = _make_service([mw_a, mw_b])
+    svc.bulk_delete([str(mw_a.id), str(mw_b.id)])
+    assert nginx_gw.reload_count == 0
+
+
+def test_bulk_delete_empty_list_returns_zero_no_sync():
+    nginx_rule = _make_rule(layer="nginx")
+    svc, repo, nginx_gw = _make_service([nginx_rule])
+    result = svc.bulk_delete([])
+    assert result == {"deleted": 0}
+    assert nginx_gw.reload_count == 0
 
 
 # ── evaluate ─────────────────────────────────────────────────────────────────

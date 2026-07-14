@@ -28,8 +28,12 @@ from vbwd.services.data_exchange.envelope import (
     build_envelope,
     read_bundle,
 )
-from vbwd.services.data_exchange.port import ExportSelector
+from vbwd.services.data_exchange.port import ExportSelector, MODE_REPLACE_ALL
 from plugins.cms.src.models.cms_image import CmsImage
+from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
+from plugins.cms.src.repositories.routing_rule_repository import (
+    CmsRoutingRuleRepository,
+)
 from plugins.cms.src.models.cms_layout import CmsLayout
 from plugins.cms.src.models.cms_style import CmsStyle
 from plugins.cms.src.models.cms_widget import CmsWidget
@@ -745,6 +749,133 @@ class TestImagesRoundTrip:
         assert storage.read(file_path) == raw
 
 
+class TestRoutingRulesRoundTrip:
+    """The ``cms_routing_rules`` exchanger upserts on the composite
+    ``(layer, match_type, match_value)`` (the table has no natural-key column)."""
+
+    def _seed_rule(self, db, **overrides):
+        data = dict(
+            name="Rule",
+            match_type="language",
+            match_value=f"de-{uuid.uuid4().hex[:6]}",
+            target_slug="home-de",
+            redirect_code=302,
+            layer="nginx",
+        )
+        data.update(overrides)
+        return CmsRoutingRuleRepository(db.session).save(CmsRoutingRule(**data))
+
+    def test_export_carries_portable_fields_only(self, db):
+        rule = self._seed_rule(db)
+        exchanger = _exchangers(db.session)["cms_routing_rules"]
+        rows = exchanger.export(
+            ExportSelector(ids=[str(rule.id)]), include_pii=False
+        ).rows
+        assert len(rows) == 1
+        row = rows[0]
+        assert "id" not in row and "created_at" not in row
+        assert row["match_value"] == rule.match_value
+        assert row["layer"] == "nginx"
+
+    def test_upsert_creates_new_and_updates_existing(self, db):
+        existing = self._seed_rule(db, target_slug="old-target", layer="middleware")
+        exchanger = _exchangers(db.session)["cms_routing_rules"]
+
+        new_match_value = f"fr-{uuid.uuid4().hex[:6]}"
+        payload = build_envelope(
+            "cms_routing_rules",
+            [
+                {
+                    "name": "Updated",
+                    "is_active": True,
+                    "priority": 5,
+                    "match_type": existing.match_type,
+                    "match_value": existing.match_value,
+                    "target_slug": "new-target",
+                    "redirect_code": 301,
+                    "is_rewrite": False,
+                    "layer": "middleware",
+                },
+                {
+                    "name": "Brand New",
+                    "is_active": True,
+                    "priority": 0,
+                    "match_type": "language",
+                    "match_value": new_match_value,
+                    "target_slug": "home-fr",
+                    "redirect_code": 302,
+                    "is_rewrite": False,
+                    "layer": "middleware",
+                },
+            ],
+            instance="test",
+        )
+        result = exchanger.import_(payload, mode="upsert", dry_run=False)
+        assert result.created == 1
+        assert result.updated == 1
+
+        repo = CmsRoutingRuleRepository(db.session)
+        updated = repo.find_by_id(str(existing.id))
+        assert updated.target_slug == "new-target"
+        assert updated.redirect_code == 301
+
+    def test_dry_run_counts_but_persists_nothing(self, db):
+        match_value = f"es-{uuid.uuid4().hex[:6]}"
+        exchanger = _exchangers(db.session)["cms_routing_rules"]
+        payload = build_envelope(
+            "cms_routing_rules",
+            [
+                {
+                    "name": "Preview",
+                    "is_active": True,
+                    "priority": 0,
+                    "match_type": "language",
+                    "match_value": match_value,
+                    "target_slug": "home-es",
+                    "redirect_code": 302,
+                    "is_rewrite": False,
+                    "layer": "middleware",
+                }
+            ],
+            instance="test",
+        )
+        result = exchanger.import_(payload, mode="upsert", dry_run=True)
+        assert result.created == 1
+        assert (
+            CmsRoutingRuleRepository(db.session).find_by_match("language", match_value)
+            == []
+        )
+
+    def test_replace_all_wipes_then_inserts(self, db):
+        stale_id = str(self._seed_rule(db, layer="middleware").id)
+        exchanger = _exchangers(db.session)["cms_routing_rules"]
+
+        match_value = f"it-{uuid.uuid4().hex[:6]}"
+        payload = build_envelope(
+            "cms_routing_rules",
+            [
+                {
+                    "name": "Only",
+                    "is_active": True,
+                    "priority": 0,
+                    "match_type": "language",
+                    "match_value": match_value,
+                    "target_slug": "home-it",
+                    "redirect_code": 302,
+                    "is_rewrite": False,
+                    "layer": "middleware",
+                }
+            ],
+            instance="test",
+        )
+        result = exchanger.import_(payload, mode=MODE_REPLACE_ALL, dry_run=False)
+        assert result.created == 1
+
+        repo = CmsRoutingRuleRepository(db.session)
+        assert repo.find_by_id(stale_id) is None
+        assert repo.find_by_match("language", match_value)
+
+
 class TestRegistration:
     def test_on_enable_registers_cms_exchangers(self, db):
         from vbwd.services.data_exchange.registry import data_exchange_registry
@@ -761,7 +892,12 @@ class TestRegistration:
             "cms_styles",
             "cms_widgets",
             "cms_images",
+            "cms_routing_rules",
         } <= keys
+        routing = data_exchange_registry.get("cms_routing_rules")
+        assert routing is not None
+        assert routing.export_permission == "cms.configure"
+        assert routing.import_permission == "cms.configure"
 
 
 def _term(term_type, slug, name):

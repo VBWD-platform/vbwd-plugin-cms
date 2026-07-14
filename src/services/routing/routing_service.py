@@ -100,6 +100,25 @@ class CmsRoutingService:
         if was_nginx:
             self.sync_nginx()
 
+    def bulk_delete(self, ids: List[str]) -> Dict[str, int]:
+        """Delete many rules in one commit; sync nginx once iff any was nginx-layer.
+
+        Looks up the targeted rules before deletion so a single ``sync_nginx()``
+        runs at the end when at least one deleted rule lived in the nginx layer —
+        never once-per-rule. Unknown/empty ids delete nothing and never sync.
+        """
+        if not ids:
+            return {"deleted": 0}
+        selected_ids = {str(rule_id) for rule_id in ids}
+        targeted = [
+            rule for rule in self._rule_repo.find_all() if str(rule.id) in selected_ids
+        ]
+        had_nginx_rule = any(rule.layer == "nginx" for rule in targeted)
+        deleted = self._rule_repo.delete_many(ids)
+        if had_nginx_rule:
+            self.sync_nginx()
+        return {"deleted": deleted}
+
     # ── Nginx sync ────────────────────────────────────────────────────────────
 
     def sync_nginx(self) -> None:

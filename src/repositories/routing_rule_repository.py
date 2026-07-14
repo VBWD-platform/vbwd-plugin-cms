@@ -33,7 +33,9 @@ class CmsRoutingRuleRepository:
             .all()
         )
 
-    def find_by_match(self, match_type: str, match_value: str) -> List[CmsRoutingRule]:
+    def find_by_match(
+        self, match_type: str, match_value: Optional[str]
+    ) -> List[CmsRoutingRule]:
         """All rules with the given (match_type, match_value).
 
         Used by the permalink engine to emit an *idempotent* 301 on a slug
@@ -68,3 +70,19 @@ class CmsRoutingRuleRepository:
         self.session.delete(rule)
         self.session.commit()
         return True
+
+    def delete_many(self, ids: List[str]) -> int:
+        """Delete every rule whose id is in ``ids`` in one commit.
+
+        Returns the count actually deleted; unknown ids are skipped (not an
+        error). Empty ``ids`` is a no-op that returns 0.
+        """
+        if not ids:
+            return 0
+        deleted = (
+            self.session.query(CmsRoutingRule)
+            .filter(CmsRoutingRule.id.in_(ids))
+            .delete(synchronize_session=False)
+        )
+        self.session.commit()
+        return deleted

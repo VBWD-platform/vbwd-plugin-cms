@@ -1400,6 +1400,18 @@ def admin_create_routing_rule():
         return jsonify({"error": str(e)}), 400
 
 
+@cms_bp.route("/api/v1/admin/cms/routing-rules/bulk", methods=["POST"])
+@require_auth
+@require_admin
+@require_permission("cms.configure")
+def admin_bulk_routing_rules():
+    """POST /api/v1/admin/cms/routing-rules/bulk — bulk-delete routing rules."""
+    data = request.get_json()
+    if not data or not isinstance(data.get("ids"), list):
+        return jsonify({"error": "ids required"}), 400
+    return jsonify(_routing_svc().bulk_delete(data["ids"])), 200
+
+
 @cms_bp.route("/api/v1/admin/cms/routing-rules/reload", methods=["POST"])
 @require_auth
 @require_admin

@@ -22,6 +22,7 @@ from plugins.cms.src.services.data_exchange.cms_exchangers import (
     CMS_CLUSTER,
     CmsImagesExchanger,
     CmsPostsExchanger,
+    CmsRoutingRulesExchanger,
     CmsTermsExchanger,
     build_cms_exchangers,
     register_cms_exchangers,
@@ -39,7 +40,7 @@ def storage():
 
 
 class TestManifestMetadata:
-    def test_all_six_entities_present(self, session, storage):
+    def test_all_entities_present(self, session, storage):
         keys = {
             exchanger.entity_key
             for exchanger in build_cms_exchangers(session, file_storage=storage)
@@ -51,6 +52,7 @@ class TestManifestMetadata:
             "cms_styles",
             "cms_widgets",
             "cms_images",
+            "cms_routing_rules",
         }
 
     def test_clusters_are_content(self, session, storage):
@@ -58,8 +60,13 @@ class TestManifestMetadata:
             assert exchanger.cluster == CMS_CLUSTER
 
     def test_natural_keys_are_slug(self, session, storage):
+        # Routing rules have no natural-key column; they upsert on a composite
+        # (layer, match_type, match_value) and declare "match_value" advisorily.
         for exchanger in build_cms_exchangers(session, file_storage=storage):
-            assert exchanger.natural_key == "slug"
+            if exchanger.entity_key == "cms_routing_rules":
+                assert exchanger.natural_key == "match_value"
+            else:
+                assert exchanger.natural_key == "slug"
 
     def test_no_secret_or_pii_fields(self, session, storage):
         for exchanger in build_cms_exchangers(session, file_storage=storage):
@@ -84,6 +91,8 @@ class TestManifestMetadata:
         assert by_key["cms_layouts"].import_permission == "cms.layouts.manage"
         assert by_key["cms_styles"].import_permission == "cms.styles.manage"
         assert by_key["cms_images"].import_permission == "cms.images.manage"
+        assert by_key["cms_routing_rules"].export_permission == "cms.configure"
+        assert by_key["cms_routing_rules"].import_permission == "cms.configure"
 
 
 class TestRegistration:
@@ -265,6 +274,64 @@ class TestLayoutsExchangerExportShape:
         exchanger = self._exchanger(layout_widget_repo, widget_repo)
         row = exchanger._serialise_row(layout, include_pii=False)
         assert row["widget_assignments"] == []
+
+
+class TestRoutingRulesExchangerExportShape:
+    """``cms_routing_rules`` exports the portable, id-free fields and filters by
+    the selector's primary ids (the admin list sends primary ids)."""
+
+    _PORTABLE_FIELDS = {
+        "name",
+        "is_active",
+        "priority",
+        "match_type",
+        "match_value",
+        "target_slug",
+        "redirect_code",
+        "is_rewrite",
+        "layer",
+    }
+
+    def _rule(self, rule_id, **overrides):
+        base = dict(
+            id=rule_id,
+            name="Lang DE",
+            is_active=True,
+            priority=0,
+            match_type="language",
+            match_value="de",
+            target_slug="home-de",
+            redirect_code=302,
+            is_rewrite=False,
+            layer="nginx",
+            created_at="2026-03-15",
+            updated_at="2026-03-15",
+        )
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def _exchanger(self, rules):
+        repo = MagicMock()
+        repo.find_all.return_value = rules
+        return CmsRoutingRulesExchanger(MagicMock(), repo)
+
+    def test_export_strips_id_and_timestamps(self):
+        exchanger = self._exchanger([self._rule("rule-1")])
+        envelope = exchanger.export(ExportSelector(all=True), include_pii=False)
+        assert envelope.entity_key == "cms_routing_rules"
+        row = envelope.rows[0]
+        assert set(row.keys()) == self._PORTABLE_FIELDS
+        assert "id" not in row
+        assert "created_at" not in row and "updated_at" not in row
+        assert row["match_value"] == "de"
+        assert row["layer"] == "nginx"
+
+    def test_export_filters_by_selector_ids(self):
+        exchanger = self._exchanger(
+            [self._rule("rule-1", name="Keep"), self._rule("rule-2", name="Drop")]
+        )
+        envelope = exchanger.export(ExportSelector(ids=["rule-1"]), include_pii=False)
+        assert [row["name"] for row in envelope.rows] == ["Keep"]
 
 
 class TestTermsExchangerDelegation:

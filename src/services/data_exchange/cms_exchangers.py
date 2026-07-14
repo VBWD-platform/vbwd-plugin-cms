@@ -34,6 +34,7 @@ from typing import Any, List, Optional
 from vbwd.services.data_exchange.base_model_exchanger import BaseModelExchanger
 from vbwd.services.data_exchange.envelope import validate_envelope
 from vbwd.services.data_exchange.port import (
+    MODE_REPLACE_ALL,
     EntityExchanger,
     Envelope,
     ExportSelector,
@@ -587,6 +588,126 @@ class CmsImagesExchanger(EntityExchanger):
         return PERM_IMAGES_MANAGE
 
 
+# ── routing rules (flat rows, composite-key upsert) ───────────────────────────
+
+
+class CmsRoutingRulesExchanger(EntityExchanger):
+    """``cms_routing_rules`` — flat routing-rule rows keyed on a composite.
+
+    The table has NO unique/natural-key column (``name`` is not unique, there is
+    no slug), so ``natural_key = "match_value"`` is advisory only: this custom
+    exchanger upserts by matching an existing rule on the composite
+    ``(layer, match_type, match_value)``.
+
+    This exchanger never triggers an nginx reload on import — the operator
+    reloads manually via the admin "Apply & Reload Nginx" button, so a bulk
+    import stays a pure DB write.
+    """
+
+    entity_key = "cms_routing_rules"
+    label = "CMS Routing Rules"
+    cluster = CMS_CLUSTER
+    natural_key = "match_value"
+    supports_export = True
+    supports_import = True
+    supported_formats = frozenset({"json"})
+    secret_fields = frozenset()
+    pii_fields = frozenset()
+
+    # The portable, id-free / timestamp-free fields of a routing-rule row.
+    _ROW_FIELDS = (
+        "name",
+        "is_active",
+        "priority",
+        "match_type",
+        "match_value",
+        "target_slug",
+        "redirect_code",
+        "is_rewrite",
+        "layer",
+    )
+
+    def __init__(self, session: Any, routing_rule_repository: Any = None) -> None:
+        from plugins.cms.src.repositories.routing_rule_repository import (
+            CmsRoutingRuleRepository,
+        )
+
+        self._session = session
+        self._repo = routing_rule_repository or CmsRoutingRuleRepository(session)
+
+    @property
+    def export_permission(self) -> str:
+        return "cms.configure"
+
+    @property
+    def import_permission(self) -> str:
+        return "cms.configure"
+
+    def export(self, selector: ExportSelector, *, include_pii: bool) -> Envelope:
+        rules = self._repo.find_all()
+        if selector.ids:
+            wanted = {str(value) for value in selector.ids}
+            rules = [rule for rule in rules if str(rule.id) in wanted]
+        rows = [self._serialise(rule) for rule in rules]
+        return Envelope(entity_key=self.entity_key, rows=rows)
+
+    def _serialise(self, rule: Any) -> dict:
+        return {
+            field_name: getattr(rule, field_name) for field_name in self._ROW_FIELDS
+        }
+
+    def import_(self, payload: dict, *, mode: str, dry_run: bool) -> ImportResult:
+        from plugins.cms.src.models.cms_routing_rule import CmsRoutingRule
+
+        rows = validate_envelope(payload, self.entity_key)
+        result = ImportResult(entity=self.entity_key, mode=mode, dry_run=dry_run)
+        try:
+            if mode == MODE_REPLACE_ALL and not dry_run:
+                self._session.query(CmsRoutingRule).delete()
+            for row in rows:
+                self._import_row(row, CmsRoutingRule, result, dry_run=dry_run)
+        except Exception:
+            self._session.rollback()
+            raise
+        if dry_run:
+            self._session.rollback()
+        else:
+            self._session.commit()
+        return result
+
+    def _import_row(
+        self,
+        row: dict,
+        model_class: type,
+        result: ImportResult,
+        *,
+        dry_run: bool,
+    ) -> None:
+        existing = self._find_existing(row)
+        if not dry_run:
+            rule = existing or model_class()
+            self._apply(rule, row)
+            self._session.add(rule)
+        if existing is not None:
+            result.updated += 1
+        else:
+            result.created += 1
+
+    def _find_existing(self, row: dict) -> Optional[Any]:
+        matches = self._repo.find_by_match(
+            row.get("match_type", ""), row.get("match_value")
+        )
+        for rule in matches:
+            if rule.layer == row.get("layer"):
+                return rule
+        return None
+
+    def _apply(self, rule: Any, row: dict) -> None:
+        for field_name in self._ROW_FIELDS:
+            if field_name in row:
+                setattr(rule, field_name, row[field_name])
+
+
 # ── factory + registration ────────────────────────────────────────────────────
 
 
@@ -705,6 +826,7 @@ def build_cms_exchangers(
             manage_permission=PERM_WIDGETS_MANAGE,
         ),
         CmsImagesExchanger(session, CmsImageRepository(session), file_storage),
+        CmsRoutingRulesExchanger(session),
     ]
 
 
