@@ -148,6 +148,75 @@ class PostRepository:
             "pages": max(1, (total + per_page - 1) // per_page),
         }
 
+    def find_by_slug_prefix(
+        self,
+        prefix: str,
+        post_type: str = "post",
+        status: str = POST_STATUS_PUBLISHED,
+        page: int = 1,
+        per_page: int = 20,
+        newest_first: bool = True,
+    ) -> Dict[str, Any]:
+        """Posts whose full-path ``slug`` sits UNDER ``prefix`` (S-prefix-archive).
+
+        The archive at a WordPress-style path prefix ``P`` is every post whose
+        ``slug`` starts with ``P/`` — the trailing slash pins the match to a
+        SEGMENT boundary, so ``blog/2026`` lists ``blog/2026/...`` but never a
+        sibling like ``blog/20260-x`` or ``blog/2026news``. A pure slug match:
+        no year parsing, no term joins.
+
+        LIKE wildcards (``%``, ``_``) and the escape char in ``prefix`` are
+        escaped so a slug segment that literally contains them cannot widen the
+        pattern. Returns the SAME paginated shape as ``find_paginated`` and
+        reuses the shared ordering helper (newest-first by default, like the
+        public archive listing).
+        """
+        query = self._slug_prefix_query(prefix, post_type, status)
+        total = query.count()
+        items = (
+            self._apply_ordering(query, newest_first, pinned_column=CmsPost.pinned)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": max(1, (total + per_page - 1) // per_page),
+        }
+
+    def count_by_slug_prefix(
+        self,
+        prefix: str,
+        post_type: str = "post",
+        status: str = POST_STATUS_PUBLISHED,
+    ) -> int:
+        """Cheap existence/size check for a prefix archive (no row hydration)."""
+        return self._slug_prefix_query(prefix, post_type, status).count()
+
+    def _slug_prefix_query(self, prefix: str, post_type: str, status: str):
+        """Build the ``slug LIKE '<escaped-prefix>/%'`` archive query.
+
+        Single source for both ``find_by_slug_prefix`` and
+        ``count_by_slug_prefix`` (DRY) — the escaping and segment-boundary rule
+        live in exactly one place.
+        """
+        pattern = f"{self._escape_like(prefix.strip('/'))}/%"
+        return (
+            self.session.query(CmsPost)
+            .filter(CmsPost.type == post_type)
+            .filter(CmsPost.status == status)
+            .filter(CmsPost.slug.like(pattern, escape="\\"))
+        )
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        """Escape LIKE wildcards so a literal ``%``/``_``/``\\`` in a slug prefix
+        matches itself rather than acting as a pattern metacharacter."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     def find_by_tag_slug(
         self,
         tag_slug: str,

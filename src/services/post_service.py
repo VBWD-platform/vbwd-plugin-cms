@@ -432,6 +432,31 @@ class PostService:
             )
         return self._serialize_page(result)
 
+    def list_posts_by_prefix(
+        self,
+        prefix: str,
+        post_type: str = "post",
+        page: int = 1,
+        per_page: int = 20,
+    ) -> Dict[str, Any]:
+        """PUBLISHED posts whose ``slug`` sits under ``prefix`` (S-prefix-archive).
+
+        Backs the WordPress-style prefix archive: the listing at path prefix
+        ``P`` is every published post with ``slug`` starting ``P/``. Thin
+        delegation to the repo's slug-prefix query, serialized through the SAME
+        page serializer as ``list_posts`` so items carry consistent
+        terms/primary_category/tags. Returns the ``{items, total, page,
+        per_page, pages}`` envelope.
+        """
+        result = self._repo.find_by_slug_prefix(
+            prefix=prefix,
+            post_type=post_type,
+            status=POST_STATUS_PUBLISHED,
+            page=page,
+            per_page=per_page,
+        )
+        return self._serialize_page(result)
+
     def resolve_tag_term(self, slug: str) -> Optional[Dict[str, Any]]:
         """Resolve a TAG archive to a synthetic term dict, or ``None``.
 

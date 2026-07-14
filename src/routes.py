@@ -2425,6 +2425,45 @@ def public_resolve_term(term_type: str, slug: str):
     return jsonify(term), 200
 
 
+def _archive_title(prefix: str) -> str:
+    """Human title for a prefix archive: the LAST path segment, hyphens → spaces,
+    title-cased (``news`` → ``News``, ``2026`` → ``2026``, ``new-year`` → ``New
+    Year``). Deliberately dumb — no config, no lookup."""
+    last_segment = prefix.strip("/").rsplit("/", 1)[-1]
+    return last_segment.replace("-", " ").title()
+
+
+@cms_bp.route("/api/v1/cms/archive/<path:prefix>", methods=["GET"])
+def public_resolve_archive(prefix: str):
+    """GET /api/v1/cms/archive/<path:prefix> — WordPress-style prefix archive.
+
+    Post permalinks store the full path in ``cms_post.slug`` (e.g.
+    ``blog/2026/news/vbwd-v26-7-0-released``). Every PREFIX of that path resolves
+    here to a listing of the published posts beneath it, via one rule: the
+    archive at prefix ``P`` = all published posts whose ``slug`` starts with
+    ``P/`` (a segment-boundary match — no year parsing, no category joins).
+
+    Returns 200 with ``{prefix, title, items, total, page, per_page, pages}`` —
+    ``title`` is the last path segment title-cased — or 404 when no published
+    post sits under the prefix (so the fe falls through to not-found).
+    """
+    page = request.args.get("page", 1, type=int)
+    per_page = min(request.args.get("per_page", 20, type=int), 100)
+    normalized = prefix.strip("/")
+
+    result = _post_service().list_posts_by_prefix(
+        prefix=normalized,
+        post_type="post",
+        page=page,
+        per_page=per_page,
+    )
+    if result["total"] == 0:
+        return jsonify({"error": f"Archive '{prefix}' not found"}), 404
+    result["prefix"] = normalized
+    result["title"] = _archive_title(normalized)
+    return jsonify(result), 200
+
+
 @cms_bp.route("/api/v1/cms/embed-manifest", methods=["GET"])
 def public_embed_manifest():
     """GET /api/v1/cms/embed-manifest?type=&category= — mobile validation probe.

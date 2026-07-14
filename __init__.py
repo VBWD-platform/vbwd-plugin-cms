@@ -87,6 +87,10 @@ class CmsPlugin(BasePlugin):
         return PublicRouteDeclaration(
             read={
                 "/uploads/<path:filename>": "Public CMS upload serving; published media only.",
+                "/api/v1/cms/archive/<path:prefix>": (
+                    "Public WordPress-style prefix archive: published posts whose "
+                    "slug sits under a permalink path prefix (e.g. blog/2026/news)."
+                ),
                 "/api/v1/cms/categories": "Public CMS category listing for the website.",
                 "/api/v1/cms/config": "Public CMS site config (theme / public SEO settings) for the website.",
                 "/api/v1/cms/entity-pages/<owner_type>/<owner_id>": (
