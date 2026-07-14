@@ -1428,6 +1428,39 @@ POSTS_ARCHIVE_WIDGET_SLUG = "posts-archive"
 TERMS_ARCHIVE_LAYOUT_SLUG = "terms-archive"
 TERMS_ARCHIVE_WIDGET_SLUG = "terms-archive"
 
+# Canonical route-driven TermArchive widget definition — the single source of
+# truth for BOTH the seeder (``populate_cms``) and the create-only applier
+# (``apply_terms_archive_layout``), so the two can never drift. The widget reads
+# the term type + slug from the catch-all route (NOT config), so ONE widget on
+# the ONE terms-archive layout renders every category and tag archive.
+TERMS_ARCHIVE_WIDGET_NAME = "Term Archive"
+TERMS_ARCHIVE_WIDGET_CONTENT_JSON = {
+    "component": "TermArchive",
+    "mode": "category",
+    "type": "post",
+}
+TERMS_ARCHIVE_WIDGET_CONFIG = {
+    "component_name": "TermArchive",
+    "type": "post",
+    "mode": "category",
+    "posts_per_page": 20,
+    "paginate": True,
+}
+
+
+def terms_archive_layout_row() -> Optional[dict]:
+    """The canonical ``terms-archive`` layout row (areas + widget placements).
+
+    Returns the translated bundled ``terms-archive`` layout row — its ``areas``,
+    ``name``, ``description``, ``sort_order`` plus the seeder-owned
+    ``widget_assignments`` — or ``None`` when the bundled layout JSON is missing.
+    Shared with the create-only applier so the layout definition has ONE home.
+    """
+    for row in LAYOUTS:
+        if row.get("slug") == TERMS_ARCHIVE_LAYOUT_SLUG:
+            return row
+    return None
+
 
 def _resolve_posts_root() -> str:
     """Resolve the archive slug (``posts_root``) from the aggregated CMS config.
@@ -2120,16 +2153,10 @@ def populate_cms() -> None:
     # ONE terms-archive layout renders every category and tag archive.
     widget_map[TERMS_ARCHIVE_WIDGET_SLUG] = _get_or_create_widget(
         TERMS_ARCHIVE_WIDGET_SLUG,
-        "Term Archive",
+        TERMS_ARCHIVE_WIDGET_NAME,
         "vue-component",
-        content_json={"component": "TermArchive", "mode": "category", "type": "post"},
-        config={
-            "component_name": "TermArchive",
-            "type": "post",
-            "mode": "category",
-            "posts_per_page": 20,
-            "paginate": True,
-        },
+        content_json=dict(TERMS_ARCHIVE_WIDGET_CONTENT_JSON),
+        config=dict(TERMS_ARCHIVE_WIDGET_CONFIG),
     )
     widget_map["addon-catalog"] = _get_or_create_widget(
         "addon-catalog",
