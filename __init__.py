@@ -168,6 +168,21 @@ class CmsPlugin(BasePlugin):
         ]
 
     @property
+    def licensed_features(self) -> tuple:
+        """Declare ``cms`` as this plugin's licensable feature (S135).
+
+        Collected by the core ``licensed_feature_registry`` so the request-level
+        gate (``@requires_license(feature="cms")`` / the blueprint guard in
+        ``routes.py``) has a registered feature to match. Core names no feature —
+        this is the plugin's single source of truth for the id.
+
+        NOTE: CMS is a free plugin; gating it is a license-blockage DEMO surface,
+        not a production monetisation boundary. Enforcement only engages when an
+        operator sets ``LICENSE_REQUIRED=true`` (off by default in CE).
+        """
+        return ("cms",)
+
+    @property
     def api_scopes(self):
         """API-key scopes this plugin's endpoints require (S52).
 

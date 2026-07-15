@@ -46,6 +46,7 @@ from flask import (
 from vbwd.extensions import db
 from vbwd.middleware.auth import require_auth, require_admin, require_permission
 from vbwd.middleware.api_key_auth import require_api_key
+from vbwd.security.licensing import requires_license
 
 from plugins.cms.src.repositories.cms_image_repository import CmsImageRepository
 from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
@@ -135,6 +136,48 @@ logger = logging.getLogger(__name__)
 
 # Blueprint with no url_prefix — routes are defined with absolute paths.
 cms_bp = Blueprint("cms", __name__)
+
+
+# ── License gate (S135 demo) ─────────────────────────────────────────────────
+#
+# Gate the ENTIRE CMS blueprint on the ``cms`` license feature. Rather than
+# stamping ``@requires_license(feature="cms")`` onto ~107 individual routes, we
+# apply the core gate ONCE at the blueprint level and REUSE the core decorator's
+# exact check — we wrap a no-op view with ``@requires_license`` and invoke it in
+# a ``before_request``. On the pass path the wrapped gate calls the no-op
+# (returns ``None`` → request proceeds); on the block path it returns the core
+# decorator's own ``(402, {"error": "License required", "feature": "cms"})``
+# tuple, which the ``before_request`` returns to short-circuit the request. This
+# keeps the 402 response byte-identical to every other license-gated route.
+#
+# Behaviour is IDENTICAL to today whenever ``LICENSE_REQUIRED`` is false (the CE
+# default): the core gate is inert and returns ``None``, so nothing changes for
+# the running instance. Enforcement only engages when an operator opts in.
+#
+# route_audit note: the per-route ``requires_license``/``licensed_feature``
+# markers are intentionally NOT stamped here — those markers feed the auth-
+# exposure audit's informational table only (they are not a correctness gate),
+# and stamping 107 routes to satisfy an informational column is unwarranted. The
+# gate reuses the core decorator's check verbatim, so behaviour is unchanged.
+#
+# Ordering note: a blueprint ``before_request`` runs BEFORE a route's own
+# ``@require_auth``/``@require_permission`` decorators. An unauthenticated
+# request to a CMS admin route under enforcement therefore sees 402 (license)
+# rather than 401 (auth). For the demo — and for the whole-surface "every CMS
+# API returns 402" intent — this is the desired uniform behaviour.
+CMS_LICENSED_FEATURE = "cms"
+_cms_license_gate = requires_license(feature=CMS_LICENSED_FEATURE)(lambda: None)
+
+
+@cms_bp.before_request
+def _enforce_cms_license():
+    """Block every CMS route with 402 when ``cms`` is licensed but not covered.
+
+    Returns ``None`` on the pass path (CE inert-path or a covering key), so the
+    request proceeds unchanged; returns the core gate's 402 response on the
+    block path.
+    """
+    return _cms_license_gate()
 
 
 # ── Access-level visibility helpers ──────────────────────────────────────────
