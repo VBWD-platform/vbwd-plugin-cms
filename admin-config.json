@@ -101,6 +101,22 @@
           "description": "Enable verbose CMS debug logging"
         }
       ]
+    },
+    {
+      "id": "languages",
+      "label": "Languages",
+      "fields": [
+        {
+          "key": "enabled_languages",
+          "label": "Enabled Languages",
+          "component": "dual-list",
+          "optionsEndpoint": "/admin/cms/languages/available",
+          "optionsKey": "languages",
+          "valueKey": "code",
+          "labelKey": "label",
+          "description": "Languages offered in the post/page editor and the content-list language filter."
+        }
+      ]
     }
   ]
 }

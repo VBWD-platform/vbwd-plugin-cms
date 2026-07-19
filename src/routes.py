@@ -48,6 +48,7 @@ from vbwd.middleware.auth import require_auth, require_admin, require_permission
 from vbwd.middleware.api_key_auth import require_api_key
 from vbwd.security.licensing import requires_license
 
+from plugins.cms.src.languages import LANGUAGE_CATALOG, resolve_enabled_languages
 from plugins.cms.src.repositories.cms_image_repository import CmsImageRepository
 from plugins.cms.src.repositories.cms_layout_repository import CmsLayoutRepository
 from plugins.cms.src.repositories.cms_layout_widget_repository import (
@@ -531,6 +532,38 @@ def public_cms_config():
         ),
         200,
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ADMIN — Editor languages
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@cms_bp.route("/api/v1/admin/cms/languages/available", methods=["GET"])
+@require_auth
+@require_admin
+def admin_available_languages():
+    """GET /api/v1/admin/cms/languages/available — full curated language catalog.
+
+    Feeds the "Languages" settings-tab dual-list. Gated on ``require_admin`` (not
+    a cms-specific permission) so it loads on the settings page, which is itself
+    gated on ``settings.system``.
+    """
+    return jsonify({"languages": list(LANGUAGE_CATALOG)}), 200
+
+
+@cms_bp.route("/api/v1/admin/cms/languages", methods=["GET"])
+@require_auth
+@require_admin
+@require_permission("cms.pages.view")
+def admin_enabled_languages():
+    """GET /api/v1/admin/cms/languages — resolved enabled languages with labels.
+
+    Returns the configured ``enabled_languages`` subset (in configured order,
+    unknown codes dropped, en/de/ru fallback) that the post/page editor and the
+    content-list language filter offer.
+    """
+    return jsonify({"languages": resolve_enabled_languages(_cms_config())}), 200
 
 
 # ════════════════════════════════════════════════════════════════════════════

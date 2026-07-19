@@ -34,6 +34,11 @@
     "default": "en",
     "description": "Default language code applied to new pages"
   },
+  "enabled_languages": {
+    "type": "string",
+    "default": "en,de,ru",
+    "description": "Language codes offered in the post/page editor and the content-list language filter. Managed via the Languages tab."
+  },
   "posts_per_page": {
     "type": "number",
     "default": 20,
