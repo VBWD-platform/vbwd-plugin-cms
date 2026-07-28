@@ -105,6 +105,28 @@ class TestDecideConfigDefaults:
         # The still-empty siblings are filled — kept keys don't block filled keys.
         assert decisions["highlight_slug"] == "filled"
 
+    def test_retired_teal_default_is_migrated_to_current_default(self):
+        # A widget still carrying the retired seed default ("teal") is normalised
+        # to the current default ("default"). Only the retired value migrates.
+        assert "teal" in applier.RETIRED_THEME_DEFAULTS
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        starting = {**_ROOT_CONFIG, "theme": "teal", "features": ["x"]}
+
+        new_config, decisions = applier.decide_config_defaults(starting, defaults)
+
+        assert new_config["theme"] == "default"
+        assert decisions["theme"] == "migrated"
+
+    def test_theme_migration_is_idempotent(self):
+        # Once migrated, the value is no longer retired → a second run keeps it.
+        defaults = applier.defaults_for_config(_ROOT_CONFIG)
+        starting = {**_ROOT_CONFIG, "theme": "default", "features": ["x"]}
+
+        new_config, decisions = applier.decide_config_defaults(starting, defaults)
+
+        assert new_config["theme"] == "default"
+        assert decisions["theme"] == "kept"
+
     def test_non_root_config_never_gains_a_highlight_slug(self):
         config = {
             "component_name": "TariffPlanCollection",

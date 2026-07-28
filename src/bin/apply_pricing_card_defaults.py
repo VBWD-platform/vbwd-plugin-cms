@@ -104,6 +104,15 @@ def _is_empty(value: object) -> bool:
     return value is None or value == "" or value == []
 
 
+# Themes that were shipped as the *seeded default* in an earlier release and are
+# now retired in favour of the current default (``NATIVE_PRICING_CONFIG["theme"]``).
+# A pricing-card widget still carrying a retired default is a leftover of the old
+# seed — not a deliberate operator choice — so it is normalised to the current
+# default, moving existing instances on-brand without a manual edit. Any other
+# theme (a genuine operator selection like ``emerald``/``dark``) is always kept.
+RETIRED_THEME_DEFAULTS: Tuple[str, ...] = ("teal",)
+
+
 def decide_config_defaults(
     config: Optional[Dict[str, object]], defaults: Dict[str, object]
 ) -> Tuple[Dict[str, object], Dict[str, str]]:
@@ -117,9 +126,20 @@ def decide_config_defaults(
     result: Dict[str, object] = dict(config or {})
     decisions: Dict[str, str] = {}
     for key, default_value in defaults.items():
-        if _is_empty(result.get(key)):
+        current = result.get(key)
+        if _is_empty(current):
             result[key] = default_value
             decisions[key] = "filled"
+        elif (
+            key == "theme"
+            and current in RETIRED_THEME_DEFAULTS
+            and current != default_value
+        ):
+            # Leftover of a retired seed default → normalise to the current one.
+            # Idempotent: once migrated the value is no longer retired, so a
+            # second run reports "kept".
+            result[key] = default_value
+            decisions[key] = "migrated"
         else:
             decisions[key] = "kept"
     return result, decisions
@@ -205,15 +225,25 @@ def _apply_component_configs(
             widget.config, defaults_for_config(widget.config)
         )
         filled = [key for key, verdict in decisions.items() if verdict == "filled"]
-        if filled:
+        migrated = [key for key, verdict in decisions.items() if verdict == "migrated"]
+        if filled or migrated:
             widget.config = new_config
             repository.save(widget)
-            print(f"  ~ widget '{widget.slug}' — filled seeded defaults {filled}")
+            changes = []
+            if filled:
+                changes.append(f"filled seeded defaults {filled}")
+            if migrated:
+                changes.append(f"migrated retired defaults {migrated}")
+            print(f"  ~ widget '{widget.slug}' — {'; '.join(changes)}")
             status = "updated"
         else:
             print(f"  = widget '{widget.slug}' (already-current)")
             status = "already-current"
-        per_widget[widget.slug] = {"status": status, "filled": filled}
+        per_widget[widget.slug] = {
+            "status": status,
+            "filled": filled,
+            "migrated": migrated,
+        }
     if not per_widget:
         print("  = no pricing-card widgets found — skipped")
     summary["components"] = per_widget
