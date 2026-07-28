@@ -16,7 +16,7 @@
         "mode": "category",
         "category": "root",
         "plan_slugs": [],
-        "theme": "teal",
+        "theme": "default",
         "highlight_slug": "pro",
         "features": [
           "All core platform features",

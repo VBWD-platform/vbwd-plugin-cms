@@ -17,7 +17,7 @@
         "plan_slugs": [],
         "default_view": "cards",
         "heading": "",
-        "theme": "teal",
+        "theme": "default",
         "highlight_slug": "pro",
         "features": [
           "All core platform features",

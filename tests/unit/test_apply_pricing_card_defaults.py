@@ -45,7 +45,7 @@ class TestIsPricingCardWidget:
 class TestDefaultsForConfig:
     def test_root_category_includes_highlight_slug(self):
         defaults = applier.defaults_for_config(_ROOT_CONFIG)
-        assert defaults["theme"] == "teal"
+        assert defaults["theme"] == "default"
         assert defaults["features"] == populate_cms.NATIVE_PRICING_FEATURES
         assert defaults["highlight_slug"] == "pro"
 
@@ -53,7 +53,7 @@ class TestDefaultsForConfig:
         defaults = applier.defaults_for_config(
             {"component_name": "TariffPlanCollection", "category": "subscription-plans"}
         )
-        assert defaults["theme"] == "teal"
+        assert defaults["theme"] == "default"
         assert defaults["features"] == populate_cms.NATIVE_PRICING_FEATURES
         assert "highlight_slug" not in defaults
 
@@ -114,7 +114,7 @@ class TestDecideConfigDefaults:
 
         new_config, decisions = applier.decide_config_defaults(config, defaults)
 
-        assert new_config["theme"] == "teal"
+        assert new_config["theme"] == "default"
         assert new_config["features"] == populate_cms.NATIVE_PRICING_FEATURES
         assert "highlight_slug" not in new_config
 

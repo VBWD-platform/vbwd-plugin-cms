@@ -106,7 +106,7 @@ def test_root_tariff_plan_collection_gets_full_styling(db):
 
     assert summary["components"]["TariffPlanCollection"]["status"] == "updated"
     widget = CmsWidgetRepository(db.session).find_by_slug("TariffPlanCollection")
-    assert widget.config["theme"] == "teal"
+    assert widget.config["theme"] == "default"
     assert widget.config["features"] == populate_cms.NATIVE_PRICING_FEATURES
     assert widget.config["highlight_slug"] == "pro"
 
@@ -132,7 +132,7 @@ def test_non_root_tariff_plan_collection_gets_no_highlight(db):
     assert "theme" in filled and "features" in filled
     assert "highlight_slug" not in filled
     widget = CmsWidgetRepository(db.session).find_by_slug("subscription-plans-cards")
-    assert widget.config["theme"] == "teal"
+    assert widget.config["theme"] == "default"
     assert widget.config["features"] == populate_cms.NATIVE_PRICING_FEATURES
     assert "highlight_slug" not in widget.config
 

@@ -190,7 +190,7 @@ class TestLostStandaloneWidgets:
 
 class TestTariffPlanCollectionDefaultStyling:
     """The seeded ``tariff-plan-collection`` widget ships the pricing-card
-    styling as its DEFAULT: ``theme='teal'`` + the shared ``features`` bullets,
+    styling as its DEFAULT: ``theme='default'`` + the shared ``features`` bullets,
     and (being a ``root``-category widget, the only category with a ``pro`` plan)
     ``highlight_slug='pro'``. The features list reuses NATIVE_PRICING_FEATURES —
     it is never retyped. The inert docs mirror must carry the same three keys."""
@@ -201,7 +201,7 @@ class TestTariffPlanCollectionDefaultStyling:
 
     def test_seed_config_carries_default_pricing_card_styling(self):
         config = self._config()
-        assert config["theme"] == "teal"
+        assert config["theme"] == "default"
         assert config["highlight_slug"] == "pro"
         assert config["features"] == populate_cms.NATIVE_PRICING_FEATURES
 
@@ -230,7 +230,7 @@ class TestTariffPlanCollectionDefaultStyling:
         )
         mirror = json.loads(mirror_path.read_text())
         config = mirror["cms_widgets"][0]["config"]
-        assert config["theme"] == "teal"
+        assert config["theme"] == "default"
         assert config["highlight_slug"] == "pro"
         assert config["features"] == populate_cms.NATIVE_PRICING_FEATURES
 

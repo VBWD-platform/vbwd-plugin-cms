@@ -617,12 +617,13 @@ NATIVE_PRICING_CONFIG = {
     "mode": "category",
     "category": "root",
     "plan_slugs": [],
-    # 'teal' is one of Landing1View's ALLOWED_THEMES; 'pro' is a real seeded plan
-    # slug in the 'root' category, so the featured badge/border lands on a card.
+    # 'default' is Landing1View's brand theme (blue #2563eb) — keeps the pricing
+    # cards on-brand with the rest of the site; 'pro' is a real seeded plan slug
+    # in the 'root' category, so the featured badge/border lands on a card.
     # heading/subtitle/cta_label/highlight_badge and image_url are deliberately
     # left UNSET: the first four fall back to i18n keys present in all 8 locales,
     # and image_url would be a dangling reference on a fresh (no media) install.
-    "theme": "teal",
+    "theme": "default",
     "highlight_slug": "pro",
     "features": NATIVE_PRICING_FEATURES,
     "css": NATIVE_PRICING_CSS,
@@ -987,10 +988,10 @@ _STANDALONE_VUE_WIDGETS = [
             "default_view": "cards",
             "heading": "",
             # Default pricing-card styling (shared with NativePricingPlans):
-            # 'teal' theme + the shared feature bullets are universally safe, and
-            # this is a 'root'-category widget — the only category with a 'pro'
-            # plan — so 'pro' resolves to a real card here.
-            "theme": "teal",
+            # 'default' (brand blue) theme + the shared feature bullets are
+            # universally safe, and this is a 'root'-category widget — the only
+            # category with a 'pro' plan — so 'pro' resolves to a real card here.
+            "theme": "default",
             "highlight_slug": "pro",
             "features": NATIVE_PRICING_FEATURES,
         },
