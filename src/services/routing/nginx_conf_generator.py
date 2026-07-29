@@ -1,5 +1,6 @@
 """NginxConfGenerator — produces cms_routing.conf from active nginx-layer rules."""
 import os
+import shutil
 import tempfile
 import subprocess
 from typing import List
@@ -57,16 +58,31 @@ class NginxConfGenerator:
         return "\n".join(lines)
 
     @staticmethod
-    def _wrap_for_validation(conf_str: str) -> str:
+    def _wrap_for_validation(conf_str: str, scratch_dir: str) -> str:
         """Wrap the snippet in a minimal main config so ``nginx -t`` accepts it.
 
-        ``generate()`` emits ``geo``/``map`` blocks, which are http-context
-        directives. The snippet is ``include``d inside the real config's
-        ``http {}`` block, so on its own it is not a valid main config —
-        validating it bare fails with ``"geo" directive is not allowed here``
-        wherever nginx is actually installed.
+        Two things are needed to make ``nginx -t`` a meaningful check here:
+
+        1. ``generate()`` emits ``geo``/``map`` blocks, which are http-context
+           directives. The snippet is ``include``d inside the real config's
+           ``http {}`` block, so on its own it is not a valid main config —
+           validating it bare fails with ``"geo" directive is not allowed
+           here`` wherever nginx is actually installed.
+        2. ``nginx -t`` also *opens* the configured pid and error-log paths.
+           The compiled-in defaults live under ``/run`` and ``/var/log``, which
+           an unprivileged process cannot write, so the test failed with
+           ``open() "/run/nginx.pid" failed (13: Permission denied)`` even
+           after reporting ``syntax is ok``. Pointing both at the scratch
+           directory keeps the check about the config, not about privileges.
         """
-        return f"events {{}}\nhttp {{\n{conf_str}\n}}\n"
+        pid_path = os.path.join(scratch_dir, "nginx-validate.pid")
+        log_path = os.path.join(scratch_dir, "nginx-validate.log")
+        return (
+            f"pid {pid_path};\n"
+            f"error_log {log_path};\n"
+            f"events {{}}\n"
+            f"http {{\n{conf_str}\n}}\n"
+        )
 
     def write_and_validate(self, conf_str: str, path: str) -> None:
         """Write conf to path. Skips nginx -t if nginx is not available."""
@@ -74,9 +90,10 @@ class NginxConfGenerator:
         if parent:
             os.makedirs(parent, exist_ok=True)
         # Validate the snippet in the context it is included into, not bare.
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False) as tf:
-            tf.write(self._wrap_for_validation(conf_str))
-            tmp_path = tf.name
+        scratch_dir = tempfile.mkdtemp(prefix="vbwd-nginx-validate-")
+        tmp_path = os.path.join(scratch_dir, "cms_routing_check.conf")
+        with open(tmp_path, "w") as handle:
+            handle.write(self._wrap_for_validation(conf_str, scratch_dir))
         try:
             result = subprocess.run(
                 ["nginx", "-t", "-c", tmp_path],
@@ -93,10 +110,7 @@ class NginxConfGenerator:
         except subprocess.TimeoutExpired:
             pass
         finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+            shutil.rmtree(scratch_dir, ignore_errors=True)
         # Write to target
         with open(path, "w") as f:
             f.write(conf_str)

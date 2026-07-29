@@ -78,6 +78,52 @@ def test_validation_wraps_the_fragment_in_a_full_config(tmp_path, monkeypatch):
     assert conf.rstrip().endswith("}")
 
 
+def test_validation_redirects_pid_and_log_off_the_privileged_defaults(
+    tmp_path, monkeypatch
+):
+    """``nginx -t`` opens the pid and error-log paths, and the compiled-in
+    defaults (/run, /var/log) are unwritable for an unprivileged process — it
+    fails with EACCES *after* reporting "syntax is ok"."""
+    validated: dict[str, str] = {}
+
+    def _fake_run(argv, **kwargs):
+        conf_path = argv[argv.index("-c") + 1]
+        with open(conf_path) as handle:
+            validated["conf"] = handle.read()
+        validated["dir"] = os.path.dirname(conf_path)
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    NginxConfGenerator().write_and_validate(
+        _fragment(), str(tmp_path / "cms_routing.conf")
+    )
+
+    conf = validated["conf"]
+    assert "pid " in conf and "error_log " in conf
+    # Both must live in the scratch dir beside the temp conf, never the
+    # compiled-in defaults.
+    for line in conf.splitlines():
+        if line.startswith(("pid ", "error_log ")):
+            target = line.split(None, 1)[1].rstrip(";")
+            assert target.startswith(validated["dir"]), target
+            assert not target.startswith(("/run", "/var/log"))
+
+
+def test_scratch_dir_is_cleaned_up(tmp_path, monkeypatch):
+    """The validation scratch directory must not leak on success."""
+    seen: dict[str, str] = {}
+
+    def _fake_run(argv, **kwargs):
+        seen["dir"] = os.path.dirname(argv[argv.index("-c") + 1])
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    NginxConfGenerator().write_and_validate(
+        _fragment(), str(tmp_path / "cms_routing.conf")
+    )
+    assert not os.path.exists(seen["dir"])
+
+
 def test_written_file_is_the_bare_fragment_not_the_wrapper(tmp_path, monkeypatch):
     """The wrapper exists only to validate; the real config includes the
     fragment inside its own ``http`` block."""
