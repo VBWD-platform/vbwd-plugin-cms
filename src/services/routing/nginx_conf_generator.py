@@ -56,14 +56,26 @@ class NginxConfGenerator:
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _wrap_for_validation(conf_str: str) -> str:
+        """Wrap the snippet in a minimal main config so ``nginx -t`` accepts it.
+
+        ``generate()`` emits ``geo``/``map`` blocks, which are http-context
+        directives. The snippet is ``include``d inside the real config's
+        ``http {}`` block, so on its own it is not a valid main config —
+        validating it bare fails with ``"geo" directive is not allowed here``
+        wherever nginx is actually installed.
+        """
+        return f"events {{}}\nhttp {{\n{conf_str}\n}}\n"
+
     def write_and_validate(self, conf_str: str, path: str) -> None:
         """Write conf to path. Skips nginx -t if nginx is not available."""
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
-        # Write to temp file for validation
+        # Validate the snippet in the context it is included into, not bare.
         with tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False) as tf:
-            tf.write(conf_str)
+            tf.write(self._wrap_for_validation(conf_str))
             tmp_path = tf.name
         try:
             result = subprocess.run(
