@@ -25,7 +25,7 @@ from plugins.cms.src.services.seo_registry import SitemapEntry
 
 def _render(lastmod):
     entry = SitemapEntry(loc="https://vbwd.cc/x", lastmod=lastmod)
-    return seo_routes._render_url_element(entry)
+    return seo_routes._render_url_element(entry, "https://vbwd.cc")
 
 
 def _lastmod_value(xml: str):

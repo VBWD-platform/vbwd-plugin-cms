@@ -9,7 +9,8 @@ plugin is enabled via the manifest, so the routes are registered) and assert:
   * registered provider entries render with lastmod/changefreq/hreflang;
   * loc values are XML-escaped;
   * past the 50k cap the sitemap becomes an index + numbered chunk files;
-  * ``/robots.txt`` blocks the app surfaces and names the sitemap, and
+  * ``/robots.txt`` blocks only the private surfaces (S150: CMS content and
+    ``/api/v1/cms/`` stay crawlable) and names the sitemap, and
     ``SEO_MODE=off`` disallows everything.
 
 Engineering requirements (binding, restated): TDD-first (these are the route
@@ -123,12 +124,17 @@ def test_sitemap_page_serves_a_chunk(client):
 
 
 def test_robots_blocks_app_surfaces(client):
-    body = client.get("/robots.txt").get_data(as_text=True)
-    assert "Disallow: /dashboard" in body
-    assert "Disallow: /api" in body
-    assert "Disallow: /admin" in body
-    assert "Sitemap:" in body
-    assert "/sitemap.xml" in body
+    lines = client.get("/robots.txt").get_data(as_text=True).splitlines()
+    assert "Allow: /api/v1/cms/" in lines
+    assert "Disallow: /api/" in lines
+    assert "Disallow: /admin/" in lines
+    assert "Disallow: /dashboard$" in lines
+    assert "Disallow: /dashboard/" in lines
+    for bare_prefix in ("Disallow: /api", "Disallow: /admin", "Disallow: /dashboard"):
+        assert bare_prefix not in lines
+    assert any(
+        line.startswith("Sitemap: ") and line.endswith("/sitemap.xml") for line in lines
+    )
 
 
 def test_robots_mode_off_disallows_all(client, app):

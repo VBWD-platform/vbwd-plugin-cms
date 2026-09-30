@@ -4,7 +4,8 @@ The served ``/robots.txt`` body now honours an admin override:
 
   * ``seo.mode==off`` still forces ``Disallow: /`` (safety wins, unchanged);
   * else a non-empty ``robots_txt`` cms-config value is served **verbatim**;
-  * else the current default template (blocks app surfaces + names sitemap).
+  * else the default template (S150: keeps CMS content crawlable, blocks
+    only the private surfaces, names the sitemap).
 
 These are pure-logic unit tests: a minimal Flask app provides the request
 context + a fake ``config_store`` double (no DB), mirroring the plugin's lazy
@@ -53,10 +54,12 @@ def test_serves_custom_robots_verbatim_when_set(robots_app):
 
 
 def test_serves_default_template_when_robots_txt_empty(robots_app):
-    body = _robots_body(robots_app, {"robots_txt": ""})
-    assert "Disallow: /dashboard" in body
-    assert "Disallow: /api" in body
-    assert "Sitemap:" in body
+    lines = _robots_body(robots_app, {"robots_txt": ""}).splitlines()
+    assert "Disallow: /dashboard$" in lines
+    assert "Disallow: /dashboard/" in lines
+    assert "Allow: /api/v1/cms/" in lines
+    assert "Disallow: /api/" in lines
+    assert "Sitemap: https://example.com/sitemap.xml" in lines
 
 
 def test_mode_off_forces_disallow_all_even_with_custom(robots_app):
@@ -66,8 +69,9 @@ def test_mode_off_forces_disallow_all_even_with_custom(robots_app):
 
 
 def test_no_config_store_falls_back_to_default(robots_app):
-    body = _robots_body(robots_app)
-    assert "Disallow: /dashboard" in body
+    lines = _robots_body(robots_app).splitlines()
+    assert "Disallow: /dashboard$" in lines
+    assert "Disallow: /dashboard/" in lines
 
 
 def _robots_body_http(app, cms_config=None, seo_mode="on"):
@@ -96,3 +100,16 @@ def test_sitemap_line_falls_back_to_request_host_when_unset(robots_app):
     """No public_base_url configured → preserve the legacy request-host behaviour."""
     body = _robots_body_http(robots_app, {"public_base_url": ""})
     assert "Sitemap: http://vbwd.cc/sitemap.xml" in body
+
+
+def test_sitemap_line_keeps_non_default_port(robots_app):
+    """S150 D4: the request-host fallback keeps a non-default port."""
+    app = robots_app
+    app.config["SEO_MODE"] = "on"
+    app.config_store = _FakeConfigStore({"public_base_url": ""})
+    body = (
+        app.test_client()
+        .get("/robots.txt", headers={"Host": "localhost:8080"})
+        .get_data(as_text=True)
+    )
+    assert "Sitemap: http://localhost:8080/sitemap.xml" in body.splitlines()

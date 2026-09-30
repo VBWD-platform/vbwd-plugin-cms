@@ -36,9 +36,11 @@ DEFAULT_CONFIG = {
     # COMPLETE page HTML (layout + content) it returns; empty ⇒ off (the
     # writer keeps its content-only document — current behaviour).
     "prerender_service_url": "",
-    # Admin-editable robots.txt body (S56). Empty ⇒ the default template the
-    # robots() route builds; a non-empty string is served verbatim. seo.mode=off
-    # still forces "Disallow: /" (safety wins).
+    # Admin-editable robots.txt body (S56). Empty ⇒ the default policy
+    # (S150, services/seo_robots_policy.py): "Allow: /", "Allow: /api/v1/cms/",
+    # disallow only /api/, /admin/, /dashboard$ and /dashboard/, plus the
+    # Sitemap line — CMS content stays crawlable. A non-empty string is served
+    # verbatim. seo.mode=off still forces "Disallow: /" (safety wins).
     "robots_txt": "",
     # Sitemap.xml filtering (S56), all read live per request. When
     # sitemap_include_pages is False, type=="page" posts are dropped;

@@ -13,12 +13,14 @@ chunk files (``/sitemap-<n>.xml``), as the sitemaps.org protocol requires.
 """
 import hmac
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from xml.sax.saxutils import escape, quoteattr
 
 from flask import Response, current_app, request
 
 from plugins.cms.src.routes import cms_bp
 from plugins.cms.src.services.seo_registry import aggregate_sitemap_entries
+from plugins.cms.src.services.seo_robots_policy import build_default_robots_txt
 
 # The header nginx (increment 2) injects with the shared secret when it routes a
 # bot request to the internal render route.
@@ -26,8 +28,6 @@ _RENDER_TOKEN_HEADER = "X-VBWD-Render-Token"
 
 # sitemaps.org caps a single sitemap at 50,000 URLs; past that we emit an index.
 SITEMAP_URL_CAP = 50000
-
-_DISALLOWED_SURFACES = ("/dashboard", "/api", "/admin")
 
 
 def _seo_mode() -> str:
@@ -116,8 +116,20 @@ def _w3c_lastmod(value):
     return parsed.isoformat()
 
 
-def _render_url_element(entry) -> str:
-    parts = [f"  <url>\n    <loc>{escape(entry.loc)}</loc>"]
+def _absolute_url(url: str, site_base: str) -> str:
+    """Join a root-relative URL with ``site_base``; absolute URLs pass through.
+
+    sitemaps.org requires fully-qualified ``<loc>``s, but a provider without a
+    request (``public_base_url`` unset) can only emit ``/<path>``.
+    """
+    if urlsplit(url).scheme:
+        return url
+    return f"{site_base}/{url.lstrip('/')}"
+
+
+def _render_url_element(entry, site_base: str) -> str:
+    loc = _absolute_url(entry.loc, site_base)
+    parts = [f"  <url>\n    <loc>{escape(loc)}</loc>"]
     lastmod = _w3c_lastmod(entry.lastmod)
     if lastmod:
         parts.append(f"    <lastmod>{escape(lastmod)}</lastmod>")
@@ -127,7 +139,7 @@ def _render_url_element(entry) -> str:
         parts.append(f"    <priority>{escape(entry.priority)}</priority>")
     for alternate in entry.alternates:
         hreflang = quoteattr(alternate.get("hreflang", ""))
-        href = quoteattr(alternate.get("href", ""))
+        href = quoteattr(_absolute_url(alternate.get("href", ""), site_base))
         parts.append(
             '    <xhtml:link rel="alternate" ' f"hreflang={hreflang} href={href} />"
         )
@@ -135,13 +147,13 @@ def _render_url_element(entry) -> str:
     return "\n".join(parts)
 
 
-def _render_urlset(entries) -> str:
+def _render_urlset(entries, site_base: str) -> str:
     header = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
         'xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
     )
-    rows = "\n".join(_render_url_element(entry) for entry in entries)
+    rows = "\n".join(_render_url_element(entry, site_base) for entry in entries)
     if rows:
         rows += "\n"
     return header + rows + "</urlset>\n"
@@ -175,7 +187,7 @@ def sitemap():
     if len(entries) > SITEMAP_URL_CAP:
         chunk_count = (len(entries) + SITEMAP_URL_CAP - 1) // SITEMAP_URL_CAP
         return _xml_response(_render_sitemap_index(chunk_count))
-    return _xml_response(_render_urlset(entries))
+    return _xml_response(_render_urlset(entries, _site_base()))
 
 
 @cms_bp.route("/sitemap-<int:chunk>.xml", methods=["GET"])
@@ -184,8 +196,8 @@ def sitemap_chunk(chunk: int):
     entries = aggregate_sitemap_entries()
     chunks = list(_chunk(entries, SITEMAP_URL_CAP))
     if chunk < 1 or chunk > len(chunks):
-        return _xml_response(_render_urlset([]))
-    return _xml_response(_render_urlset(chunks[chunk - 1]))
+        return _xml_response(_render_urlset([], _site_base()))
+    return _xml_response(_render_urlset(chunks[chunk - 1], _site_base()))
 
 
 @cms_bp.route("/api/v1/cms/_seo-render", methods=["GET"])
@@ -258,19 +270,18 @@ def indexnow_key_file(key: str):
 
 @cms_bp.route("/robots.txt", methods=["GET"])
 def robots():
-    """Block app surfaces + name the sitemap; ``seo.mode=off`` blocks all."""
+    """Serve ``seo.mode=off`` block-all, else the admin override, else the default.
+
+    The default policy (S150) lives in ``seo_robots_policy``: CMS content stays
+    crawlable, only the private surfaces are disallowed.
+    """
     base = _site_base()
-    sitemap_line = f"Sitemap: {base}/sitemap.xml"
     if _seo_mode() == "off":
-        body = "User-agent: *\nDisallow: /\n\n" + sitemap_line + "\n"
+        body = f"User-agent: *\nDisallow: /\n\nSitemap: {base}/sitemap.xml\n"
         return Response(body, status=200, mimetype="text/plain")
 
     custom = _custom_robots_txt()
     if custom:
         return Response(custom, status=200, mimetype="text/plain")
 
-    lines = ["User-agent: *"]
-    lines.extend(f"Disallow: {surface}" for surface in _DISALLOWED_SURFACES)
-    lines.append("")
-    lines.append(sitemap_line)
-    return Response("\n".join(lines) + "\n", status=200, mimetype="text/plain")
+    return Response(build_default_robots_txt(base), status=200, mimetype="text/plain")

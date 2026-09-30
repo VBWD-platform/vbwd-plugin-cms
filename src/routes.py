@@ -395,11 +395,13 @@ def _search_service() -> SearchService:
 
 def _rss_feed_service() -> RssFeedService:
     # Reuses the same PostService published-post query as the public lists; the
-    # public_base_url / rss_item_limit come from the shared cms config.
+    # public_base_url / rss_item_limit come from the shared cms config; when no
+    # base is configured, links fall back to the request host (S150) so item
+    # links are absolute, as RSS readers and crawlers require.
     config = _cms_config()
     return RssFeedService(
         post_service=_post_service(),
-        public_base_url=config.get("public_base_url", ""),
+        public_base_url=config.get("public_base_url") or request.host_url,
         item_limit=config.get("rss_item_limit", 20),
     )
 

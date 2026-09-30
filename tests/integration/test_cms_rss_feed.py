@@ -167,3 +167,16 @@ class TestUnknownTerm:
         channel = _channel(resp)
         assert channel.findtext("title")
         assert channel.find("item") is None
+
+
+class TestAbsoluteLinks:
+    """S150: with ``public_base_url`` unset, links fall back to the request host
+    (RSS readers and crawlers cannot resolve root-relative item links)."""
+
+    def test_links_are_absolute_on_request_host(self, client, db, seeded):
+        resp = client.get("/api/v1/cms/rss.xml", headers={"Host": "localhost:8080"})
+        channel = _channel(resp)
+        links = [channel.findtext("link")] + [
+            item.findtext("link") for item in channel.findall("item")
+        ]
+        assert all(link and link.startswith("http") for link in links), links
