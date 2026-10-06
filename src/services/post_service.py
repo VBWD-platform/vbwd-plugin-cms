@@ -502,6 +502,31 @@ class PostService:
             post.id,
         )
 
+    def list_public_translations(self, post: Dict[str, Any]) -> List[Dict[str, str]]:
+        """The post's published translation siblings as ``{language, slug, url}``.
+
+        One repository query (the same one the SEO hreflang loader uses); each
+        ``url`` follows the shared canonical rule the sitemap alternates use, so
+        the public switcher and hreflang always agree (S152 W3).
+        """
+        translation_group_id = post.get("translation_group_id")
+        if not translation_group_id:
+            return []
+        public_base_url = self._permalink_config.get("public_base_url", "")
+        siblings = self._repo.find_published_translation_siblings(
+            translation_group_id, post["id"]
+        )
+        return [
+            {
+                "language": sibling.language,
+                "slug": sibling.slug,
+                "url": derive_canonical_url(
+                    sibling.canonical_url, sibling.slug, public_base_url
+                ),
+            }
+            for sibling in siblings
+        ]
+
     def _apply_content_blocks(self, post_id: Any, data: Dict[str, Any]) -> None:
         """Upsert any additional content areas carried in the payload (S55).
 

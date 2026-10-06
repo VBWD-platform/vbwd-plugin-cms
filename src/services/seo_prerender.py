@@ -175,7 +175,10 @@ class SeoPrerenderWriter:
 
         renderable = RenderablePost(
             post,
-            siblings=[RenderableSibling(s.language, s.canonical_url) for s in siblings],
+            siblings=[
+                RenderableSibling(sibling.language, sibling.canonical_url, sibling.slug)
+                for sibling in siblings
+            ],
             robots_override=robots_override,
             public_base_url=self._public_base_url,
             home_slug=self._home_slug,

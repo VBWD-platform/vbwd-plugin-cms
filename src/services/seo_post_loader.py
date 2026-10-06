@@ -2,15 +2,16 @@
 
 Both SEO consumers are pure (no ORM). This loader is the single glue that
 reads ``cms_post`` rows, their attached terms (for the exclusion-inheritance
-predicate), and their translation siblings (for hreflang) from a SQLAlchemy
-session. Keeping the loader separate keeps the writer/provider unit-testable
-with simple doubles.
+predicate), and their PUBLISHED translation siblings (for hreflang — a draft
+is never an alternate) from a SQLAlchemy session. Keeping the loader separate
+keeps the writer/provider unit-testable with simple doubles.
 """
 from typing import List, Optional, Tuple
 
 from plugins.cms.src.models.cms_post import CmsPost, POST_STATUS_PUBLISHED
 from plugins.cms.src.models.cms_term import CmsTerm
 from plugins.cms.src.models.cms_post_term import CmsPostTerm
+from plugins.cms.src.repositories.post_repository import PostRepository
 
 
 class _Sibling:
@@ -66,12 +67,7 @@ class SeoPostLoader:
     def siblings_for(self, post: CmsPost) -> List[_Sibling]:
         if not post.translation_group_id:
             return []
-        rows = (
-            self._session.query(CmsPost)
-            .filter(
-                CmsPost.translation_group_id == post.translation_group_id,
-                CmsPost.id != post.id,
-            )
-            .all()
+        rows = PostRepository(self._session).find_published_translation_siblings(
+            post.translation_group_id, post.id
         )
         return [_Sibling(row.language, row.canonical_url, row.slug) for row in rows]

@@ -331,6 +331,26 @@ class PostRepository:
             .all()
         )
 
+    def find_published_translation_siblings(
+        self, translation_group_id: Any, exclude_post_id: Any
+    ) -> List[CmsPost]:
+        """Published posts of one translation group, minus one post, by language.
+
+        The ONE sibling query shared by the SEO hreflang loader and the public
+        single-post ``translations`` field (S152 W3) — a draft sibling is never
+        linked from either.
+        """
+        return (
+            self.session.query(CmsPost)
+            .filter(
+                CmsPost.translation_group_id == translation_group_id,
+                CmsPost.id != exclude_post_id,
+                CmsPost.status == POST_STATUS_PUBLISHED,
+            )
+            .order_by(CmsPost.language)
+            .all()
+        )
+
     def find_all_by_type(self, post_type: str) -> List[CmsPost]:
         """Every post of one type, any status — used by the permalink-repair
         maintenance command. Deterministically ordered so a collision between two

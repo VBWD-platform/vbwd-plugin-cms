@@ -18,10 +18,16 @@ NOINDEX_ROBOTS = "noindex,nofollow"
 
 @dataclass
 class RenderableSibling:
-    """A translation sibling for hreflang generation."""
+    """A translation sibling for hreflang generation.
+
+    ``slug`` lets ``RenderablePost`` derive the sibling's URL when it has no
+    stored ``canonical_url`` (the same rule the sitemap alternates and the
+    public ``translations`` payload use).
+    """
 
     language: str
     canonical_url: Optional[str]
+    slug: Optional[str] = None
 
 
 class RenderablePost:
@@ -56,7 +62,19 @@ class RenderablePost:
         self.schema_json = post.schema_json
         self.schema_type = WEBPAGE_SCHEMA_TYPE
         self.robots = robots_override or post.robots
-        self.translation_siblings = siblings or []
+        # Siblings follow the SAME derivation (no ``home_slug``, matching the
+        # sitemap alternates and the public ``translations`` URLs), so a sibling
+        # without a stored canonical is derived rather than dropped (S152 W3b).
+        self.translation_siblings = [
+            RenderableSibling(
+                sibling.language,
+                derive_canonical_url(
+                    sibling.canonical_url, sibling.slug, public_base_url
+                ),
+                sibling.slug,
+            )
+            for sibling in siblings or []
+        ]
 
     def is_search_visible(self) -> bool:
         return "noindex" not in (self.robots or "").lower()

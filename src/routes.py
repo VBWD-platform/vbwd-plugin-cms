@@ -92,6 +92,7 @@ from plugins.cms.src.repositories.routing_rule_repository import (
 )
 from plugins.cms.src.repositories.search_repository import SearchRepository
 from plugins.cms.src.services.search_service import SearchService
+from plugins.cms.src.services.public_payload import public_payload
 from plugins.cms.src.services.post_service import (
     PostService,
     PostNotFoundError,
@@ -1888,7 +1889,7 @@ def public_get_entity_page(owner_type: str, owner_id: str, slot: str = "main"):
     view = _entity_page_service().public_view(owner_type, owner_id, slot)
     if view is None:
         return jsonify({"error": "Not found"}), 404
-    return jsonify(view), 200
+    return jsonify(public_payload(view)), 200
 
 
 @cms_bp.route("/api/v1/admin/cms/posts/<post_id>/widgets", methods=["GET"])
@@ -2451,7 +2452,7 @@ def public_list_posts():
             page=page,
             per_page=per_page,
         )
-    return jsonify(result), 200
+    return jsonify(public_payload(result)), 200
 
 
 @cms_bp.route("/api/v1/cms/posts/<path:slug>", methods=["GET"])
@@ -2463,21 +2464,26 @@ def public_get_post(slug: str):
     A matching ``?preview_token=`` returns the post regardless of status, so an
     admin can preview a draft/pending/scheduled/private/trash post via a
     shareable link (the editor's "Preview" button).
+
+    ``translations`` lists the post's PUBLISHED translation siblings as
+    ``{language, slug, url}`` (S152 W3) — even when previewing a draft.
     """
     post_type = request.args.get("type", "page")
     preview_token = request.args.get("preview_token")
-    post = _post_service().resolve_published_path(post_type, slug)
+    post_service = _post_service()
+    post = post_service.resolve_published_path(post_type, slug)
     if not post:
         return jsonify({"error": "Post not found"}), 404
     _enrich_public_post_areas(post)
     _append_core_tags_and_custom_fields(post)
+    post["translations"] = post_service.list_public_translations(post)
     if preview_token:
         if post.get("preview_token") and post["preview_token"] == preview_token:
-            return jsonify(post), 200
+            return jsonify(public_payload(post)), 200
         return jsonify({"error": "Invalid preview token"}), 403
     if not _post_is_publicly_visible(post):
         return jsonify({"error": "Post not found"}), 404
-    return jsonify(post), 200
+    return jsonify(public_payload(post)), 200
 
 
 @cms_bp.route("/api/v1/cms/terms", methods=["GET"])
@@ -2551,7 +2557,7 @@ def public_resolve_archive(prefix: str):
         return jsonify({"error": f"Archive '{prefix}' not found"}), 404
     result["prefix"] = normalized
     result["title"] = _archive_title(normalized)
-    return jsonify(result), 200
+    return jsonify(public_payload(result)), 200
 
 
 @cms_bp.route("/api/v1/cms/embed-manifest", methods=["GET"])
@@ -2652,7 +2658,7 @@ def public_search_posts():
         page=page,
         per_page=per_page,
     )
-    return jsonify(result), 200
+    return jsonify(public_payload(result)), 200
 
 
 @cms_bp.route("/api/v1/cms/rss.xml", methods=["GET"])
