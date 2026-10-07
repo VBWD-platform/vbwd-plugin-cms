@@ -44,6 +44,21 @@ def test_default_matcher_matches():
     assert m.matches(_rule("default"), _ctx()) is True
 
 
+def test_default_matcher_matches_index_html():
+    m = DefaultMatcher()
+    assert m.matches(_rule("default"), _ctx(path="/index.html")) is True
+
+
+def test_default_matcher_applies_only_at_the_site_root():
+    """Mirrors the fe-user middlewareRoutingGuard: a `default` rule applies at
+    `/` (or `/index.html`) only — never to every path, or a rule targeting
+    `home` would redirect /home to itself once the backend sees HTML
+    navigations (S152 nginx router)."""
+    m = DefaultMatcher()
+    for path in ("/home", "/about", "/shop", "/blog/post"):
+        assert m.matches(_rule("default"), _ctx(path=path)) is False, path
+
+
 def test_default_matcher_wrong_type():
     m = DefaultMatcher()
     assert m.matches(_rule("language", "de"), _ctx()) is False

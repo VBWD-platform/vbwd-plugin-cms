@@ -147,6 +147,8 @@ class CmsRoutingService:
                     if rule.target_slug.startswith("/")
                     else f"/{rule.target_slug}"
                 )
+                if _is_self_redirect(ctx, location):
+                    continue
                 return RedirectInstruction(
                     location=location,
                     code=rule.redirect_code,
@@ -184,3 +186,8 @@ class CmsRoutingService:
                 errors.append(f"layer must be one of {sorted(self.VALID_LAYERS)}")
         if errors:
             raise ValueError("; ".join(errors))
+
+
+def _is_self_redirect(ctx: RequestContext, location: str) -> bool:
+    """True when the redirect points at the current path — it would loop forever."""
+    return location.split("?", 1)[0] == ctx.path

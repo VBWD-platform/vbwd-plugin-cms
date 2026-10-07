@@ -19,9 +19,15 @@ class RedirectInstruction:
     is_rewrite: bool
 
 
+# A `default` rule applies at the site root only — the same semantics as the
+# fe-user middlewareRoutingGuard. Matching every path made a rule targeting
+# `home` redirect /home to itself once the backend received HTML navigations.
+DEFAULT_RULE_PATHS = frozenset({"/", "/index.html"})
+
+
 class DefaultMatcher:
     def matches(self, rule, ctx: RequestContext) -> bool:
-        return rule.match_type == "default"
+        return rule.match_type == "default" and ctx.path in DEFAULT_RULE_PATHS
 
 
 class LanguageMatcher:

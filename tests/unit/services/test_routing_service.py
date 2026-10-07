@@ -245,3 +245,55 @@ def test_evaluate_no_match_returns_none():
     )
     instruction = svc.evaluate(ctx)
     assert instruction is None
+
+
+def _path_ctx(path):
+    return RequestContext(
+        path=path,
+        accept_language="en-US",
+        remote_addr="127.0.0.1",
+        geoip_country=None,
+        cookie_lang=None,
+    )
+
+
+def test_evaluate_default_rule_redirects_only_the_root():
+    rule = _make_rule(match_type="default", match_value=None, target_slug="home")
+    svc, _, _ = _make_service([rule])
+    assert svc.evaluate(_path_ctx("/")).location == "/home"
+    assert svc.evaluate(_path_ctx("/home")) is None
+    assert svc.evaluate(_path_ctx("/about")) is None
+
+
+def test_evaluate_skips_a_redirect_to_the_current_path():
+    """A rule whose target is the current path would loop forever — skip it."""
+    rule = _make_rule(
+        match_type="path_prefix", match_value="/blog", target_slug="/blog/archive"
+    )
+    svc, _, _ = _make_service([rule])
+    assert svc.evaluate(_path_ctx("/blog/some-post")).location == "/blog/archive"
+    assert svc.evaluate(_path_ctx("/blog/archive")) is None
+
+
+def test_evaluate_language_rule_does_not_redirect_its_own_target():
+    rule = _make_rule(match_type="language", match_value="de", target_slug="home-de")
+    svc, _, _ = _make_service([rule])
+    ctx = RequestContext(
+        path="/home-de",
+        accept_language="de-DE,de;q=0.9",
+        remote_addr="127.0.0.1",
+        geoip_country=None,
+        cookie_lang=None,
+    )
+    assert svc.evaluate(ctx) is None
+
+
+def test_evaluate_falls_through_to_the_next_rule_after_a_self_redirect():
+    looping = _make_rule(
+        match_type="path_prefix", match_value="/docs", target_slug="/docs/old"
+    )
+    good = _make_rule(
+        match_type="path_exact", match_value="/docs/old", target_slug="/guide"
+    )
+    svc, _, _ = _make_service([looping, good])
+    assert svc.evaluate(_path_ctx("/docs/old")).location == "/guide"
