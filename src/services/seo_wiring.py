@@ -34,6 +34,11 @@ from plugins.cms.src.services.render_cache import InMemoryTtlRenderCache
 from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
 from plugins.cms.src.services.seo_post_loader import SeoPostLoader
 from plugins.cms.src.services.seo_prerender import SeoPrerenderWriter
+from plugins.cms.src.services.seo_scope import (
+    PRIVATE_PATH_PREFIXES_CONFIG_KEY,
+    path_is_private,
+    resolve_private_path_prefixes,
+)
 from plugins.cms.src.services.seo_sitemap_provider import CmsSitemapProvider
 
 logger = logging.getLogger(__name__)
@@ -165,6 +170,7 @@ _SITEMAP_CONFIG_KEYS = (
     "sitemap_excluded_slugs",
     "sitemap_include_terms",
     "sitemap_exclude_terms",
+    PRIVATE_PATH_PREFIXES_CONFIG_KEY,
 )
 
 
@@ -187,6 +193,29 @@ def _sitemap_config() -> dict:
     except Exception as exc:  # pragma: no cover - defensive (no app context)
         logger.warning("[cms.seo] sitemap config lookup failed: %s", exc)
         return {}
+
+
+def _private_path_prefixes() -> tuple:
+    """Resolve the cms ``seo_private_path_prefixes`` from live config (lazy).
+
+    Read per call (mirroring ``_sitemap_config``); a key the operator never
+    saved falls back to the shipped defaults (``/dashboard``, ``/tuktuk``,
+    ``/pay``, ``/software``), so private areas stay unindexed on a fresh install.
+    """
+    try:
+        from flask import current_app
+
+        config_store = getattr(current_app, "config_store", None)
+        cfg = (config_store.get_config("cms") if config_store else None) or {}
+        return resolve_private_path_prefixes(cfg)
+    except Exception as exc:  # pragma: no cover - defensive (no app context)
+        logger.warning("[cms.seo] private path prefixes lookup failed: %s", exc)
+        return resolve_private_path_prefixes({})
+
+
+def seo_render_path_is_private(path: str) -> bool:
+    """True when the on-demand render must refuse ``path`` (a private area)."""
+    return path_is_private(path, _private_path_prefixes())
 
 
 def _seo_prerender_enabled() -> bool:
@@ -406,6 +435,7 @@ def _build_writer() -> SeoPrerenderWriter:
         minifier=PrerenderMinifier() if _minify_prerender_output() else None,
         public_base_url=_public_base_url(),
         home_slug=_home_slug(),
+        private_path_prefixes=_private_path_prefixes(),
     )
 
 

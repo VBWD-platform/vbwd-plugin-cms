@@ -19,7 +19,8 @@ The document is ``<head>`` (meta-builder) + ``<body><div id="app">{content}</div
 import json
 import logging
 import os
-from typing import Any, Callable, List, Optional
+import re
+from typing import Any, Callable, List, Optional, Sequence
 
 from vbwd.services.filesystem.local import LocalFilesystemManager
 
@@ -35,7 +36,11 @@ from plugins.cms.src.services.seo_renderable_post import (
     RenderablePost,
     RenderableSibling,
 )
-from plugins.cms.src.services.seo_scope import page_is_search_visible
+from plugins.cms.src.services.seo_scope import (
+    DEFAULT_PRIVATE_PATH_PREFIXES,
+    ScopeView,
+    page_is_search_visible,
+)
 from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED
 
 logger = logging.getLogger(__name__)
@@ -45,6 +50,12 @@ logger = logging.getLogger(__name__)
 # write atomic (temp+fsync+replace — no torn reads) and path-confined (the slug
 # becomes a confined relative path; ``..``/absolute/traversal is rejected).
 SEO_NAMESPACE = "seo"
+
+# Every ``<meta name="robots" …>`` tag, whatever its attribute order/quoting.
+_ROBOTS_META_PATTERN = re.compile(
+    r"<meta\b[^>]*\bname\s*=\s*([\"']?)robots\1(?=[\s/>])[^>]*>", re.IGNORECASE
+)
+_HEAD_OPEN_PATTERN = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
 
 
 class SeoPrerenderWriter:
@@ -73,6 +84,7 @@ class SeoPrerenderWriter:
         minifier: Optional[PrerenderMinifier] = None,
         public_base_url: str = "",
         home_slug: Optional[str] = None,
+        private_path_prefixes: Sequence[str] = DEFAULT_PRIVATE_PATH_PREFIXES,
     ) -> None:
         self._filesystem_manager = filesystem_manager or LocalFilesystemManager(
             var_root=var_dir
@@ -106,6 +118,8 @@ class SeoPrerenderWriter:
         # renderable so the pure meta-builder stays base-URL agnostic.
         self._public_base_url = public_base_url
         self._home_slug = home_slug
+        # Path prefixes (``/software`` …) whose posts are never search-visible.
+        self._private_path_prefixes = private_path_prefixes
 
     # ── event entry point ────────────────────────────────────────────────
 
@@ -148,6 +162,9 @@ class SeoPrerenderWriter:
     # ── file ops ─────────────────────────────────────────────────────────
 
     def _write(self, post, terms, siblings) -> None:
+        searchable = page_is_search_visible(
+            ScopeView(post, terms), self._private_path_prefixes
+        )
         # Prefer the COMPLETE page HTML from the external renderer when one is
         # configured. The rendered HTML is captured from the live SPA and is
         # self-contained (already carries head meta + the hashed asset tags),
@@ -161,6 +178,10 @@ class SeoPrerenderWriter:
             else None
         )
         if isinstance(rendered, str) and rendered:
+            # The captured SPA carries the post's own robots value; a post that
+            # is not search-visible (e.g. a private path) must not leak it.
+            if not searchable:
+                rendered = force_noindex_robots_meta(rendered)
             # The full render is HTML too, so honour the same minify toggle the
             # content-only branch below applies (DRY: one minifier, both paths).
             if self._minifier is not None:
@@ -170,7 +191,6 @@ class SeoPrerenderWriter:
             )
             return
 
-        searchable = page_is_search_visible(_ScopeView(post, terms))
         robots_override = None if searchable else NOINDEX_ROBOTS
 
         renderable = RenderablePost(
@@ -274,6 +294,21 @@ class SeoPrerenderWriter:
         )
 
 
+def force_noindex_robots_meta(html: str) -> str:
+    """Replace every robots meta tag in ``html`` with a single noindex one.
+
+    Inserted right after ``<head>`` (else at the very start) so the captured
+    page can never advertise ``index,follow`` for a non-search-visible post.
+    """
+    noindex_tag = f'<meta name="robots" content="{NOINDEX_ROBOTS}" />'
+    without_robots = _ROBOTS_META_PATTERN.sub("", html)
+    head_open = _HEAD_OPEN_PATTERN.search(without_robots)
+    if head_open is None:
+        return noindex_tag + without_robots
+    insert_at = head_open.end()
+    return without_robots[:insert_at] + noindex_tag + without_robots[insert_at:]
+
+
 def _mark_ssr(head_tag: str) -> str:
     """Tag a server-emitted ``<meta>``/``<link>`` with ``data-seo="ssr"``.
 
@@ -286,13 +321,3 @@ def _mark_ssr(head_tag: str) -> str:
     if head_tag.startswith("<meta") or head_tag.startswith("<link"):
         return head_tag.replace("/>", 'data-seo="ssr" />', 1)
     return head_tag
-
-
-class _ScopeView:
-    """Adapts (post, terms) into the duck-typed shape the predicate expects."""
-
-    def __init__(self, post, terms) -> None:
-        self.status = post.status
-        self.seo_excluded = post.seo_excluded
-        self.robots = post.robots
-        self.terms = terms or []

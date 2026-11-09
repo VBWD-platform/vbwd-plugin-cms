@@ -51,6 +51,10 @@ DEFAULT_CONFIG = {
     "sitemap_excluded_slugs": [],
     "sitemap_include_terms": [],
     "sitemap_exclude_terms": [],
+    # Private app areas never indexed: posts under these path prefixes are
+    # dropped from the sitemap, prerendered noindex, and refused by the
+    # on-demand bot render (segment-aware: "/pay" never matches "/payments").
+    "seo_private_path_prefixes": ["/dashboard", "/tuktuk", "/pay", "/software"],
     "debug_mode": False,
 }
 

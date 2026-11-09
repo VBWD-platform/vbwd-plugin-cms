@@ -113,3 +113,51 @@ def test_seo_render_disabled_when_token_empty(client, db):
         headers={"X-VBWD-Render-Token": ""},
     )
     assert response.status_code == 404
+
+
+# ── private paths (/dashboard, /tuktuk, /pay, /software) are never rendered ────
+
+
+def test_seo_render_404_for_private_path_without_rendering(client, db):
+    _configure()
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _http_response()
+        for private_path in ("/software", "/software/payments", "/pay", "/dashboard"):
+            response = client.get(
+                f"{RENDER_URL}?path={private_path}",
+                headers={"X-VBWD-Render-Token": _TOKEN},
+            )
+            assert response.status_code == 404, private_path
+    get.assert_not_called()
+
+
+def test_seo_render_still_serves_non_private_sibling_path(client, db):
+    _configure()
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _http_response()
+        response = client.get(
+            f"{RENDER_URL}?path=/softwarex",
+            headers={"X-VBWD-Render-Token": _TOKEN},
+        )
+    assert response.status_code == 200
+
+
+def test_seo_render_private_prefixes_follow_saved_config(client, db):
+    _configure()
+    store = current_app.config_store
+    config = store.get_config("cms") or {}
+    config["seo_private_path_prefixes"] = []
+    store.save_config("cms", config)
+    try:
+        with patch(
+            "plugins.cms.src.services.seo_full_page_renderer.requests.get"
+        ) as get:
+            get.return_value = _http_response()
+            response = client.get(
+                f"{RENDER_URL}?path=/software",
+                headers={"X-VBWD-Render-Token": _TOKEN},
+            )
+        assert response.status_code == 200
+    finally:
+        config.pop("seo_private_path_prefixes", None)
+        store.save_config("cms", config)

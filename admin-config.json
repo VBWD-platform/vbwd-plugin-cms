@@ -95,6 +95,13 @@
           "description": "When on, content changes write prerendered SEO HTML for crawlers. SPA only if switched off."
         },
         {
+          "key": "seo_private_path_prefixes",
+          "label": "Private Path Prefixes (never indexed)",
+          "component": "input",
+          "inputType": "text",
+          "description": "Comma-separated URL path prefixes kept out of search: no sitemap entry, noindex prerender, no bot render. Default: /dashboard,/tuktuk,/pay,/software"
+        },
+        {
           "key": "debug_mode",
           "label": "Debug Mode",
           "component": "switch",

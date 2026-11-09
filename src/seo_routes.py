@@ -212,11 +212,16 @@ def seo_dynamic_render():
     so the route requires the ``X-VBWD-Render-Token`` shared secret (injected by
     nginx). A missing/wrong token — or an empty configured token, or the feature
     switched off / no renderer URL — returns **404** (the route is not revealed).
+
+    A path under a private prefix (``seo_private_path_prefixes``: ``/dashboard``,
+    ``/tuktuk``, ``/pay``, ``/software``) is never rendered for bots: **404**, so
+    nginx falls back to its noindex-tagged shell instead of an indexable page.
     """
     from plugins.cms.src.services.seo_wiring import (
         build_dynamic_render_service,
         seo_dynamic_render_available,
         seo_render_internal_token,
+        seo_render_path_is_private,
     )
 
     token = seo_render_internal_token()
@@ -228,6 +233,8 @@ def seo_dynamic_render():
         return Response("", status=404)
 
     path = request.args.get("path") or "/"
+    if seo_render_path_is_private(path):
+        return Response("", status=404)
     html = build_dynamic_render_service().render(path)
     if html is None:
         return Response("", status=502)

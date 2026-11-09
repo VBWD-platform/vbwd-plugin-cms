@@ -15,7 +15,11 @@ from typing import Callable, List, Optional
 
 from plugins.cms.src.services.seo_canonical import derive_canonical_url
 from plugins.cms.src.services.seo_registry import SitemapEntry
-from plugins.cms.src.services.seo_scope import page_is_search_visible
+from plugins.cms.src.services.seo_scope import (
+    ScopeView,
+    page_is_search_visible,
+    resolve_private_path_prefixes,
+)
 
 
 class CmsSitemapProvider:
@@ -46,10 +50,12 @@ class CmsSitemapProvider:
 
     def sitemap_entries(self) -> List[SitemapEntry]:
         config = self._sitemap_config_provider() or {}
+        private_path_prefixes = resolve_private_path_prefixes(config)
         entries: List[SitemapEntry] = []
         for post in self._post_loader.iter_candidate_posts():
             terms = self._post_loader.terms_for(post)
-            if not page_is_search_visible(_ScopeView(post, terms)):
+            scope_view = ScopeView(post, terms)
+            if not page_is_search_visible(scope_view, private_path_prefixes):
                 continue
             if self._is_config_excluded(post, terms, config):
                 continue
@@ -104,13 +110,3 @@ class CmsSitemapProvider:
             alternates.append({"hreflang": sibling.language, "href": sibling_loc})
         alternates.append({"hreflang": "x-default", "href": loc})
         return alternates
-
-
-class _ScopeView:
-    """Adapts (post, terms) into the duck-typed shape the predicate expects."""
-
-    def __init__(self, post, terms) -> None:
-        self.status = post.status
-        self.seo_excluded = post.seo_excluded
-        self.robots = post.robots
-        self.terms = terms or []

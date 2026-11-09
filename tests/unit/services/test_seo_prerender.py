@@ -470,3 +470,87 @@ def test_missing_post_is_a_noop(tmp_path):
     )
     # Trash/delete must still remove any stale file keyed by the event slug.
     assert not _seo_file(tmp_path, "pricing").exists()
+
+
+# ── private paths (/dashboard, /tuktuk, /pay, /software) are always noindex ────
+
+_INDEXABLE_FULL_PAGE_HTML = (
+    '<!doctype html><html lang="en"><head><title>Software</title>'
+    '<meta data-seo="ssr" name="robots" content="index,follow">'
+    "<meta name='ROBOTS' content='index' />"
+    "</head><body><main>Software</main></body></html>"
+)
+
+
+def _private_post(slug="software"):
+    return _Post(slug=slug, canonical_url=f"https://x/{slug}")
+
+
+def test_content_document_for_private_path_is_noindex(tmp_path):
+    post = _private_post()
+    writer = _writer(tmp_path, [post])
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "software").read_text()
+    assert 'content="noindex,nofollow"' in html
+    assert 'content="index,follow"' not in html
+    assert '"robots": "noindex,nofollow"' in html
+
+
+def test_full_page_render_for_private_path_is_forced_noindex(tmp_path):
+    post = _private_post("software/payments")
+    renderer = _StubFullPageRenderer(_INDEXABLE_FULL_PAGE_HTML)
+    writer = _writer(tmp_path, [post], full_page_renderer=renderer)
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "software/payments").read_text()
+    assert html.count('name="robots"') == 1
+    assert '<meta name="robots" content="noindex,nofollow" />' in html
+    assert "index,follow" not in html
+    assert "content='index'" not in html
+    # The rest of the captured page is preserved.
+    assert "<main>Software</main>" in html
+
+
+def test_full_page_render_for_excluded_post_is_forced_noindex(tmp_path):
+    post = _Post(seo_excluded=True)
+    renderer = _StubFullPageRenderer(_FULL_PAGE_HTML)
+    writer = _writer(tmp_path, [post], full_page_renderer=renderer)
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "pricing").read_text()
+    assert '<meta name="robots" content="noindex,nofollow" />' in html
+
+
+def test_private_path_rule_is_config_driven_in_writer(tmp_path):
+    post = _private_post()
+    writer = _writer(tmp_path, [post], private_path_prefixes=())
+    writer.handle_content_changed(_event(post))
+
+    html = _seo_file(tmp_path, "software").read_text()
+    assert 'content="index,follow"' in html
+    assert "noindex" not in html
+
+
+def test_force_noindex_leaves_other_meta_and_header_tags_alone():
+    from plugins.cms.src.services.seo_prerender import force_noindex_robots_meta
+
+    html = (
+        '<html><head><meta name="googlebot" content="index">'
+        '<meta name="robots-hint" content="x"></head>'
+        "<body><header>NAV</header></body></html>"
+    )
+    forced = force_noindex_robots_meta(html)
+    assert forced.startswith(
+        '<html><head><meta name="robots" content="noindex,nofollow" />'
+    )
+    assert '<meta name="googlebot" content="index">' in forced
+    assert '<meta name="robots-hint" content="x">' in forced
+    assert "<header>NAV</header>" in forced
+
+
+def test_force_noindex_prepends_when_document_has_no_head():
+    from plugins.cms.src.services.seo_prerender import force_noindex_robots_meta
+
+    forced = force_noindex_robots_meta("<main>X</main>")
+    assert forced == '<meta name="robots" content="noindex,nofollow" /><main>X</main>'

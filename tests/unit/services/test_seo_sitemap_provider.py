@@ -142,3 +142,28 @@ def test_includes_hreflang_alternates():
     assert "de" in hreflangs
     assert "en" in hreflangs
     assert "x-default" in hreflangs
+
+
+# ── private paths (/dashboard, /tuktuk, /pay, /software) are never advertised ──
+
+
+def _slugged_posts(*slugs):
+    return [
+        _Post(id=slug, slug=slug, canonical_url=f"https://x/{slug}") for slug in slugs
+    ]
+
+
+def test_private_path_posts_are_excluded_by_default():
+    posts = _slugged_posts("software", "software/payments", "pay", "softwarex")
+    posts += _slugged_posts("payments-guide")
+    entries = CmsSitemapProvider(_Loader(posts)).sitemap_entries()
+    assert sorted(entry.loc for entry in entries) == [
+        "https://x/payments-guide",
+        "https://x/softwarex",
+    ]
+
+
+def test_private_path_rule_is_config_driven():
+    posts = _slugged_posts("software", "software/payments")
+    provider = _provider(posts, {"seo_private_path_prefixes": []})
+    assert len(provider.sitemap_entries()) == 2

@@ -6,7 +6,12 @@ the prerender writer, and the sitemap provider. No consumer re-implements it.
 from dataclasses import dataclass, field
 from typing import List
 
-from plugins.cms.src.services.seo_scope import page_is_search_visible
+from plugins.cms.src.services.seo_scope import (
+    DEFAULT_PRIVATE_PATH_PREFIXES,
+    page_is_search_visible,
+    path_is_private,
+    resolve_private_path_prefixes,
+)
 from plugins.cms.src.models.cms_post import (
     POST_STATUS_PUBLISHED,
     POST_STATUS_DRAFT,
@@ -62,3 +67,73 @@ def test_non_published_statuses_not_visible():
         POST_STATUS_TRASH,
     ):
         assert page_is_search_visible(_Post(status=status)) is False
+
+
+# ── private-path rule: /dashboard, /tuktuk, /pay, /software are never indexed ──
+
+
+@dataclass
+class _SluggedPost(_Post):
+    slug: str = "pricing"
+
+
+def test_default_private_prefixes_cover_the_private_areas():
+    assert set(DEFAULT_PRIVATE_PATH_PREFIXES) == {
+        "/dashboard",
+        "/tuktuk",
+        "/pay",
+        "/software",
+    }
+
+
+def test_path_under_private_prefix_is_private():
+    prefixes = DEFAULT_PRIVATE_PATH_PREFIXES
+    assert path_is_private("/software", prefixes) is True
+    assert path_is_private("software", prefixes) is True
+    assert path_is_private("software/payments", prefixes) is True
+    assert path_is_private("/pay/checkout?step=2", prefixes) is True
+    assert path_is_private("/dashboard/", prefixes) is True
+    assert path_is_private("/TukTuk/reports", prefixes) is True
+
+
+def test_private_prefix_match_is_segment_aware():
+    prefixes = DEFAULT_PRIVATE_PATH_PREFIXES
+    assert path_is_private("/softwarex", prefixes) is False
+    assert path_is_private("/payments", prefixes) is False
+    assert path_is_private("payments-guide", prefixes) is False
+    assert path_is_private("/blog/software", prefixes) is False
+    assert path_is_private("/", prefixes) is False
+
+
+def test_blank_prefix_never_makes_everything_private():
+    assert path_is_private("/pricing", ["", "/", "  "]) is False
+
+
+def test_resolve_prefixes_defaults_when_key_absent():
+    assert resolve_private_path_prefixes({}) == DEFAULT_PRIVATE_PATH_PREFIXES
+
+
+def test_resolve_prefixes_honours_saved_override():
+    config = {"seo_private_path_prefixes": []}
+    assert resolve_private_path_prefixes(config) == ()
+    config = {"seo_private_path_prefixes": ["members/", "/vip"]}
+    assert resolve_private_path_prefixes(config) == ("/members", "/vip")
+
+
+def test_resolve_prefixes_accepts_comma_separated_string():
+    config = {"seo_private_path_prefixes": "/pay, software ,"}
+    assert resolve_private_path_prefixes(config) == ("/pay", "/software")
+
+
+def test_post_under_private_path_is_not_search_visible():
+    prefixes = DEFAULT_PRIVATE_PATH_PREFIXES
+    assert page_is_search_visible(_SluggedPost(slug="software"), prefixes) is False
+    assert (
+        page_is_search_visible(_SluggedPost(slug="software/payments"), prefixes)
+        is False
+    )
+    assert page_is_search_visible(_SluggedPost(slug="softwarex"), prefixes) is True
+
+
+def test_no_private_prefixes_keeps_path_rule_off():
+    assert page_is_search_visible(_SluggedPost(slug="software")) is True
