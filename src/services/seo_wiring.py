@@ -40,7 +40,13 @@ from plugins.cms.src.services.seo_scope import (
     path_is_private,
     resolve_private_path_prefixes,
 )
-from plugins.cms.src.services.seo_index_switches import SEO_INDEX_CONFIG_KEYS
+from plugins.cms.src.services.seo_index_switches import (
+    SEO_INDEX_CONFIG_KEYS,
+    SeoIndexSwitches,
+    post_type_is_indexable,
+    resolve_seo_index_switches,
+)
+from plugins.cms.src.services.seo_path_robots import SeoPathRobots
 from plugins.cms.src.services.seo_sitemap_provider import CmsSitemapProvider
 from plugins.cms.src.services.seo_term_archive_loader import (
     CategoryArchiveSource,
@@ -224,6 +230,11 @@ def _private_path_prefixes() -> tuple:
         return resolve_private_path_prefixes({})
 
 
+def _index_switches() -> SeoIndexSwitches:
+    """The live per-type indexable switches (S154 D7), read per call."""
+    return resolve_seo_index_switches(_sitemap_config())
+
+
 def seo_private_path_prefixes() -> tuple:
     """The live private prefixes the sitemap filters centrally (S154, D1)."""
     return _private_path_prefixes()
@@ -232,6 +243,20 @@ def seo_private_path_prefixes() -> tuple:
 def seo_render_path_is_private(path: str) -> bool:
     """True when the on-demand render must refuse ``path`` (a private area)."""
     return path_is_private(path, _private_path_prefixes())
+
+
+def seo_render_robots_override(path: str) -> Optional[str]:
+    """The robots the on-demand render must force at ``path`` (S154 D7).
+
+    ``noindex,follow`` for a switched-off cms type, ``noindex,nofollow`` for
+    excluded content, ``None`` to serve the render unchanged.
+    """
+    return SeoPathRobots(
+        SeoPostLoader(_session()),
+        _index_switches(),
+        _private_path_prefixes(),
+        _home_slug(),
+    ).robots_for(path)
 
 
 def _seo_prerender_enabled() -> bool:
@@ -452,6 +477,7 @@ def _build_writer() -> SeoPrerenderWriter:
         public_base_url=_public_base_url(),
         home_slug=_home_slug(),
         private_path_prefixes=_private_path_prefixes(),
+        index_switches=_index_switches(),
     )
 
 
@@ -498,7 +524,9 @@ def regenerate_prerendered() -> int:
     Writes directly via the writer (not the automatic ``content.changed`` path),
     so it runs regardless of the ``seo_prerender_enabled`` toggle — a deliberate
     admin override. Use it to (re)build files for content that predates the
-    writer or arrived via bulk import/backfill. Returns the number written.
+    writer or arrived via bulk import/backfill, or after flipping an indexable
+    switch (S154 D7) so existing files pick up the new robots. Returns the
+    number written.
     """
     writer = _build_writer()
     loader = SeoPostLoader(_session())
@@ -696,10 +724,15 @@ def build_indexnow_submitter() -> IndexNowSubmitter:
 
 
 def _on_content_changed_indexnow(_event_name: str, data: dict) -> None:
-    """Ping IndexNow with a published CMS post's canonical URL (best-effort)."""
+    """Ping IndexNow with a published CMS post's canonical URL (best-effort).
+
+    A post whose type is switched off for indexing (S154 D7) is never pinged.
+    """
     if not indexnow_available():
         return
     if (data or {}).get("status") != POST_STATUS_PUBLISHED:
+        return
+    if not post_type_is_indexable(_index_switches(), (data or {}).get("type") or ""):
         return
     try:
         submitter = build_indexnow_submitter()

@@ -27,13 +27,13 @@ from plugins.cms.src.services.seo_scope import (
     page_is_search_visible,
     resolve_private_path_prefixes,
 )
-from plugins.cms.src.services.seo_index_switches import resolve_seo_index_switches
+from plugins.cms.src.services.seo_index_switches import (
+    PAGE_POST_TYPE,
+    POST_POST_TYPE,
+    resolve_seo_index_switches,
+)
 
 CMS_SITEMAP_PROVIDER_NAME = "cms"
-
-# The ``cms_post.type`` values the two content-type switches govern.
-PAGE_POST_TYPE = "page"
-POST_POST_TYPE = "post"
 
 
 def excluded_post_types(config: dict) -> Tuple[str, ...]:

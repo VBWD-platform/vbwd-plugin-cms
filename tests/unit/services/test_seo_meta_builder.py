@@ -158,3 +158,11 @@ def test_register_custom_schema_mapper():
     register_schema_mapper("FAQPage", faq_mapper)
     _, jsonld = build_meta(_Renderable(schema_type="FAQPage"))
     assert jsonld["@type"] == "FAQPage"
+
+
+def test_switched_off_type_renders_noindex_follow():
+    """S154 D7: the switched-off robots reaches the head unchanged (follow kept)."""
+    from plugins.cms.src.services.seo_index_switches import SWITCHED_OFF_ROBOTS
+
+    tags, _ = build_meta(_Renderable(robots=SWITCHED_OFF_ROBOTS))
+    assert '<meta name="robots" content="noindex,follow" />' in _head_text(tags)

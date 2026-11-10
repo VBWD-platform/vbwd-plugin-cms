@@ -6,6 +6,8 @@ sync with a post's status:
   - ``published``           → write a public file (indexed unless excluded);
   - ``published`` + excluded → write the file BUT with ``robots: noindex`` (a
                                direct-link visitor still gets the fast page);
+  - ``published`` + its type switched off (S154 D7) → write the file with
+                               ``robots: noindex,follow``;
   - ``private``/``draft``/``scheduled``/``pending`` → write nothing;
   - ``trash``/unpublish/delete → remove the file.
 
@@ -30,6 +32,11 @@ from plugins.cms.src.services.seo_asset_stamp import (
 )
 from plugins.cms.src.services.prerender_minifier import PrerenderMinifier
 from plugins.cms.src.services.seo_full_page_renderer import IFullPageRenderer
+from plugins.cms.src.services.seo_index_switches import (
+    SeoIndexSwitches,
+    index_robots_override,
+    post_type_is_indexable,
+)
 from plugins.cms.src.services.seo_meta_builder import build_meta
 from plugins.cms.src.services.seo_renderable_post import (
     NOINDEX_ROBOTS,
@@ -85,6 +92,7 @@ class SeoPrerenderWriter:
         public_base_url: str = "",
         home_slug: Optional[str] = None,
         private_path_prefixes: Sequence[str] = DEFAULT_PRIVATE_PATH_PREFIXES,
+        index_switches: Optional[SeoIndexSwitches] = None,
     ) -> None:
         self._filesystem_manager = filesystem_manager or LocalFilesystemManager(
             var_root=var_dir
@@ -120,6 +128,9 @@ class SeoPrerenderWriter:
         self._home_slug = home_slug
         # Path prefixes (``/dashboard`` …) whose posts are never search-visible.
         self._private_path_prefixes = private_path_prefixes
+        # The per-type indexable switches (S154 D7); absent ⇒ every type is
+        # indexable (today's output).
+        self._index_switches = index_switches
 
     # ── event entry point ────────────────────────────────────────────────
 
@@ -161,10 +172,18 @@ class SeoPrerenderWriter:
 
     # ── file ops ─────────────────────────────────────────────────────────
 
-    def _write(self, post, terms, siblings) -> None:
+    def _robots_override(self, post, terms) -> Optional[str]:
+        """``None`` keeps the post's robots; else the noindex value to force."""
         searchable = page_is_search_visible(
             ScopeView(post, terms), self._private_path_prefixes
         )
+        type_indexable = self._index_switches is None or post_type_is_indexable(
+            self._index_switches, post.type
+        )
+        return index_robots_override(searchable, type_indexable)
+
+    def _write(self, post, terms, siblings) -> None:
+        robots_override = self._robots_override(post, terms)
         # Prefer the COMPLETE page HTML from the external renderer when one is
         # configured. The rendered HTML is captured from the live SPA and is
         # self-contained (already carries head meta + the hashed asset tags),
@@ -179,9 +198,10 @@ class SeoPrerenderWriter:
         )
         if isinstance(rendered, str) and rendered:
             # The captured SPA carries the post's own robots value; a post that
-            # is not search-visible (e.g. a private path) must not leak it.
-            if not searchable:
-                rendered = force_noindex_robots_meta(rendered)
+            # is not search-visible (e.g. a private path) or whose type is
+            # switched off must not leak it.
+            if robots_override is not None:
+                rendered = force_noindex_robots_meta(rendered, robots_override)
             # The full render is HTML too, so honour the same minify toggle the
             # content-only branch below applies (DRY: one minifier, both paths).
             if self._minifier is not None:
@@ -190,8 +210,6 @@ class SeoPrerenderWriter:
                 SEO_NAMESPACE, self._relative_path_for(post.slug), rendered
             )
             return
-
-        robots_override = None if searchable else NOINDEX_ROBOTS
 
         renderable = RenderablePost(
             post,
@@ -294,13 +312,15 @@ class SeoPrerenderWriter:
         )
 
 
-def force_noindex_robots_meta(html: str) -> str:
+def force_noindex_robots_meta(html: str, robots: str = NOINDEX_ROBOTS) -> str:
     """Replace every robots meta tag in ``html`` with a single noindex one.
 
-    Inserted right after ``<head>`` (else at the very start) so the captured
-    page can never advertise ``index,follow`` for a non-search-visible post.
+    ``robots`` is ``noindex,nofollow`` (private/excluded) or ``noindex,follow``
+    (type switched off). Inserted right after ``<head>`` (else at the very
+    start) so the captured page can never advertise ``index,follow`` for a
+    page that must stay out of the index.
     """
-    noindex_tag = f'<meta name="robots" content="{NOINDEX_ROBOTS}" />'
+    noindex_tag = f'<meta name="robots" content="{robots}" />'
     without_robots = _ROBOTS_META_PATTERN.sub("", html)
     head_open = _HEAD_OPEN_PATTERN.search(without_robots)
     if head_open is None:

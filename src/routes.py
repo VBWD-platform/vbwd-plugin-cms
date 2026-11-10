@@ -125,7 +125,9 @@ from plugins.cms.src.services.term_permalink import term_archive_path
 from plugins.cms.src.services.seo_index_switches import (
     LEGACY_INCLUDE_PAGES_KEY,
     SEO_INDEX_PAGES_KEY,
+    post_type_is_indexable,
     resolve_seo_index_switches,
+    term_type_is_indexable,
 )
 
 # Some base images ship a mimetypes registry that does not know modern image
@@ -2481,6 +2483,9 @@ def public_get_post(slug: str):
 
     ``translations`` lists the post's PUBLISHED translation siblings as
     ``{language, slug, url}`` (S152 W3) — even when previewing a draft.
+
+    ``seo_indexable`` is the indexable switch of the post's type (S154 D7):
+    ``false`` ⇒ the frontends render the page ``noindex,follow``.
     """
     post_type = request.args.get("type", "page")
     preview_token = request.args.get("preview_token")
@@ -2491,6 +2496,9 @@ def public_get_post(slug: str):
     _enrich_public_post_areas(post)
     _append_core_tags_and_custom_fields(post)
     post["translations"] = post_service.list_public_translations(post)
+    post["seo_indexable"] = post_type_is_indexable(
+        resolve_seo_index_switches(_cms_config()), post["type"]
+    )
     if preview_token:
         if post.get("preview_token") and post["preview_token"] == preview_token:
             return jsonify(public_payload(post)), 200
@@ -2523,6 +2531,9 @@ def public_resolve_term(term_type: str, slug: str):
     ``cms_term`` — they are held in the core ``vbwd_entity_tag`` index (D7) — so
     a tag is resolved to a SYNTHETIC term via the same tag index the archive
     listing uses, valid iff at least one PUBLISHED post carries it.
+
+    ``seo_indexable`` is the archive family's indexable switch (S154 D7:
+    ``seo_index_categories`` / ``seo_index_tags``).
     """
     normalized = slug.strip("/")
     if term_type == TAG_TERM_TYPE:
@@ -2532,6 +2543,9 @@ def public_resolve_term(term_type: str, slug: str):
     if not term:
         return jsonify({"error": f"Term '{slug}' not found"}), 404
     term["archive_url"] = term_archive_path(term["term_type"], term["slug"])
+    term["seo_indexable"] = term_type_is_indexable(
+        resolve_seo_index_switches(_cms_config()), term["term_type"]
+    )
     return jsonify(term), 200
 
 

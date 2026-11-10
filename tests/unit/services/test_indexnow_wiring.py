@@ -71,3 +71,34 @@ def test_submit_failure_is_swallowed(monkeypatch):
 
     # Best-effort: a failing submitter must never propagate out of the callback.
     seo_wiring._on_content_changed_indexnow("content.changed", _published("pricing"))
+
+
+# ── S154 D7: a switched-off content type is never pinged ─────────────────────
+
+
+def test_switched_off_post_type_is_not_submitted(monkeypatch):
+    submitter = MagicMock()
+    monkeypatch.setattr(seo_wiring, "indexnow_available", lambda: True)
+    monkeypatch.setattr(seo_wiring, "build_indexnow_submitter", lambda: submitter)
+    monkeypatch.setattr(
+        seo_wiring, "_sitemap_config", lambda: {"seo_index_pages": False}
+    )
+
+    event = dict(_published("pricing"), previous_slug="old-pricing")
+    seo_wiring._on_content_changed_indexnow("content.changed", event)
+
+    submitter.submit.assert_not_called()
+
+
+def test_other_type_still_submitted_when_one_type_is_off(monkeypatch):
+    submitter = MagicMock()
+    monkeypatch.setattr(seo_wiring, "indexnow_available", lambda: True)
+    monkeypatch.setattr(seo_wiring, "build_indexnow_submitter", lambda: submitter)
+    monkeypatch.setattr(
+        seo_wiring, "_sitemap_config", lambda: {"seo_index_pages": False}
+    )
+
+    event = dict(_published("news-item"), type="post")
+    seo_wiring._on_content_changed_indexnow("content.changed", event)
+
+    submitter.submit.assert_called_once_with("/news-item")

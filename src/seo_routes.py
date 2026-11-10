@@ -247,13 +247,18 @@ def seo_dynamic_render():
     A path under a private prefix (``seo_private_path_prefixes``: ``/dashboard``,
     ``/tuktuk``, ``/pay``) is never rendered for bots: **404**, so
     nginx falls back to its noindex-tagged shell instead of an indexable page.
+
+    A cms page/post/term archive whose type is switched off for indexing
+    (S154 D7) is served with its robots forced to ``noindex,follow``.
     """
     from plugins.cms.src.services.seo_wiring import (
         build_dynamic_render_service,
         seo_dynamic_render_available,
         seo_render_internal_token,
         seo_render_path_is_private,
+        seo_render_robots_override,
     )
+    from plugins.cms.src.services.seo_prerender import force_noindex_robots_meta
 
     token = seo_render_internal_token()
     provided = request.headers.get(_RENDER_TOKEN_HEADER, "")
@@ -269,6 +274,9 @@ def seo_dynamic_render():
     html = build_dynamic_render_service().render(path)
     if html is None:
         return Response("", status=502)
+    robots_override = seo_render_robots_override(path)
+    if robots_override is not None:
+        html = force_noindex_robots_meta(html, robots_override)
     return Response(html, status=200, mimetype="text/html")
 
 

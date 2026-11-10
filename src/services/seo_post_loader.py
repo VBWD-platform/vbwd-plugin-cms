@@ -12,6 +12,13 @@ from plugins.cms.src.models.cms_post import CmsPost, POST_STATUS_PUBLISHED
 from plugins.cms.src.models.cms_term import CmsTerm
 from plugins.cms.src.models.cms_post_term import CmsPostTerm
 from plugins.cms.src.repositories.post_repository import PostRepository
+from plugins.cms.src.services.seo_index_switches import (
+    PAGE_POST_TYPE,
+    POST_POST_TYPE,
+)
+
+# The fe catch-all's precedence for one path: a page wins over a post.
+_PUBLIC_PATH_POST_TYPES = (PAGE_POST_TYPE, POST_POST_TYPE)
 
 
 class _Sibling:
@@ -45,6 +52,24 @@ class SeoPostLoader:
         if post is None:
             return None
         return post, self.terms_for(post), self.siblings_for(post)
+
+    # ── on-demand render interface (S154 D7) ─────────────────────────────
+
+    def find_published_by_path(self, slug: str) -> Optional[CmsPost]:
+        """The published page, else post, stored at ``slug`` (or ``None``)."""
+        for post_type in _PUBLIC_PATH_POST_TYPES:
+            post = (
+                self._session.query(CmsPost)
+                .filter(
+                    CmsPost.type == post_type,
+                    CmsPost.slug == slug,
+                    CmsPost.status == POST_STATUS_PUBLISHED,
+                )
+                .first()
+            )
+            if post is not None:
+                return post
+        return None
 
     # ── sitemap provider interface ───────────────────────────────────────
 
