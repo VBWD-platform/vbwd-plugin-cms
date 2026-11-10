@@ -138,6 +138,9 @@ class CmsPlugin(BasePlugin):
                 "/robots.txt": "Public robots.txt for crawlers.",
                 "/sitemap.xml": "Public sitemap index for crawlers.",
                 "/sitemap-<int:chunk>.xml": "Public paginated sitemap chunk for crawlers.",
+                "/sitemap-<provider_name>-<int:chunk_number>.xml": (
+                    "Public per-provider sitemap chunk for crawlers (S154)."
+                ),
             },
             mutation={
                 "/api/v1/contact": "Public contact form submission (no account required).",
