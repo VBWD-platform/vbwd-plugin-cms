@@ -110,6 +110,36 @@
       ]
     },
     {
+      "id": "indexing",
+      "label": "Indexing",
+      "fields": [
+        {
+          "key": "seo_index_pages",
+          "label": "Index pages",
+          "component": "checkbox",
+          "description": "List pages in the sitemap. Private paths are never indexed."
+        },
+        {
+          "key": "seo_index_posts",
+          "label": "Index posts",
+          "component": "checkbox",
+          "description": "List posts in the sitemap. Private paths are never indexed."
+        },
+        {
+          "key": "seo_index_categories",
+          "label": "Index category archives",
+          "component": "checkbox",
+          "description": "List /category/<slug> archives that have at least one published post."
+        },
+        {
+          "key": "seo_index_tags",
+          "label": "Index tag archives",
+          "component": "checkbox",
+          "description": "List /tag/<slug> archives that have at least one published post."
+        }
+      ]
+    },
+    {
       "id": "languages",
       "label": "Languages",
       "fields": [

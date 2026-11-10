@@ -37,17 +37,24 @@ class _Post:
 
 
 class _Loader:
-    """Test double exposing all published posts + per-post terms/siblings."""
+    """Test double exposing all published posts + per-post terms/siblings.
+
+    Honours the real loader's contract: ``excluded_post_types`` narrows BOTH
+    the count and the paged window (the SQL ``type NOT IN`` filter).
+    """
 
     def __init__(self, posts):
         self._posts = posts
 
-    def count_candidate_posts(self):
-        return len(self._posts)
+    def _candidates(self, excluded_post_types):
+        return [post for post in self._posts if post.type not in excluded_post_types]
 
-    def iter_candidate_posts(self, offset=0, limit=None):
+    def count_candidate_posts(self, excluded_post_types=()):
+        return len(self._candidates(excluded_post_types))
+
+    def iter_candidate_posts(self, offset=0, limit=None, excluded_post_types=()):
         stop = None if limit is None else offset + limit
-        return list(self._posts[offset:stop])
+        return list(self._candidates(excluded_post_types)[offset:stop])
 
     def terms_for(self, post):
         return post.terms
@@ -187,9 +194,9 @@ class _RecordingLoader(_Loader):
         super().__init__(posts)
         self.page_requests = []
 
-    def iter_candidate_posts(self, offset=0, limit=None):
+    def iter_candidate_posts(self, offset=0, limit=None, excluded_post_types=()):
         self.page_requests.append((offset, limit))
-        return super().iter_candidate_posts(offset, limit)
+        return super().iter_candidate_posts(offset, limit, excluded_post_types)
 
 
 def test_provider_is_named_cms():
@@ -218,3 +225,52 @@ def test_paging_covers_the_same_urls_as_one_full_page():
     ]
     assert paged_locs == [entry.loc for entry in _all_entries(provider)]
     assert paged_locs == ["https://x/a", "https://x/b", "https://x/c", "https://x/d"]
+
+
+# ── S154 P2: the seo_index_pages / seo_index_posts switches ──────────────────
+
+
+def _typed_posts():
+    return [
+        _Post(id="p1", type="page", slug="about", canonical_url="https://x/about"),
+        _Post(id="p2", type="post", slug="news", canonical_url="https://x/news"),
+        _Post(id="p3", type="page", slug="team", canonical_url="https://x/team"),
+    ]
+
+
+def test_index_pages_off_drops_pages_from_count_and_page():
+    provider = _provider(_typed_posts(), {"seo_index_pages": False})
+    assert provider.count() == 1
+    assert [entry.loc for entry in _all_entries(provider)] == ["https://x/news"]
+
+
+def test_index_posts_off_drops_posts_from_count_and_page():
+    provider = _provider(_typed_posts(), {"seo_index_posts": False})
+    assert provider.count() == 2
+    assert [entry.loc for entry in _all_entries(provider)] == [
+        "https://x/about",
+        "https://x/team",
+    ]
+
+
+def test_index_pages_saved_on_wins_over_legacy_include_pages_off():
+    config = {"seo_index_pages": True, "sitemap_include_pages": False}
+    provider = _provider(_typed_posts(), config)
+    assert provider.count() == 3
+
+
+def test_both_switches_off_leave_an_empty_provider():
+    config = {"seo_index_pages": False, "seo_index_posts": False}
+    provider = _provider(_typed_posts(), config)
+    assert provider.count() == 0
+    assert list(provider.page(0, 10)) == []
+
+
+def test_switch_filter_keeps_paging_consistent_with_count():
+    provider = _provider(_typed_posts(), {"seo_index_posts": False})
+    paged_locs = [
+        entry.loc
+        for offset in range(0, provider.count(), 1)
+        for entry in provider.page(offset, 1)
+    ]
+    assert paged_locs == ["https://x/about", "https://x/team"]

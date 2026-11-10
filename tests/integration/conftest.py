@@ -35,6 +35,7 @@ import pytest
 from flask import current_app
 
 from plugins.cms.src.services import seo_registry
+from plugins.cms.src.services.seo_index_switches import SEO_INDEX_CONFIG_KEYS
 from plugins.cms.src.services.seo_wiring import (
     register_seo_pipeline,
     unregister_seo_pipeline,
@@ -57,8 +58,9 @@ def _seo_sitemap_filter_baseline(request):
     """Reset the cms sitemap-filter config keys to their no-filter defaults.
 
     Snapshots the cms config blob, forces the four ``sitemap_*`` filter keys to
-    the shipped (no-filter) values for the test, then restores the original blob
-    on teardown. A test that PUTs its own filters (the S56 settings suite) still
+    the shipped (no-filter) values and drops the S154 ``seo_index_*`` switches
+    (so their defaults / legacy precedence apply) for the test, then restores
+    the original blob on teardown. A test that PUTs its own filters (the S56 settings suite) still
     overrides these for the duration of its body.
 
     A ``no_db_isolation`` test (e.g. the migration suites, which open their OWN
@@ -73,7 +75,10 @@ def _seo_sitemap_filter_baseline(request):
     request.getfixturevalue("db")
     store = current_app.config_store
     saved = dict(store.get_config("cms") or {})
-    store.save_config("cms", {**saved, **_SITEMAP_FILTER_DEFAULTS})
+    baseline = {
+        key: value for key, value in saved.items() if key not in SEO_INDEX_CONFIG_KEYS
+    }
+    store.save_config("cms", {**baseline, **_SITEMAP_FILTER_DEFAULTS})
     yield
     store.save_config("cms", saved)
 

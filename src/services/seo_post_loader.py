@@ -6,7 +6,7 @@ predicate), and their PUBLISHED translation siblings (for hreflang — a draft
 is never an alternate) from a SQLAlchemy session. Keeping the loader separate
 keeps the writer/provider unit-testable with simple doubles.
 """
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from plugins.cms.src.models.cms_post import CmsPost, POST_STATUS_PUBLISHED
 from plugins.cms.src.models.cms_term import CmsTerm
@@ -48,20 +48,31 @@ class SeoPostLoader:
 
     # ── sitemap provider interface ───────────────────────────────────────
 
-    def _candidate_query(self):
-        """Only ``published`` posts can ever be search-visible (D9)."""
-        return self._session.query(CmsPost).filter(
+    def _candidate_query(self, excluded_post_types: Sequence[str] = ()):
+        """Only ``published`` posts can ever be search-visible (D9); post types
+        switched off for indexing (S154 P2) are dropped in SQL."""
+        query = self._session.query(CmsPost).filter(
             CmsPost.status == POST_STATUS_PUBLISHED
         )
+        if excluded_post_types:
+            query = query.filter(CmsPost.type.notin_(list(excluded_post_types)))
+        return query
 
-    def count_candidate_posts(self) -> int:
-        return self._candidate_query().count()
+    def count_candidate_posts(self, excluded_post_types: Sequence[str] = ()) -> int:
+        return self._candidate_query(excluded_post_types).count()
 
     def iter_candidate_posts(
-        self, offset: int = 0, limit: Optional[int] = None
+        self,
+        offset: int = 0,
+        limit: Optional[int] = None,
+        excluded_post_types: Sequence[str] = (),
     ) -> List[CmsPost]:
         """Published posts in a stable (primary-key) order, optionally paged."""
-        query = self._candidate_query().order_by(CmsPost.id).offset(offset)
+        query = (
+            self._candidate_query(excluded_post_types)
+            .order_by(CmsPost.id)
+            .offset(offset)
+        )
         if limit is not None:
             query = query.limit(limit)
         return query.all()

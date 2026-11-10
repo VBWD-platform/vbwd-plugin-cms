@@ -46,7 +46,10 @@ DEFAULT_CONFIG = {
     # sitemap_include_pages is False, type=="page" posts are dropped;
     # sitemap_excluded_slugs drops posts by slug; sitemap_include_terms (term
     # slugs) — when non-empty — restricts to posts carrying ≥1; and
-    # sitemap_exclude_terms (term slugs) drops posts carrying any.
+    # sitemap_exclude_terms (term slugs) drops posts carrying any (and, S154,
+    # those terms' archives). sitemap_include_pages is folded into the S154
+    # seo_index_pages switch (config.json), which wins once saved — see
+    # services/seo_index_switches.py and docs/seo/sitemap-providers.md.
     "sitemap_include_pages": True,
     "sitemap_excluded_slugs": [],
     "sitemap_include_terms": [],

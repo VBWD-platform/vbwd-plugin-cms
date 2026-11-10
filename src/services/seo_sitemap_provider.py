@@ -13,8 +13,12 @@ emitted (D8) — only individual prerendered posts/pages.
 ``post_loader`` supplies the candidate posts and, per post, its terms and
 translation siblings so the provider can apply the predicate + build hreflang
 without importing the ORM here.
+
+The ``seo_index_pages`` / ``seo_index_posts`` switches (S154 P2) are applied as
+an ``excluded_post_types`` filter in the loader's SQL, for ``count()`` and
+``page()`` alike, so the chunk plan and the chunks stay consistent.
 """
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
 from plugins.cms.src.services.seo_canonical import derive_canonical_url
 from plugins.cms.src.services.seo_registry import SitemapEntry
@@ -23,8 +27,24 @@ from plugins.cms.src.services.seo_scope import (
     page_is_search_visible,
     resolve_private_path_prefixes,
 )
+from plugins.cms.src.services.seo_index_switches import resolve_seo_index_switches
 
 CMS_SITEMAP_PROVIDER_NAME = "cms"
+
+# The ``cms_post.type`` values the two content-type switches govern.
+PAGE_POST_TYPE = "page"
+POST_POST_TYPE = "post"
+
+
+def excluded_post_types(config: dict) -> Tuple[str, ...]:
+    """The post types switched off for indexing (``seo_index_pages/posts``)."""
+    switches = resolve_seo_index_switches(config)
+    excluded = []
+    if not switches.pages:
+        excluded.append(PAGE_POST_TYPE)
+    if not switches.posts:
+        excluded.append(POST_POST_TYPE)
+    return tuple(excluded)
 
 
 class CmsSitemapProvider:
@@ -56,13 +76,20 @@ class CmsSitemapProvider:
         self._sitemap_config_provider = sitemap_config_provider or (lambda: {})
 
     def count(self) -> int:
-        return self._post_loader.count_candidate_posts()
+        config = self._sitemap_config_provider() or {}
+        return self._post_loader.count_candidate_posts(
+            excluded_post_types=excluded_post_types(config)
+        )
 
     def page(self, offset: int, limit: int) -> List[SitemapEntry]:
         config = self._sitemap_config_provider() or {}
         private_path_prefixes = resolve_private_path_prefixes(config)
         entries: List[SitemapEntry] = []
-        candidates = self._post_loader.iter_candidate_posts(offset=offset, limit=limit)
+        candidates = self._post_loader.iter_candidate_posts(
+            offset=offset,
+            limit=limit,
+            excluded_post_types=excluded_post_types(config),
+        )
         for post in candidates:
             terms = self._post_loader.terms_for(post)
             scope_view = ScopeView(post, terms)
@@ -74,9 +101,11 @@ class CmsSitemapProvider:
         return entries
 
     def _is_config_excluded(self, post, terms, config: dict) -> bool:
-        """Apply the admin sitemap filters (S56) by post type / slug / terms."""
-        if not config.get("sitemap_include_pages", True) and post.type == "page":
-            return True
+        """Apply the admin sitemap filters (S56) by slug / terms.
+
+        The by-type filter (``sitemap_include_pages``, now folded into
+        ``seo_index_pages``) runs in SQL via ``excluded_post_types``.
+        """
         if post.slug in set(config.get("sitemap_excluded_slugs") or []):
             return True
         term_slugs = {getattr(term, "slug", None) for term in (terms or [])}

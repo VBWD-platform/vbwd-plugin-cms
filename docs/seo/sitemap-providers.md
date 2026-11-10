@@ -80,3 +80,48 @@ if registry is not None:
 Also gate the registration on cms actually being *enabled*, not only
 importable. Use the same check the plugin already uses for its other optional
 cms integrations.
+
+## cms providers and the indexable-type switches (S154 P2)
+
+cms registers three providers. Each switch lives in the cms plugin config
+(`config.json` default, `admin-config.json` "Indexing" tab in fe-admin) and is
+read live on every sitemap request.
+
+| Provider | URLs | Switch (default) |
+|---|---|---|
+| `cms` | published pages (`type=page`) and posts (`type=post`) at their canonical URL | `seo_index_pages` (on), `seo_index_posts` (on) |
+| `cms-categories` | `/category/<slug>` for each category with at least one published post | `seo_index_categories` (off) |
+| `cms-tags` | `/tag/<slug>` for each core tag carried by at least one published cms post | `seo_index_tags` (off) |
+
+- Switched-off types are filtered in SQL, so `count()` and `page()` agree. A
+  switched-off archive provider has `count() == 0`, and `/sitemap.xml` lists no
+  `sitemap-cms-categories-*` / `sitemap-cms-tags-*` chunk for it.
+- Archive URLs come from `term_archive_path` (the same map the terms API uses
+  for `archive_url`). `lastmod` is the newest published post's `updated_at`
+  (for categories, or the term's own `updated_at` if newer), computed in the
+  same grouped query.
+- Categories with `seo_excluded` are skipped. Term slugs in
+  `sitemap_exclude_terms` are skipped for both archive families. Tags have no
+  `seo_excluded` flag (they live in the core tag index).
+
+### Precedence and the pre-S154 keys
+
+`get_config("cms")` returns the saved blob only, so "saved" means the key is
+present and not null.
+
+1. `seo_index_pages`, when saved, wins.
+2. Else the legacy `sitemap_include_pages`, when saved.
+3. Else the default (on).
+
+`seo_index_posts`, `seo_index_categories` and `seo_index_tags` have no legacy
+key. The S56 SEO settings endpoint (`/api/v1/admin/cms/seo/settings`) keeps
+working: a PUT of `sitemap_include_pages` also writes `seo_index_pages`, and a
+GET reports the effective pages value under `sitemap_include_pages`.
+
+`sitemap_include_terms` and `sitemap_exclude_terms` keep their S56 meaning as
+post filters (restrict to / drop posts carrying those term slugs);
+`sitemap_exclude_terms` also drops the matching term archives.
+
+Note: the generic fe-admin plugin form saves every `config.json` key with its
+default. An install that had `sitemap_include_pages: false` and then saves the
+cms plugin form without unticking "Index pages" will index pages again.

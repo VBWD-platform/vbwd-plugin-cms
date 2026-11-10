@@ -122,6 +122,11 @@ from plugins.cms.src.repositories.entity_page_repository import EntityPageReposi
 from plugins.cms.src.models.cms_post import POST_STATUS_PUBLISHED, POST_STATUS_PRIVATE
 from plugins.cms.src.models.cms_term import CATEGORY_TERM_TYPE, TAG_TERM_TYPE
 from plugins.cms.src.services.term_permalink import term_archive_path
+from plugins.cms.src.services.seo_index_switches import (
+    LEGACY_INCLUDE_PAGES_KEY,
+    SEO_INDEX_PAGES_KEY,
+    resolve_seo_index_switches,
+)
 
 # Some base images ship a mimetypes registry that does not know modern image
 # formats (e.g. `.webp` → None → served as application/octet-stream, which an
@@ -2116,10 +2121,16 @@ _SEO_SETTINGS_DEFAULTS = {
 
 
 def _seo_settings_view(config: dict) -> dict:
-    """Project the SEO settings out of the full cms config (with defaults)."""
-    return {
+    """Project the SEO settings out of the full cms config (with defaults).
+
+    ``sitemap_include_pages`` is folded into ``seo_index_pages`` (S154), so the
+    view reports the EFFECTIVE pages switch, whichever key set it.
+    """
+    view = {
         key: config.get(key, default) for key, default in _SEO_SETTINGS_DEFAULTS.items()
     }
+    view[LEGACY_INCLUDE_PAGES_KEY] = resolve_seo_index_switches(config).pages
+    return view
 
 
 def _coerce_str_list(value) -> list:
@@ -2149,8 +2160,11 @@ def _typed_seo_settings(body: dict) -> dict:
         # An empty/blank slug falls back to the shipped default so ``/`` never
         # points at a non-existent home post.
         typed["home_slug"] = str(body["home_slug"] or "").strip() or _DEFAULT_HOME_SLUG
-    if "sitemap_include_pages" in body:
-        typed["sitemap_include_pages"] = bool(body["sitemap_include_pages"])
+    if LEGACY_INCLUDE_PAGES_KEY in body:
+        # Mirrored into the S154 switch, which wins once saved (precedence).
+        include_pages = bool(body[LEGACY_INCLUDE_PAGES_KEY])
+        typed[LEGACY_INCLUDE_PAGES_KEY] = include_pages
+        typed[SEO_INDEX_PAGES_KEY] = include_pages
     if "minify_prerender_output" in body:
         typed["minify_prerender_output"] = bool(body["minify_prerender_output"])
     if "seo_serve_to_humans" in body:

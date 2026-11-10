@@ -2,14 +2,15 @@
 
 Two seams are connected here (and nowhere in core):
   1. the prerender writer subscribes to ``content.changed`` on the EventBus;
-  2. the cms sitemap provider is registered with the core sitemap registry.
+  2. the cms sitemap providers (``cms`` posts/pages, ``cms-categories`` and
+     ``cms-tags`` archives — S154 P2) are registered with the sitemap registry.
 
 Both use a live ``db.session`` lazily (resolved per call), so the writer and
 provider stay session-agnostic and unit-testable with doubles.
 """
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from vbwd.events.bus import event_bus
 from vbwd.services.filesystem.local import LocalFilesystemManager
@@ -39,7 +40,16 @@ from plugins.cms.src.services.seo_scope import (
     path_is_private,
     resolve_private_path_prefixes,
 )
+from plugins.cms.src.services.seo_index_switches import SEO_INDEX_CONFIG_KEYS
 from plugins.cms.src.services.seo_sitemap_provider import CmsSitemapProvider
+from plugins.cms.src.services.seo_term_archive_loader import (
+    CategoryArchiveSource,
+    TagArchiveSource,
+)
+from plugins.cms.src.services.seo_term_archive_sitemap_provider import (
+    build_category_archive_provider,
+    build_tag_archive_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +181,7 @@ _SITEMAP_CONFIG_KEYS = (
     "sitemap_include_terms",
     "sitemap_exclude_terms",
     PRIVATE_PATH_PREFIXES_CONFIG_KEY,
+    *SEO_INDEX_CONFIG_KEYS,
 )
 
 
@@ -702,13 +713,41 @@ def _on_content_changed_indexnow(_event_name: str, data: dict) -> None:
         logger.warning("[cms.indexnow] submit for %s failed: %s", data, exc)
 
 
-# Track the registered provider so a repeat enable (e.g. per-test app) replaces
-# rather than accumulates it.
+# Track the registered providers so a repeat enable (e.g. per-test app) replaces
+# rather than accumulates them.
 _active_provider: Optional[CmsSitemapProvider] = None
+_active_term_archive_providers: List[Any] = []
+
+
+def _register_term_archive_providers() -> None:
+    """Register ``cms-categories`` + ``cms-tags`` (each gated by its switch)."""
+    global _active_term_archive_providers
+    _unregister_term_archive_providers()
+    _active_term_archive_providers = [
+        build_category_archive_provider(
+            CategoryArchiveSource(_session()),
+            public_base_url_provider=_public_base_url,
+            sitemap_config_provider=_sitemap_config,
+        ),
+        build_tag_archive_provider(
+            TagArchiveSource(_session()),
+            public_base_url_provider=_public_base_url,
+            sitemap_config_provider=_sitemap_config,
+        ),
+    ]
+    for provider in _active_term_archive_providers:
+        register_sitemap_provider(provider)
+
+
+def _unregister_term_archive_providers() -> None:
+    global _active_term_archive_providers
+    for provider in _active_term_archive_providers:
+        unregister_sitemap_provider(provider)
+    _active_term_archive_providers = []
 
 
 def register_seo_pipeline() -> CmsSitemapProvider:
-    """Subscribe the prerender writer + register the sitemap provider."""
+    """Subscribe the prerender writer + register the sitemap providers."""
     global _active_provider
     event_bus.subscribe(CONTENT_CHANGED_EVENT, _on_content_changed)
     # Render-cache invalidation (increment 4): precise on CMS content, best-effort
@@ -728,6 +767,7 @@ def register_seo_pipeline() -> CmsSitemapProvider:
         sitemap_config_provider=_sitemap_config,
     )
     register_sitemap_provider(_active_provider)
+    _register_term_archive_providers()
     return _active_provider
 
 
@@ -742,3 +782,4 @@ def unregister_seo_pipeline() -> None:
     if _active_provider is not None:
         unregister_sitemap_provider(_active_provider)
         _active_provider = None
+    _unregister_term_archive_providers()

@@ -89,6 +89,26 @@
     "default": "/dashboard,/tuktuk,/pay",
     "description": "Comma-separated private URL path prefixes that are never indexed: posts under them are left out of the sitemap, prerendered with robots noindex,nofollow, and refused by the on-demand bot render. Segment-aware ('/pay' covers '/pay/...', not '/payments')."
   },
+  "seo_index_pages": {
+    "type": "boolean",
+    "default": true,
+    "description": "Index pages (type=page): list them in the sitemap. Precedence: this key once saved; else the legacy sitemap_include_pages; else on (S154)."
+  },
+  "seo_index_posts": {
+    "type": "boolean",
+    "default": true,
+    "description": "Index posts (type=post): list them in the sitemap (S154)."
+  },
+  "seo_index_categories": {
+    "type": "boolean",
+    "default": false,
+    "description": "Index category archives (/category/<slug>, those with at least one published post) via the sitemap-cms-categories chunks (S154)."
+  },
+  "seo_index_tags": {
+    "type": "boolean",
+    "default": false,
+    "description": "Index tag archives (/tag/<slug>, those with at least one published post) via the sitemap-cms-tags chunks (S154)."
+  },
   "seo_dynamic_render_enabled": {
     "type": "boolean",
     "default": false,
