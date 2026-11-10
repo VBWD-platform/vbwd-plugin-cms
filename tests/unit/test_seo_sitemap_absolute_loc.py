@@ -20,6 +20,7 @@ import pytest
 from flask import Flask
 
 from plugins.cms.src import seo_routes
+from plugins.cms.src.services import seo_registry
 from plugins.cms.src.services.seo_registry import SitemapEntry
 
 SMALL_URL_CAP = 2
@@ -47,13 +48,32 @@ def _entries():
     ]
 
 
+class _SiteProvider:
+    name = "site"
+
+    def count(self):
+        return len(_entries())
+
+    def page(self, offset, limit):
+        return _entries()[offset : offset + limit]
+
+
 @pytest.fixture
-def sitemap_app(monkeypatch):
-    monkeypatch.setattr(seo_routes, "aggregate_sitemap_entries", _entries)
+def sitemap_app():
+    saved_providers = seo_registry.list_sitemap_providers()
+    seo_registry.clear_sitemap_providers()
+    seo_registry.register_sitemap_provider(_SiteProvider())
     app = Flask(__name__)
     app.add_url_rule("/sitemap.xml", view_func=seo_routes.sitemap)
+    app.add_url_rule(
+        "/sitemap-<provider_name>-<int:chunk_number>.xml",
+        view_func=seo_routes.sitemap_provider_chunk,
+    )
     app.add_url_rule("/sitemap-<int:chunk>.xml", view_func=seo_routes.sitemap_chunk)
-    return app
+    yield app
+    seo_registry.clear_sitemap_providers()
+    for provider in saved_providers:
+        seo_registry.register_sitemap_provider(provider)
 
 
 def _get(app, path, public_base_url=""):
@@ -67,7 +87,7 @@ def _urls(body):
 
 
 def test_relative_locs_use_request_host_with_port(sitemap_app):
-    urls = _urls(_get(sitemap_app, "/sitemap.xml"))
+    urls = _urls(_get(sitemap_app, "/sitemap-site-1.xml"))
     assert "http://localhost:8080/about" in urls
     assert "http://localhost:8080/" in urls
     relative = [url for url in urls if not url.startswith("http")]
@@ -75,7 +95,9 @@ def test_relative_locs_use_request_host_with_port(sitemap_app):
 
 
 def test_relative_locs_use_public_base_url_without_double_slash(sitemap_app):
-    body = _get(sitemap_app, "/sitemap.xml", public_base_url="https://example.com/")
+    body = _get(
+        sitemap_app, "/sitemap-site-1.xml", public_base_url="https://example.com/"
+    )
     urls = _urls(body)
     assert "https://example.com/about" in urls
     assert "https://example.com/" in urls
@@ -83,7 +105,7 @@ def test_relative_locs_use_public_base_url_without_double_slash(sitemap_app):
 
 
 def test_absolute_loc_passes_through_unchanged(sitemap_app):
-    urls = _urls(_get(sitemap_app, "/sitemap.xml"))
+    urls = _urls(_get(sitemap_app, "/sitemap-site-1.xml"))
     assert "https://canonical.example.org/kept" in urls
 
 
@@ -91,9 +113,9 @@ def test_chunk_and_index_locs_are_absolute(sitemap_app, monkeypatch):
     monkeypatch.setattr(seo_routes, "SITEMAP_URL_CAP", SMALL_URL_CAP)
     index_urls = _urls(_get(sitemap_app, "/sitemap.xml"))
     assert index_urls == [
-        "http://localhost:8080/sitemap-1.xml",
-        "http://localhost:8080/sitemap-2.xml",
+        "http://localhost:8080/sitemap-site-1.xml",
+        "http://localhost:8080/sitemap-site-2.xml",
     ]
-    chunk_urls = _urls(_get(sitemap_app, "/sitemap-1.xml"))
+    chunk_urls = _urls(_get(sitemap_app, "/sitemap-site-1.xml"))
     assert chunk_urls
     assert all(url.startswith("http://localhost:8080/") for url in chunk_urls)

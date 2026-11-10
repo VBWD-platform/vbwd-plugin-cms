@@ -122,7 +122,10 @@ def test_sitemap_route_lists_published_posts_without_canonical_url(
         }
     )
 
-    response = client.get("/sitemap.xml")
+    index_body = client.get("/sitemap.xml").get_data(as_text=True)
+    assert "/sitemap-cms-1.xml</loc>" in index_body
+
+    response = client.get("/sitemap-cms-1.xml")
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)

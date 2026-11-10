@@ -94,7 +94,7 @@ def test_publish_writes_then_trash_removes(db, seo_var_dir):
 
 
 def test_sitemap_provider_yields_published_post(db, seo_var_dir):
-    register_seo_pipeline()
+    provider = register_seo_pipeline()
     service = _service(db)
     slug = f"page-{uuid.uuid4().hex[:8]}"
     canonical = f"https://x/{slug}"
@@ -109,7 +109,8 @@ def test_sitemap_provider_yields_published_post(db, seo_var_dir):
         }
     )
 
-    entries = seo_registry.aggregate_sitemap_entries()
+    assert seo_registry.find_sitemap_provider("cms") is provider
+    entries = provider.page(0, provider.count())
     locs = {entry.loc for entry in entries}
     assert canonical in locs
 

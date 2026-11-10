@@ -3,13 +3,17 @@
 These three routes were core's only SEO endpoints (S47.1); S50.2 moved the
 whole SEO feature into cms, the plugin that already owns every ``seo_*``
 service. They are registered on ``cms_bp`` with absolute paths, and cms's
-``get_url_prefix()`` returns ``""``, so the public URLs stay at the site root
-(``/sitemap.xml``, ``/sitemap-<n>.xml``, ``/robots.txt``) — byte-identical to
-the pre-move behaviour. The routes talk only to the cms-local
-``seo_registry`` aggregator and to Flask config.
+``get_url_prefix()`` returns ``""``, so the public URLs stay at the site root.
+The routes talk only to the cms-local ``seo_registry`` and to Flask config.
 
-Past ``SITEMAP_URL_CAP`` URLs the sitemap becomes an index pointing at numbered
-chunk files (``/sitemap-<n>.xml``), as the sitemaps.org protocol requires.
+Sitemap URL scheme (S154 P1, registry v2):
+  * ``/sitemap.xml`` — ALWAYS a ``<sitemapindex>`` listing every provider's
+    chunk files, built from provider ``count()``s only;
+  * ``/sitemap-<name>-<n>.xml`` — ONE ``<urlset>`` of at most
+    ``SITEMAP_URL_CAP`` URLs from ``provider.page((n-1)*cap, cap)``; an unknown
+    provider or out-of-range ``n`` is a 404;
+  * ``/sitemap-<n>.xml`` — the pre-S154 numbering (already submitted to Search
+    Console): serves the n-th chunk of the index in place (200, no redirect).
 """
 import hmac
 from datetime import datetime, timezone
@@ -19,15 +23,21 @@ from xml.sax.saxutils import escape, quoteattr
 from flask import Response, current_app, request
 
 from plugins.cms.src.routes import cms_bp
-from plugins.cms.src.services.seo_registry import aggregate_sitemap_entries
+from plugins.cms.src.services.seo_registry import list_sitemap_providers
 from plugins.cms.src.services.seo_robots_policy import build_default_robots_txt
+from plugins.cms.src.services.seo_sitemap_chunks import (
+    SITEMAP_URL_CAP,
+    SitemapChunker,
+    SitemapChunkRef,
+)
 
 # The header nginx (increment 2) injects with the shared secret when it routes a
 # bot request to the internal render route.
 _RENDER_TOKEN_HEADER = "X-VBWD-Render-Token"
 
-# sitemaps.org caps a single sitemap at 50,000 URLs; past that we emit an index.
-SITEMAP_URL_CAP = 50000
+# Sitemaps change at most as often as content; let crawlers/proxies reuse them.
+SITEMAP_CACHE_CONTROL = "public, max-age=3600"
+SITEMAP_CONTENT_TYPE = "application/xml; charset=utf-8"
 
 
 def _seo_mode() -> str:
@@ -77,8 +87,13 @@ def _site_base() -> str:
     return base or request.host_url.rstrip("/")
 
 
-def _xml_response(body: str) -> Response:
-    return Response(body, status=200, mimetype="application/xml")
+def _sitemap_response(body: str) -> Response:
+    """A cacheable XML sitemap response; an ``If-None-Match`` hit yields 304."""
+    response = Response(body, status=200, content_type=SITEMAP_CONTENT_TYPE)
+    response.headers["Cache-Control"] = SITEMAP_CACHE_CONTROL
+    response.add_etag()
+    response.make_conditional(request)
+    return response
 
 
 def _w3c_lastmod(value):
@@ -159,11 +174,11 @@ def _render_urlset(entries, site_base: str) -> str:
     return header + rows + "</urlset>\n"
 
 
-def _render_sitemap_index(chunk_count: int) -> str:
+def _render_sitemap_index(chunk_refs) -> str:
     base = _site_base()
     rows = []
-    for index in range(1, chunk_count + 1):
-        loc = escape(f"{base}/sitemap-{index}.xml")
+    for chunk_ref in chunk_refs:
+        loc = escape(f"{base}/{chunk_ref.filename}")
         rows.append(f"  <sitemap>\n    <loc>{loc}</loc>\n  </sitemap>")
     body = "\n".join(rows)
     if body:
@@ -175,29 +190,45 @@ def _render_sitemap_index(chunk_count: int) -> str:
     )
 
 
-def _chunk(entries, size):
-    for start in range(0, len(entries), size):
-        yield entries[start : start + size]
+def _sitemap_chunker() -> SitemapChunker:
+    """A chunker over the live providers + the live private path prefixes."""
+    from plugins.cms.src.services.seo_wiring import seo_private_path_prefixes
+
+    return SitemapChunker(
+        list_sitemap_providers(),
+        private_path_prefixes=seo_private_path_prefixes(),
+        url_cap=SITEMAP_URL_CAP,
+    )
+
+
+def _chunk_response(chunker: SitemapChunker, chunk_ref: SitemapChunkRef) -> Response:
+    entries = chunker.chunk_entries(chunk_ref.provider_name, chunk_ref.number)
+    if entries is None:
+        return Response("", status=404)
+    return _sitemap_response(_render_urlset(entries, _site_base()))
 
 
 @cms_bp.route("/sitemap.xml", methods=["GET"])
 def sitemap():
-    """Aggregate all providers; emit an index past the URL cap."""
-    entries = aggregate_sitemap_entries()
-    if len(entries) > SITEMAP_URL_CAP:
-        chunk_count = (len(entries) + SITEMAP_URL_CAP - 1) // SITEMAP_URL_CAP
-        return _xml_response(_render_sitemap_index(chunk_count))
-    return _xml_response(_render_urlset(entries, _site_base()))
+    """The sitemap index: one ``<sitemap>`` per provider chunk (counts only)."""
+    return _sitemap_response(_render_sitemap_index(_sitemap_chunker().chunk_refs()))
+
+
+@cms_bp.route("/sitemap-<provider_name>-<int:chunk_number>.xml", methods=["GET"])
+def sitemap_provider_chunk(provider_name: str, chunk_number: int):
+    """Serve chunk ``chunk_number`` (1-based) of provider ``provider_name``."""
+    chunk_ref = SitemapChunkRef(provider_name, chunk_number)
+    return _chunk_response(_sitemap_chunker(), chunk_ref)
 
 
 @cms_bp.route("/sitemap-<int:chunk>.xml", methods=["GET"])
 def sitemap_chunk(chunk: int):
-    """Serve the ``chunk``-th 50k-URL slice (1-based)."""
-    entries = aggregate_sitemap_entries()
-    chunks = list(_chunk(entries, SITEMAP_URL_CAP))
-    if chunk < 1 or chunk > len(chunks):
-        return _xml_response(_render_urlset([], _site_base()))
-    return _xml_response(_render_urlset(chunks[chunk - 1], _site_base()))
+    """Pre-S154 numbering: serve the ``chunk``-th (1-based) chunk of the index."""
+    chunker = _sitemap_chunker()
+    chunk_ref = chunker.legacy_chunk_ref(chunk)
+    if chunk_ref is None:
+        return Response("", status=404)
+    return _chunk_response(chunker, chunk_ref)
 
 
 @cms_bp.route("/api/v1/cms/_seo-render", methods=["GET"])
@@ -214,7 +245,7 @@ def seo_dynamic_render():
     switched off / no renderer URL — returns **404** (the route is not revealed).
 
     A path under a private prefix (``seo_private_path_prefixes``: ``/dashboard``,
-    ``/tuktuk``, ``/pay``, ``/software``) is never rendered for bots: **404**, so
+    ``/tuktuk``, ``/pay``) is never rendered for bots: **404**, so
     nginx falls back to its noindex-tagged shell instead of an indexable page.
     """
     from plugins.cms.src.services.seo_wiring import (

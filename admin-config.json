@@ -99,7 +99,7 @@
           "label": "Private Path Prefixes (never indexed)",
           "component": "input",
           "inputType": "text",
-          "description": "Comma-separated URL path prefixes kept out of search: no sitemap entry, noindex prerender, no bot render. Default: /dashboard,/tuktuk,/pay,/software"
+          "description": "Comma-separated URL path prefixes kept out of search: no sitemap entry, noindex prerender, no bot render. Default: /dashboard,/tuktuk,/pay"
         },
         {
           "key": "debug_mode",

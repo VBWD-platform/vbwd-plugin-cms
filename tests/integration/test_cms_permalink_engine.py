@@ -133,7 +133,8 @@ def test_structured_post_resolves_and_prerenders(client, db, seo_var_dir):
     assert _seo_file(seo_var_dir, expected).exists()
 
     # Sitemap loc keys off the computed full path.
-    locs = {entry.loc for entry in seo_registry.aggregate_sitemap_entries()}
+    cms_provider = seo_registry.find_sitemap_provider("cms")
+    locs = {entry.loc for entry in cms_provider.page(0, cms_provider.count())}
     assert any(loc.endswith(expected) for loc in locs)
 
 

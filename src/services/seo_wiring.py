@@ -200,7 +200,7 @@ def _private_path_prefixes() -> tuple:
 
     Read per call (mirroring ``_sitemap_config``); a key the operator never
     saved falls back to the shipped defaults (``/dashboard``, ``/tuktuk``,
-    ``/pay``, ``/software``), so private areas stay unindexed on a fresh install.
+    ``/pay``), so private areas stay unindexed on a fresh install.
     """
     try:
         from flask import current_app
@@ -211,6 +211,11 @@ def _private_path_prefixes() -> tuple:
     except Exception as exc:  # pragma: no cover - defensive (no app context)
         logger.warning("[cms.seo] private path prefixes lookup failed: %s", exc)
         return resolve_private_path_prefixes({})
+
+
+def seo_private_path_prefixes() -> tuple:
+    """The live private prefixes the sitemap filters centrally (S154, D1)."""
+    return _private_path_prefixes()
 
 
 def seo_render_path_is_private(path: str) -> bool:

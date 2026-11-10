@@ -69,7 +69,7 @@ def test_non_published_statuses_not_visible():
         assert page_is_search_visible(_Post(status=status)) is False
 
 
-# ── private-path rule: /dashboard, /tuktuk, /pay, /software are never indexed ──
+# ── private-path rule: /dashboard, /tuktuk, /pay are never indexed ────────────
 
 
 @dataclass
@@ -82,15 +82,20 @@ def test_default_private_prefixes_cover_the_private_areas():
         "/dashboard",
         "/tuktuk",
         "/pay",
-        "/software",
     }
+
+
+def test_catalogue_base_is_public_by_default():
+    """D9: the ghrm catalogue base (admin-configurable) is never hardcoded private."""
+    assert path_is_private("/software", DEFAULT_PRIVATE_PATH_PREFIXES) is False
+    assert path_is_private("software/mobile", DEFAULT_PRIVATE_PATH_PREFIXES) is False
 
 
 def test_path_under_private_prefix_is_private():
     prefixes = DEFAULT_PRIVATE_PATH_PREFIXES
-    assert path_is_private("/software", prefixes) is True
-    assert path_is_private("software", prefixes) is True
-    assert path_is_private("software/payments", prefixes) is True
+    assert path_is_private("/pay", prefixes) is True
+    assert path_is_private("pay", prefixes) is True
+    assert path_is_private("pay/invoice", prefixes) is True
     assert path_is_private("/pay/checkout?step=2", prefixes) is True
     assert path_is_private("/dashboard/", prefixes) is True
     assert path_is_private("/TukTuk/reports", prefixes) is True
@@ -98,10 +103,10 @@ def test_path_under_private_prefix_is_private():
 
 def test_private_prefix_match_is_segment_aware():
     prefixes = DEFAULT_PRIVATE_PATH_PREFIXES
-    assert path_is_private("/softwarex", prefixes) is False
+    assert path_is_private("/payx", prefixes) is False
     assert path_is_private("/payments", prefixes) is False
     assert path_is_private("payments-guide", prefixes) is False
-    assert path_is_private("/blog/software", prefixes) is False
+    assert path_is_private("/blog/pay", prefixes) is False
     assert path_is_private("/", prefixes) is False
 
 
@@ -121,19 +126,17 @@ def test_resolve_prefixes_honours_saved_override():
 
 
 def test_resolve_prefixes_accepts_comma_separated_string():
-    config = {"seo_private_path_prefixes": "/pay, software ,"}
-    assert resolve_private_path_prefixes(config) == ("/pay", "/software")
+    config = {"seo_private_path_prefixes": "/pay, members ,"}
+    assert resolve_private_path_prefixes(config) == ("/pay", "/members")
 
 
 def test_post_under_private_path_is_not_search_visible():
     prefixes = DEFAULT_PRIVATE_PATH_PREFIXES
-    assert page_is_search_visible(_SluggedPost(slug="software"), prefixes) is False
-    assert (
-        page_is_search_visible(_SluggedPost(slug="software/payments"), prefixes)
-        is False
-    )
-    assert page_is_search_visible(_SluggedPost(slug="softwarex"), prefixes) is True
+    assert page_is_search_visible(_SluggedPost(slug="pay"), prefixes) is False
+    assert page_is_search_visible(_SluggedPost(slug="pay/invoice"), prefixes) is False
+    assert page_is_search_visible(_SluggedPost(slug="payx"), prefixes) is True
+    assert page_is_search_visible(_SluggedPost(slug="software"), prefixes) is True
 
 
 def test_no_private_prefixes_keeps_path_rule_off():
-    assert page_is_search_visible(_SluggedPost(slug="software")) is True
+    assert page_is_search_visible(_SluggedPost(slug="pay")) is True

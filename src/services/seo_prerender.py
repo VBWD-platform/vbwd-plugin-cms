@@ -118,7 +118,7 @@ class SeoPrerenderWriter:
         # renderable so the pure meta-builder stays base-URL agnostic.
         self._public_base_url = public_base_url
         self._home_slug = home_slug
-        # Path prefixes (``/software`` …) whose posts are never search-visible.
+        # Path prefixes (``/dashboard`` …) whose posts are never search-visible.
         self._private_path_prefixes = private_path_prefixes
 
     # ── event entry point ────────────────────────────────────────────────

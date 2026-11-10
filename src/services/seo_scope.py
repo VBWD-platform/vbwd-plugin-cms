@@ -10,8 +10,9 @@ A post is search-visible iff:
   - none of its terms is ``seo_excluded`` (exclusion is inherited);
   - its ``robots`` does not contain ``noindex``;
   - its public path is not under a private path prefix (``/dashboard``,
-    ``/tuktuk``, ``/pay``, ``/software`` by default — config
-    ``seo_private_path_prefixes``).
+    ``/tuktuk``, ``/pay`` by default — config ``seo_private_path_prefixes``).
+    Public catalogues (e.g. the ghrm catalogue, whose base slug is
+    admin-configurable) are never hardcoded here (S154 D9).
 
 The argument is duck-typed: anything exposing ``status``, ``seo_excluded``,
 ``robots``, ``slug`` and an iterable ``terms`` (each with ``seo_excluded``)
@@ -28,7 +29,6 @@ DEFAULT_PRIVATE_PATH_PREFIXES: Tuple[str, ...] = (
     "/dashboard",
     "/tuktuk",
     "/pay",
-    "/software",
 )
 
 

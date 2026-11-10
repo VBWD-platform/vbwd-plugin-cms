@@ -110,7 +110,7 @@ def _sitemap_hrefs_by_language(db, marker):
     )
     return {
         alternate["hreflang"]: alternate["href"]
-        for entry in provider.sitemap_entries()
+        for entry in provider.page(0, provider.count())
         for alternate in entry.alternates
         if marker in alternate["href"]
     }

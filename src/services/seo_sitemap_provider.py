@@ -1,8 +1,11 @@
 """The cms sitemap provider (S47.1 §5).
 
-Registered in ``CmsPlugin.on_enable``, it satisfies the core
-``ISeoSitemapProvider`` duck-type: ``sitemap_entries() -> [SitemapEntry]``. It
-yields one entry per **search-visible** post (the §3.1 predicate), with
+Registered in ``CmsPlugin.on_enable``, it is a native registry-v2 provider
+(``name="cms"``, ``count()``, ``page(offset, limit)`` — S154 P1). ``count()``
+is the published-candidate count and ``page()`` reads one ``LIMIT/OFFSET``
+window of candidates in primary-key order, so a chunk never loads every post.
+The page then yields one entry per **search-visible** post (the §3.1
+predicate) — a page can hold fewer than ``limit`` entries — with
 ``loc`` from the canonical URL, ``lastmod`` from ``updated_at``, and hreflang
 alternates from the post's translation siblings. Archives/search URLs are NOT
 emitted (D8) — only individual prerendered posts/pages.
@@ -21,9 +24,11 @@ from plugins.cms.src.services.seo_scope import (
     resolve_private_path_prefixes,
 )
 
+CMS_SITEMAP_PROVIDER_NAME = "cms"
+
 
 class CmsSitemapProvider:
-    """A core sitemap provider backed by cms published posts.
+    """The cms sitemap provider (registry v2) backed by published posts.
 
     ``loc`` prefers the post's stored ``canonical_url`` (the same absolute URL
     the meta-builder/canonical tag use) and falls back to
@@ -38,6 +43,8 @@ class CmsSitemapProvider:
     and unit-testable with a simple double.
     """
 
+    name = CMS_SITEMAP_PROVIDER_NAME
+
     def __init__(
         self,
         post_loader,
@@ -48,11 +55,15 @@ class CmsSitemapProvider:
         self._public_base_url_provider = public_base_url_provider or (lambda: "")
         self._sitemap_config_provider = sitemap_config_provider or (lambda: {})
 
-    def sitemap_entries(self) -> List[SitemapEntry]:
+    def count(self) -> int:
+        return self._post_loader.count_candidate_posts()
+
+    def page(self, offset: int, limit: int) -> List[SitemapEntry]:
         config = self._sitemap_config_provider() or {}
         private_path_prefixes = resolve_private_path_prefixes(config)
         entries: List[SitemapEntry] = []
-        for post in self._post_loader.iter_candidate_posts():
+        candidates = self._post_loader.iter_candidate_posts(offset=offset, limit=limit)
+        for post in candidates:
             terms = self._post_loader.terms_for(post)
             scope_view = ScopeView(post, terms)
             if not page_is_search_visible(scope_view, private_path_prefixes):

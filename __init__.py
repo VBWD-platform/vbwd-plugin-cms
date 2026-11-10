@@ -54,7 +54,7 @@ DEFAULT_CONFIG = {
     # Private app areas never indexed: posts under these path prefixes are
     # dropped from the sitemap, prerendered noindex, and refused by the
     # on-demand bot render (segment-aware: "/pay" never matches "/payments").
-    "seo_private_path_prefixes": ["/dashboard", "/tuktuk", "/pay", "/software"],
+    "seo_private_path_prefixes": ["/dashboard", "/tuktuk", "/pay"],
     "debug_mode": False,
 }
 

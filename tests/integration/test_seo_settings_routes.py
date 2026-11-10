@@ -100,7 +100,7 @@ def _create_post(db, post_type, slug, term_ids=None):
 
 
 def _sitemap_locs(client):
-    body = client.get("/sitemap.xml").get_data(as_text=True)
+    body = client.get("/sitemap-cms-1.xml").get_data(as_text=True)
     return body
 
 

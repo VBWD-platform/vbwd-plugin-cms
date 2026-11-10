@@ -48,13 +48,23 @@ class SeoPostLoader:
 
     # ── sitemap provider interface ───────────────────────────────────────
 
-    def iter_candidate_posts(self) -> List[CmsPost]:
+    def _candidate_query(self):
         """Only ``published`` posts can ever be search-visible (D9)."""
-        return (
-            self._session.query(CmsPost)
-            .filter(CmsPost.status == POST_STATUS_PUBLISHED)
-            .all()
+        return self._session.query(CmsPost).filter(
+            CmsPost.status == POST_STATUS_PUBLISHED
         )
+
+    def count_candidate_posts(self) -> int:
+        return self._candidate_query().count()
+
+    def iter_candidate_posts(
+        self, offset: int = 0, limit: Optional[int] = None
+    ) -> List[CmsPost]:
+        """Published posts in a stable (primary-key) order, optionally paged."""
+        query = self._candidate_query().order_by(CmsPost.id).offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def terms_for(self, post: CmsPost) -> List[CmsTerm]:
         return (

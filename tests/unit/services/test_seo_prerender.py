@@ -472,17 +472,17 @@ def test_missing_post_is_a_noop(tmp_path):
     assert not _seo_file(tmp_path, "pricing").exists()
 
 
-# ── private paths (/dashboard, /tuktuk, /pay, /software) are always noindex ────
+# ── private paths (/dashboard, /tuktuk, /pay) are always noindex ──────────────
 
 _INDEXABLE_FULL_PAGE_HTML = (
-    '<!doctype html><html lang="en"><head><title>Software</title>'
+    '<!doctype html><html lang="en"><head><title>Dashboard</title>'
     '<meta data-seo="ssr" name="robots" content="index,follow">'
     "<meta name='ROBOTS' content='index' />"
-    "</head><body><main>Software</main></body></html>"
+    "</head><body><main>Dashboard</main></body></html>"
 )
 
 
-def _private_post(slug="software"):
+def _private_post(slug="dashboard"):
     return _Post(slug=slug, canonical_url=f"https://x/{slug}")
 
 
@@ -491,25 +491,25 @@ def test_content_document_for_private_path_is_noindex(tmp_path):
     writer = _writer(tmp_path, [post])
     writer.handle_content_changed(_event(post))
 
-    html = _seo_file(tmp_path, "software").read_text()
+    html = _seo_file(tmp_path, "dashboard").read_text()
     assert 'content="noindex,nofollow"' in html
     assert 'content="index,follow"' not in html
     assert '"robots": "noindex,nofollow"' in html
 
 
 def test_full_page_render_for_private_path_is_forced_noindex(tmp_path):
-    post = _private_post("software/payments")
+    post = _private_post("dashboard/orders")
     renderer = _StubFullPageRenderer(_INDEXABLE_FULL_PAGE_HTML)
     writer = _writer(tmp_path, [post], full_page_renderer=renderer)
     writer.handle_content_changed(_event(post))
 
-    html = _seo_file(tmp_path, "software/payments").read_text()
+    html = _seo_file(tmp_path, "dashboard/orders").read_text()
     assert html.count('name="robots"') == 1
     assert '<meta name="robots" content="noindex,nofollow" />' in html
     assert "index,follow" not in html
     assert "content='index'" not in html
     # The rest of the captured page is preserved.
-    assert "<main>Software</main>" in html
+    assert "<main>Dashboard</main>" in html
 
 
 def test_full_page_render_for_excluded_post_is_forced_noindex(tmp_path):
@@ -527,7 +527,7 @@ def test_private_path_rule_is_config_driven_in_writer(tmp_path):
     writer = _writer(tmp_path, [post], private_path_prefixes=())
     writer.handle_content_changed(_event(post))
 
-    html = _seo_file(tmp_path, "software").read_text()
+    html = _seo_file(tmp_path, "dashboard").read_text()
     assert 'content="index,follow"' in html
     assert "noindex" not in html
 

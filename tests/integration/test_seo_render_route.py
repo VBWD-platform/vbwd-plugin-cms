@@ -115,14 +115,14 @@ def test_seo_render_disabled_when_token_empty(client, db):
     assert response.status_code == 404
 
 
-# ── private paths (/dashboard, /tuktuk, /pay, /software) are never rendered ────
+# ── private paths (/dashboard, /tuktuk, /pay) are never rendered ──────────────
 
 
 def test_seo_render_404_for_private_path_without_rendering(client, db):
     _configure()
     with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
         get.return_value = _http_response()
-        for private_path in ("/software", "/software/payments", "/pay", "/dashboard"):
+        for private_path in ("/pay", "/pay/invoice", "/tuktuk", "/dashboard"):
             response = client.get(
                 f"{RENDER_URL}?path={private_path}",
                 headers={"X-VBWD-Render-Token": _TOKEN},
@@ -136,7 +136,19 @@ def test_seo_render_still_serves_non_private_sibling_path(client, db):
     with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
         get.return_value = _http_response()
         response = client.get(
-            f"{RENDER_URL}?path=/softwarex",
+            f"{RENDER_URL}?path=/payx",
+            headers={"X-VBWD-Render-Token": _TOKEN},
+        )
+    assert response.status_code == 200
+
+
+def test_seo_render_serves_the_catalogue_base_by_default(client, db):
+    """D9: the ghrm catalogue base (e.g. ``/software``) is public, never hardcoded."""
+    _configure()
+    with patch("plugins.cms.src.services.seo_full_page_renderer.requests.get") as get:
+        get.return_value = _http_response()
+        response = client.get(
+            f"{RENDER_URL}?path=/software/mobile",
             headers={"X-VBWD-Render-Token": _TOKEN},
         )
     assert response.status_code == 200
@@ -154,7 +166,7 @@ def test_seo_render_private_prefixes_follow_saved_config(client, db):
         ) as get:
             get.return_value = _http_response()
             response = client.get(
-                f"{RENDER_URL}?path=/software",
+                f"{RENDER_URL}?path=/pay",
                 headers={"X-VBWD-Render-Token": _TOKEN},
             )
         assert response.status_code == 200
