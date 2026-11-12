@@ -723,6 +723,38 @@ def build_indexnow_submitter() -> IndexNowSubmitter:
     )
 
 
+def ping_indexnow_urls(paths: List[str]) -> Optional[bool]:
+    """Stable IndexNow ping seam for any plugin with public pages (S154 D4).
+
+    A domain plugin (shop/booking/subscription/ghrm, ...) imports this lazily
+    (guarded by ``ImportError`` when cms is absent — the same optional-
+    dependency pattern ``register_sitemap_provider`` uses, D3) and calls it on
+    its own create/update/delete, passing the SAME public path(s) its sitemap
+    provider would list. cms never imports the caller.
+
+    Each entity's own indexable switch (D7) and the private-path filter (D1)
+    are the caller's responsibility — exactly like its sitemap provider's
+    switch gate — this seam only decides whether IndexNow itself is reachable
+    and batches ``paths`` into ONE POST (IndexNow's protocol accepts many
+    ``urlList`` entries per call), so a bulk change never fans out into one
+    HTTP call per row.
+
+    Best-effort by contract (mirrors ``IndexNowSubmitter.submit``): ``None``
+    when IndexNow is unavailable or ``paths`` is empty, ``True``/``False`` on
+    an attempted submission, never raises.
+    """
+    normalized_paths = [path for path in (paths or []) if (path or "").strip()]
+    if not normalized_paths or not indexnow_available():
+        return None
+    try:
+        return build_indexnow_submitter().submit_many(normalized_paths)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "[cms.indexnow] batch ping failed for %s: %s", normalized_paths, exc
+        )
+        return False
+
+
 def _on_content_changed_indexnow(_event_name: str, data: dict) -> None:
     """Ping IndexNow with a published CMS post's canonical URL (best-effort).
 

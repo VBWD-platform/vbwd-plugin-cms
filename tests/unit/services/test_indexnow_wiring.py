@@ -102,3 +102,56 @@ def test_other_type_still_submitted_when_one_type_is_off(monkeypatch):
     seo_wiring._on_content_changed_indexnow("content.changed", event)
 
     submitter.submit.assert_called_once_with("/news-item")
+
+
+# ── ping_indexnow_urls (S154 D4) — the stable seam domain plugins call ──────
+#
+# shop/booking/subscription/ghrm import this (lazily, guarded by ImportError
+# when cms is absent) instead of talking to ``IndexNowSubmitter`` directly, so
+# cms stays the single home for the "is IndexNow available?" + "build the
+# submitter" decisions (DRY) and never imports a domain plugin (D3-style).
+
+
+def test_ping_indexnow_urls_submits_the_batch_when_available(monkeypatch):
+    submitter = MagicMock()
+    monkeypatch.setattr(seo_wiring, "indexnow_available", lambda: True)
+    monkeypatch.setattr(seo_wiring, "build_indexnow_submitter", lambda: submitter)
+
+    seo_wiring.ping_indexnow_urls(["/shop/product/mug", "/shop/product/cup"])
+
+    submitter.submit_many.assert_called_once_with(
+        ["/shop/product/mug", "/shop/product/cup"]
+    )
+
+
+def test_ping_indexnow_urls_noop_when_indexnow_unavailable(monkeypatch):
+    submitter = MagicMock()
+    monkeypatch.setattr(seo_wiring, "indexnow_available", lambda: False)
+    monkeypatch.setattr(seo_wiring, "build_indexnow_submitter", lambda: submitter)
+
+    result = seo_wiring.ping_indexnow_urls(["/shop/product/mug"])
+
+    assert result is None
+    submitter.submit_many.assert_not_called()
+
+
+def test_ping_indexnow_urls_noop_when_no_paths(monkeypatch):
+    submitter = MagicMock()
+    monkeypatch.setattr(seo_wiring, "indexnow_available", lambda: True)
+    monkeypatch.setattr(seo_wiring, "build_indexnow_submitter", lambda: submitter)
+
+    assert seo_wiring.ping_indexnow_urls([]) is None
+    assert seo_wiring.ping_indexnow_urls(["", None]) is None
+    submitter.submit_many.assert_not_called()
+
+
+def test_ping_indexnow_urls_swallows_submitter_failure(monkeypatch):
+    submitter = MagicMock()
+    submitter.submit_many.side_effect = RuntimeError("boom")
+    monkeypatch.setattr(seo_wiring, "indexnow_available", lambda: True)
+    monkeypatch.setattr(seo_wiring, "build_indexnow_submitter", lambda: submitter)
+
+    # Best-effort: a failing submitter must never propagate to the caller.
+    result = seo_wiring.ping_indexnow_urls(["/shop/product/mug"])
+
+    assert result is False

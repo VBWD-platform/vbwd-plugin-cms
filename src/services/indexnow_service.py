@@ -15,7 +15,7 @@ or non-2xx — it never raises. The HTTP transport is injected (defaulting to
 ``requests.post``) so tests use a fake and never touch the network.
 """
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -58,17 +58,35 @@ class IndexNowSubmitter:
         absolute ``http(s)://`` URL is submitted verbatim. Returns ``None`` when
         the submitter is disabled (no base URL / key / endpoint), ``True`` on a
         2xx response, and ``False`` on any error or non-2xx (logged) — never
-        raising, so the caller's publish flow is unaffected.
+        raising, so the caller's publish flow is unaffected. A thin single-item
+        wrapper over ``submit_many`` (DRY — one HTTP-call path for both).
+        """
+        return self.submit_many([path_or_url])
+
+    def submit_many(self, paths_or_urls: List[str]) -> Optional[bool]:
+        """Notify IndexNow of several URLs in ONE POST (S154 D4 batching).
+
+        Blank/``None`` entries are dropped; ``None`` is returned (no HTTP call)
+        when the submitter is disabled or nothing is left to submit after
+        dropping blanks. Same best-effort contract as ``submit``: ``True`` on a
+        2xx response, ``False`` on any error or non-2xx (logged), never raises.
         """
         if not self._public_base_url or not self._key or not self._endpoint:
             return None
 
-        target_url = self._absolute_url(path_or_url)
+        target_urls = [
+            self._absolute_url(value)
+            for value in (paths_or_urls or [])
+            if (value or "").strip()
+        ]
+        if not target_urls:
+            return None
+
         payload = {
             "host": urlparse(self._public_base_url).netloc,
             "key": self._key,
             "keyLocation": f"{self._public_base_url}/{self._key}.txt",
-            "urlList": [target_url],
+            "urlList": target_urls,
         }
         try:
             response = self._http_post(
@@ -77,16 +95,16 @@ class IndexNowSubmitter:
                 timeout=self._timeout_seconds,
             )
         except Exception as exc:  # best-effort: any failure ⇒ swallow + log
-            logger.warning("[cms.indexnow] submit failed for '%s': %s", target_url, exc)
+            logger.warning("[cms.indexnow] submit failed for %s: %s", target_urls, exc)
             return False
 
         status_code = getattr(response, "status_code", None)
         if status_code is not None and 200 <= status_code < 300:
             return True
         logger.warning(
-            "[cms.indexnow] endpoint returned status %s for '%s'",
+            "[cms.indexnow] endpoint returned status %s for %s",
             status_code,
-            target_url,
+            target_urls,
         )
         return False
 

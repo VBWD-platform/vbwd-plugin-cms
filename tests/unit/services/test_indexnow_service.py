@@ -131,3 +131,82 @@ def test_submit_false_on_non_2xx(caplog):
 
     assert result is False
     assert caplog.records
+
+
+# ── submit_many (S154 D4) — batch several paths into ONE POST ───────────────
+
+
+def test_submit_many_posts_a_single_request_with_every_url():
+    transport = MagicMock(return_value=_ok_response())
+    submitter = IndexNowSubmitter(
+        public_base_url="https://example.com",
+        key="abcdef0123456789",
+        endpoint="https://api.indexnow.org/indexnow",
+        http_transport=transport,
+    )
+
+    result = submitter.submit_many(["/shop/product/mug", "/shop/product/cup"])
+
+    assert result is True
+    transport.assert_called_once()
+    payload = transport.call_args[1]["json"]
+    assert payload["urlList"] == [
+        "https://example.com/shop/product/mug",
+        "https://example.com/shop/product/cup",
+    ]
+
+
+def test_submit_many_drops_blank_entries():
+    transport = MagicMock(return_value=_ok_response())
+    submitter = IndexNowSubmitter(
+        public_base_url="https://example.com",
+        key="abcdef0123456789",
+        endpoint="https://api.indexnow.org/indexnow",
+        http_transport=transport,
+    )
+
+    submitter.submit_many(["/shop/product/mug", "", None])
+
+    payload = transport.call_args[1]["json"]
+    assert payload["urlList"] == ["https://example.com/shop/product/mug"]
+
+
+def test_submit_many_none_when_list_is_empty_after_dropping_blanks():
+    transport = MagicMock(return_value=_ok_response())
+    submitter = IndexNowSubmitter(
+        public_base_url="https://example.com",
+        key="abcdef0123456789",
+        endpoint="https://api.indexnow.org/indexnow",
+        http_transport=transport,
+    )
+
+    assert submitter.submit_many(["", None]) is None
+    transport.assert_not_called()
+
+
+def test_submit_many_none_when_unconfigured():
+    transport = MagicMock(return_value=_ok_response())
+    submitter = IndexNowSubmitter(
+        public_base_url="",
+        key="abcdef0123456789",
+        endpoint="https://api.indexnow.org/indexnow",
+        http_transport=transport,
+    )
+
+    assert submitter.submit_many(["/pricing"]) is None
+    transport.assert_not_called()
+
+
+def test_submit_delegates_to_submit_many_single_item():
+    transport = MagicMock(return_value=_ok_response())
+    submitter = IndexNowSubmitter(
+        public_base_url="https://example.com",
+        key="abcdef0123456789",
+        endpoint="https://api.indexnow.org/indexnow",
+        http_transport=transport,
+    )
+
+    submitter.submit("/pricing")
+
+    payload = transport.call_args[1]["json"]
+    assert payload["urlList"] == ["https://example.com/pricing"]
